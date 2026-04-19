@@ -1,0 +1,23 @@
+﻿{
+  "name": "autofertilizer-iot",
+  "version": "2.1.0",
+  "description": "AutoFertilizer - He Thong Phoi Tron Phan Tu Dong IoT",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "nodemon server/server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "mqtt": "^5.3.4",
+    "socket.io": "^4.7.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  },
+  "author": "KHOA LUAN 2026",
+  "license": "MIT"
+}
