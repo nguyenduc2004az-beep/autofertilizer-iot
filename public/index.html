@@ -17,42 +17,46 @@
      LOGIN PAGE
 ════════════════════════════════════════ -->
 <div id="loginPage" class="login-page">
-    <div class="login-bg">
-        <div class="login-particle" style="--x:10%;--y:20%;--s:60px;--d:8s"></div>
-        <div class="login-particle" style="--x:80%;--y:10%;--s:40px;--d:12s"></div>
-        <div class="login-particle" style="--x:50%;--y:70%;--s:80px;--d:6s"></div>
-        <div class="login-particle" style="--x:25%;--y:85%;--s:30px;--d:10s"></div>
-        <div class="login-particle" style="--x:70%;--y:50%;--s:50px;--d:9s"></div>
-        <div class="login-particle" style="--x:90%;--y:75%;--s:35px;--d:14s"></div>
-    </div>
+    <div class="login-bg"></div>
     <div class="login-card">
         <div class="login-brand">
-            <div class="login-logo">🌱</div>
-            <h1>AutoFertilizer</h1>
-            <p>Hệ thống phối trộn phân bón tự động IoT</p>
+            <img src="/images/logo-nlu.png" alt="NLU Logo" class="login-logo-img" onerror="this.src='https://upload.wikimedia.org/wikipedia/vi/1/1b/Logo_nlu.png'; this.onerror=null;">
+            <h1>ĐĂNG NHẬP</h1>
+            <p>HỆ THỐNG PHỐI TRỘN PHÂN TỰ ĐỘNG</p>
         </div>
         <form class="login-form" id="loginForm" onsubmit="doLogin(event)">
             <div class="login-field">
-                <label for="loginUser">👤 Tên đăng nhập</label>
+                <label for="loginUser">Tài khoản</label>
                 <div class="login-input-wrap">
                     <span class="login-input-icon">👤</span>
-                    <input type="text" id="loginUser" placeholder="Nhập tên đăng nhập" autocomplete="username">
+                    <input type="text" id="loginUser" placeholder="Tài khoản" autocomplete="username">
                 </div>
             </div>
             <div class="login-field">
-                <label for="loginPass">🔒 Mật khẩu</label>
+                <label for="loginPass">Mật khẩu</label>
                 <div class="login-input-wrap">
                     <span class="login-input-icon">🔒</span>
-                    <input type="password" id="loginPass" placeholder="Nhập mật khẩu" autocomplete="current-password">
+                    <input type="password" id="loginPass" placeholder="Mật khẩu" autocomplete="current-password">
                 </div>
             </div>
-            <div class="login-error hidden" id="loginError">❌ Sai tên đăng nhập hoặc mật khẩu!</div>
+            <div class="login-error hidden" id="loginError">Tài khoản hoặc mật khẩu không đúng!</div>
             <button type="submit" class="login-btn" id="loginBtn">
-                <span id="loginBtnText">🚀 ĐĂNG NHẬP</span>
+                <span id="loginBtnText">VÀO HỆ THỐNG</span>
             </button>
         </form>
-        <div class="login-hint">Tài khoản mặc định: <strong>admin / admin123</strong></div>
-        <div class="login-version">v2.1 — ESP32 + MQTT + Node.js</div>
+        
+        <!-- Sinh viên thực hiện -->
+        <div class="login-students">
+            <strong>Sinh viên thực hiện:</strong><br>
+            22138022 - Nguyễn Hữu Đức<br>
+            22138035 - Đinh Đức Hiếu
+        </div>
+
+        <!-- Info Nông Lâm -->
+        <div class="login-version">
+            TRƯỜNG ĐẠI HỌC NÔNG LÂM TP.HCM<br>
+            © 2026 Toàn bộ quyền được bảo lưu
+        </div>
     </div>
 </div>
 
