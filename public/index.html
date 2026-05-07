@@ -77,59 +77,30 @@
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 
     <!-- ── SIDEBAR ── -->
-    <aside class="sidebar" id="sidebar">
-        <div class="sidebar-logo">
-            <div class="sidebar-logo-icon">🌱</div>
-            <div class="sidebar-logo-text">
-                <span class="sidebar-brand">Trạm Pha Phân</span>
-                <span class="sidebar-sub">Nhà Lưới</span>
-            </div>
-        </div>
-
-        <nav class="sidebar-nav">
-            <button class="nav-item active" id="nav-dashboard" onclick="showPage('dashboard')">
-                <span class="nav-icon">📊</span><span class="nav-label">Tổng Quan</span>
-            </button>
-            <button class="nav-item" id="nav-monitor" onclick="showPage('monitor')">
-                <span class="nav-icon">📡</span><span class="nav-label">Giám Sát</span>
-                <span class="nav-badge hidden" id="badge-monitor">●</span>
-            </button>
-            <button class="nav-item" id="nav-settings" onclick="showPage('settings')">
-                <span class="nav-icon">⚙️</span><span class="nav-label">Điều Khiển</span>
-            </button>
-            <button class="nav-item" id="nav-recipes" onclick="showPage('recipes')">
-                <span class="nav-icon">💾</span><span class="nav-label">Công Thức</span>
-            </button>
-
-            <div class="nav-separator"></div>
-
-            <button class="nav-item" id="nav-alerts" onclick="showPage('alerts')">
-                <span class="nav-icon">🔔</span><span class="nav-label">Cảnh Báo</span>
-                <span class="nav-badge alert-badge hidden" id="badge-alerts">0</span>
-            </button>
-            <button class="nav-item" id="nav-history" onclick="showPage('history')">
-                <span class="nav-icon">📋</span><span class="nav-label">Lịch Sử</span>
-            </button>
-            <button class="nav-item" id="nav-system" onclick="showPage('system')">
-                <span class="nav-icon">🖥️</span><span class="nav-label">Hệ Thống</span>
-            </button>
-            <button class="nav-item" id="nav-model3d" onclick="showPage('model3d')">
-                <span class="nav-icon">🏗️</span><span class="nav-label">Mô Hình 3D</span>
-            </button>
-        </nav>
-
-        <div class="sidebar-footer">
-            <div class="sidebar-conn">
-                <div class="conn-item" id="sideConnMQTT">
-                    <div class="conn-dot"></div><span>📶 Kết nối Server</span>
-                </div>
-                <div class="conn-item" id="sideConnESP">
-                    <div class="conn-dot"></div><span>🔌 Thiết bị ESP32</span>
-                </div>
-            </div>
-            <button class="logout-btn" onclick="doLogout()">⏏ Đăng xuất</button>
-        </div>
-    </aside>
+    <!-- Bottom Navigation Thay Thế Sidebar -->
+    <nav class="bottom-nav" id="bottomNav">
+        <button class="bn-item active" id="bn-dashboard" onclick="showPage('dashboard')">
+            <span class="bn-icon">📊</span><span class="bn-label">Tổng Quan</span>
+        </button>
+        <button class="bn-item" id="bn-monitor" onclick="showPage('monitor')">
+            <span class="bn-icon">📡</span><span class="bn-label">Giám Sát</span>
+        </button>
+        <button class="bn-item" id="bn-settings" onclick="showPage('settings')">
+            <span class="bn-icon">⚙️</span><span class="bn-label">Điều Khiển</span>
+        </button>
+        <button class="bn-item" id="bn-recipes" onclick="showPage('recipes')">
+            <span class="bn-icon">💾</span><span class="bn-label">Công Thức</span>
+        </button>
+        <button class="bn-item" id="bn-history" onclick="showPage('history')">
+            <span class="bn-icon">📋</span><span class="bn-label">Lịch Sử</span>
+        </button>
+        <button class="bn-item" id="bn-system" onclick="showPage('system')">
+            <span class="bn-icon">🖥️</span><span class="bn-label">Hệ Thống</span>
+        </button>
+        <button class="bn-item logout-bn" onclick="doLogout()">
+            <span class="bn-icon">⏏</span><span class="bn-label">Thoát</span>
+        </button>
+    </nav>
 
     <!-- ── TOPBAR ── -->
     <div class="topbar">
@@ -1111,10 +1082,6 @@
                 <span class="bn-icon">📋</span>
                 <span class="bn-label">Lịch Sử</span>
             </button>
-            <button class="bn-item" id="bn-model3d" onclick="showPage('model3d')">
-                <span class="bn-icon">🏗️</span>
-                <span class="bn-label">Mô Hình</span>
-            </button>
         </div>
     </nav>
 
@@ -1443,226 +1410,6 @@ const _hookSocket2D = () => {
 setTimeout(_hookSocket2D, 1000);
 </script>
 
-<script type="module">
-import * as THREE from 'three';
-import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
-import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-let scene, camera, renderer, controls, model3dObj;
-let autoRotating = false;
-let viewer3dInited = false;
-
-function initViewer() {
-    if (viewer3dInited) return;
-    viewer3dInited = true;
-
-    const canvas = document.getElementById('model3dCanvas');
-    const wrap   = document.getElementById('model3dCanvasWrap');
-    const W = wrap.clientWidth  || 800;
-    const H = wrap.clientHeight || 500;
-
-    // Scene
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0f172a);
-    scene.fog = new THREE.FogExp2(0x0f172a, 0.003);
-
-    // Camera
-    camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 5000);
-    camera.position.set(0, 80, 250);
-
-    // Renderer
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    renderer.setSize(W, H);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
-
-    // Lights
-    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-    const sun = new THREE.DirectionalLight(0xfff4e0, 1.4);
-    sun.position.set(150, 300, 200);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    scene.add(sun);
-    const fill = new THREE.DirectionalLight(0x4488cc, 0.4);
-    fill.position.set(-150, 50, -100);
-    scene.add(fill);
-
-    // Grid floor
-    const grid = new THREE.GridHelper(600, 50, 0x1e3a5f, 0x162032);
-    grid.material.opacity = 0.6;
-    grid.material.transparent = true;
-    scene.add(grid);
-
-    // Controls
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor  = 0.06;
-    controls.minDistance = 10;
-    controls.maxDistance = 1500;
-    controls.maxPolarAngle = Math.PI / 2 + 0.15;
-
-    window.addEventListener('resize', onResize3D);
-    animate3D();
-    loadModel();
-}
-
-function loadModel() {
-    const loadEl  = document.getElementById('model3dLoading');
-    const errEl   = document.getElementById('model3dError');
-    const statusEl= document.getElementById('model3dStatus');
-    const fillEl  = document.getElementById('model3dProgressFill');
-    const pctEl   = document.getElementById('model3dLoadPct');
-
-    if (loadEl) { loadEl.style.display = 'flex'; }
-    if (errEl)  { errEl.classList.add('hidden'); }
-    if (statusEl) statusEl.textContent = 'Đang tải vật liệu...';
-
-    const mtlLoader = new MTLLoader();
-    mtlLoader.setPath('/3d/');
-    mtlLoader.load('mohinh1.mtl', (mats) => {
-        mats.preload();
-        if (statusEl) statusEl.textContent = 'Đang tải mô hình...';
-        const objLoader = new OBJLoader();
-        objLoader.setMaterials(mats);
-        objLoader.setPath('/3d/');
-        objLoader.load('mohinh1.obj',
-            (obj) => onModelLoaded(obj, loadEl, statusEl),
-            (xhr) => {
-                if (xhr.total > 0) {
-                    const pct = Math.round(xhr.loaded / xhr.total * 100);
-                    if (fillEl) fillEl.style.width = pct + '%';
-                    if (pctEl)  pctEl.textContent  = pct + '%';
-                }
-            },
-            (err) => onModelError(err, loadEl, errEl, statusEl)
-        );
-    }, undefined, () => {
-        // MTL failed — load OBJ only
-        if (statusEl) statusEl.textContent = 'Tải OBJ (không texture)...';
-        const objLoader = new OBJLoader();
-        objLoader.setPath('/3d/');
-        objLoader.load('mohinh1.obj',
-            (obj) => onModelLoaded(obj, loadEl, statusEl),
-            (xhr) => {
-                if (xhr.total > 0) {
-                    const pct = Math.round(xhr.loaded / xhr.total * 100);
-                    if (fillEl) fillEl.style.width = pct + '%';
-                    if (pctEl)  pctEl.textContent  = pct + '%';
-                }
-            },
-            (err) => onModelError(err, loadEl, errEl, statusEl)
-        );
-    });
-}
-
-function onModelLoaded(obj, loadEl, statusEl) {
-    // Center & fit
-    const box    = new THREE.Box3().setFromObject(obj);
-    const center = box.getCenter(new THREE.Vector3());
-    const size   = box.getSize(new THREE.Vector3());
-    obj.position.sub(center);
-    obj.position.y += size.y / 2;
-
-    // Scale to fit 200 units
-    const maxDim = Math.max(size.x, size.y, size.z);
-    if (maxDim > 200) obj.scale.setScalar(180 / maxDim);
-
-    obj.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
-    scene.add(obj);
-    model3dObj = obj;
-
-    // Fit camera
-    const nb  = new THREE.Box3().setFromObject(obj);
-    const ns  = nb.getSize(new THREE.Vector3());
-    const mx  = Math.max(ns.x, ns.y, ns.z);
-    camera.position.set(mx * 1.3, mx * 0.9, mx * 1.6);
-    controls.target.set(0, ns.y * 0.3, 0);
-    controls.update();
-
-    if (loadEl)  loadEl.style.display = 'none';
-    if (statusEl) statusEl.textContent = '✅ Tải thành công';
-}
-
-function onModelError(err, loadEl, errEl, statusEl) {
-    console.error('3D load error', err);
-    if (loadEl) loadEl.style.display = 'none';
-    if (errEl)  errEl.classList.remove('hidden');
-    if (statusEl) statusEl.textContent = '❌ Lỗi tải mô hình';
-    const msgEl = document.getElementById('model3dErrorMsg');
-    if (msgEl) msgEl.textContent = 'Lỗi: ' + (err.message || err);
-}
-
-function animate3D() {
-    requestAnimationFrame(animate3D);
-    if (autoRotating && model3dObj) model3dObj.rotation.y += 0.004;
-    controls.update();
-    renderer.render(scene, camera);
-}
-
-function onResize3D() {
-    const wrap = document.getElementById('model3dCanvasWrap');
-    if (!wrap || !renderer) return;
-    const W = wrap.clientWidth, H = wrap.clientHeight;
-    camera.aspect = W / H;
-    camera.updateProjectionMatrix();
-    renderer.setSize(W, H);
-}
-
-// ── Global controls ──────────────────────────────────
-window.reset3DCamera = function() {
-    if (!model3dObj) return;
-    const b = new THREE.Box3().setFromObject(model3dObj);
-    const s = b.getSize(new THREE.Vector3());
-    const m = Math.max(s.x, s.y, s.z);
-    camera.position.set(m * 1.3, m * 0.9, m * 1.6);
-    controls.target.set(0, s.y * 0.3, 0);
-    controls.update();
-};
-
-window.set3DView = function(view) {
-    if (!model3dObj) return;
-    const b = new THREE.Box3().setFromObject(model3dObj);
-    const c = b.getCenter(new THREE.Vector3());
-    const s = b.getSize(new THREE.Vector3());
-    const m = Math.max(s.x, s.y, s.z);
-    if (view === 'top') {
-        camera.position.set(c.x, c.y + m * 2, c.z);
-    } else if (view === 'front') {
-        camera.position.set(c.x, c.y + s.y * 0.3, c.z + m * 1.8);
-    }
-    controls.target.copy(c);
-    controls.update();
-};
-
-window.toggle3DAutoRotate = function() {
-    autoRotating = !autoRotating;
-    const btn = document.getElementById('btn3dAutoRotate');
-    if (btn) btn.style.background = autoRotating ? 'var(--accent)' : '';
-};
-
-window.reload3DModel = function() {
-    if (!viewer3dInited) return;
-    const errEl = document.getElementById('model3dError');
-    if (errEl) errEl.classList.add('hidden');
-    loadModel();
-};
-
-// ── Hook into showPage ────────────────────────────────
-const _prev3D = window.showPage;
-window.showPage = function(page) {
-    if (_prev3D) _prev3D(page);
-    if (page === 'model3d') {
-        setTimeout(() => {
-            if (!viewer3dInited) initViewer();
-            else onResize3D();
-        }, 100);
-    }
-};
-</script>
 </body>
 </html>
