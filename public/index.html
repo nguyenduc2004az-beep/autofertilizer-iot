@@ -3,12 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AutoFertilizer IoT - Hệ Thống Phối Trộn Phân Tự Động</title>
-    <meta name="description" content="Hệ thống IoT điều khiển phối trộn phân tự động ESP32 - Giám sát van kim, cảm biến lưu lượng NPK theo thời gian thực">
+    <title>Hệ Thống Phối Trộn Phân Nhà Lưới - Điều Khiển Tự Động</title>
+    <meta name="description" content="Hệ Thống Phối Trộn Phân Nhà Lưới - Điều khiển bằng ESP32, giám sát van, cảm biến NPK thời gian thực">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+    </script>
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -22,7 +30,7 @@
         <div class="login-brand">
             <img src="/images/logo-nlu.png" alt="NLU Logo" class="login-logo-img" onerror="this.style.display='none';">
             <h1>ĐĂNG NHẬP</h1>
-            <p>HỆ THỐNG PHỐI TRỘN PHÂN TỰ ĐỘNG</p>
+            <p>HỆ THỐNG PHỐI TRỘN PHÂN NHÀ LƯỚI</p>
         </div>
         <form class="login-form" id="loginForm" onsubmit="doLogin(event)">
             <div class="login-field">
@@ -73,8 +81,8 @@
         <div class="sidebar-logo">
             <div class="sidebar-logo-icon">🌱</div>
             <div class="sidebar-logo-text">
-                <span class="sidebar-brand">AutoFertilizer</span>
-                <span class="sidebar-sub">IoT System</span>
+                <span class="sidebar-brand">Trạm Pha Phân</span>
+                <span class="sidebar-sub">Nhà Lưới</span>
             </div>
         </div>
 
@@ -104,6 +112,9 @@
             </button>
             <button class="nav-item" id="nav-system" onclick="showPage('system')">
                 <span class="nav-icon">🖥️</span><span class="nav-label">Hệ Thống</span>
+            </button>
+            <button class="nav-item" id="nav-model3d" onclick="showPage('model3d')">
+                <span class="nav-icon">🏗️</span><span class="nav-label">Mô Hình 3D</span>
             </button>
         </nav>
 
@@ -138,7 +149,7 @@
             <div class="topbar-clock" id="topbarClock">00:00:00</div>
             <div class="topbar-user">
                 <div class="user-avatar">A</div>
-                <span id="topbarUsername">Admin</span>
+                <span id="topbarUsername">Quản Trị</span>
             </div>
         </div>
     </div>
@@ -152,7 +163,7 @@
         <section class="page active" id="page-dashboard">
             <div class="page-header">
                 <h2>🌱 Tổng Quan Hệ Thống</h2>
-                <p>Chào mừng đến với AutoFertilizer IoT Dashboard</p>
+                <p>Chào mừng đến với Bảng Điều Khiển Hệ Thống</p>
             </div>
 
             <!-- Quick Guide — 3 bước đơn giản -->
@@ -218,57 +229,80 @@
                 </div>
             </div>
 
-            <!-- System Overview -->
-            <div class="dsh-grid">
-                <div class="iot-card">
-                    <div class="iot-card-title">🔗 Sơ Đồ Kết Nối Hệ Thống</div>
-                    <div class="system-diagram">
-                        <div class="diag-node web-node">
-                            <div class="diag-icon">🌐</div>
-                            <div class="diag-lbl">Web Dashboard</div>
-                        </div>
-                        <div class="diag-arrow">
-                            <div class="diag-arrow-line animated"></div>
-                            <div class="diag-arrow-label">Socket.io / HTTP</div>
-                        </div>
-                        <div class="diag-node server-node">
-                            <div class="diag-icon">💻</div>
-                            <div class="diag-lbl">Node.js Server</div>
-                        </div>
-                        <div class="diag-arrow">
-                            <div class="diag-arrow-line animated" id="mqttArrow"></div>
-                            <div class="diag-arrow-label">MQTT</div>
-                        </div>
-                        <div class="diag-node esp-node" id="diag-esp">
-                            <div class="diag-icon">🔌</div>
-                            <div class="diag-lbl">ESP32</div>
-                        </div>
-                        <div class="diag-arrow vertical">
-                            <div class="diag-arrow-line animated"></div>
-                        </div>
-                        <div class="diag-node" style="display:flex;gap:8px;margin-top:8px">
-                            <div class="diag-node small n-border">
-                                <div class="diag-icon small">🌿</div>
-                                <div class="diag-lbl small">Van N</div>
+            <!-- 2D System Animated Diagram -->
+            <div class="iot-card dash2d-card">
+                <div class="dash2d-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+                    <div class="iot-card-title" style="margin-bottom:0">🏗️ Sơ Đồ Hệ Thống — Trạng Thái Thời Gian Thực</div>
+                    <div class="dash2d-legend">
+                        <span id="dash2dStatus" class="status-chip idle" style="font-size:11px;">⚫ Chờ lệnh</span>
+                    </div>
+                </div>
+                
+                <div class="system-2d-diagram">
+                    <!-- Bể chứa -->
+                    <div class="tanks-container">
+                        <div class="tank-wrap n-tank">
+                            <div class="tank-body">
+                                <div class="tank-liquid" id="tankLiqN"></div>
+                                <div class="tank-label">N - ĐẠM</div>
+                                <div class="tank-flow" id="tFlowN">0.00 L/ph</div>
                             </div>
-                            <div class="diag-node small p-border">
-                                <div class="diag-icon small">🌿</div>
-                                <div class="diag-lbl small">Van P</div>
+                            <div class="pipe-vertical n-pipe">
+                                <div class="liquid-flow" id="flowAnimN"></div>
                             </div>
-                            <div class="diag-node small k-border">
-                                <div class="diag-icon small">🌿</div>
-                                <div class="diag-lbl small">Van K</div>
+                            <div class="solenoid-valve" id="sValveN"><div class="valve-led"></div></div>
+                        </div>
+                        
+                        <div class="tank-wrap p-tank">
+                            <div class="tank-body">
+                                <div class="tank-liquid" id="tankLiqP"></div>
+                                <div class="tank-label">P - LÂN</div>
+                                <div class="tank-flow" id="tFlowP">0.00 L/ph</div>
                             </div>
+                            <div class="pipe-vertical p-pipe">
+                                <div class="liquid-flow" id="flowAnimP"></div>
+                            </div>
+                            <div class="solenoid-valve" id="sValveP"><div class="valve-led"></div></div>
+                        </div>
+                        
+                        <div class="tank-wrap k-tank">
+                            <div class="tank-body">
+                                <div class="tank-liquid" id="tankLiqK"></div>
+                                <div class="tank-label">K - KALI</div>
+                                <div class="tank-flow" id="tFlowK">0.00 L/ph</div>
+                            </div>
+                            <div class="pipe-vertical k-pipe">
+                                <div class="liquid-flow" id="flowAnimK"></div>
+                            </div>
+                            <div class="solenoid-valve" id="sValveK"><div class="valve-led"></div></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Đường ống ngang gom -->
+                    <div class="collector-pipe">
+                        <div class="liquid-flow collector-flow" id="flowAnimCollector"></div>
+                    </div>
+                    
+                    <!-- Bơm và bồn trộn -->
+                    <div class="mixer-section">
+                        <div class="pump-module" id="sysPump">
+                            <div class="pump-icon">⚙️</div>
+                            <div class="pump-lbl">BƠM</div>
+                        </div>
+                        <div class="pipe-vertical main-pipe">
+                            <div class="liquid-flow main-flow" id="flowAnimMain"></div>
+                        </div>
+                        <div class="mixer-tank">
+                            <div class="mixer-liquid" id="mixerLiq"></div>
+                            <div class="mixer-stirrer" id="mixerStirrer"></div>
+                            <div class="mixer-label">BỒN PHA TRỘN</div>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <div class="iot-card">
-                    <div class="iot-card-title">📝 Hoạt Động Gần Đây</div>
-                    <div class="recent-list" id="recentList">
-                        <div class="recent-empty">Chưa có dữ liệu</div>
-                    </div>
-                </div>
+            <div class="dsh-grid">
+                <div class="iot-card" style="display:none"></div>
 
                 <div class="iot-card">
                     <div class="iot-card-title">ℹ️ Giới Thiệu Hệ Thống</div>
@@ -676,7 +710,7 @@
                                 <span>■</span> DỪNG KHẨN CẤP
                             </button>
                             <button id="btnHome" class="btn btn-home" onclick="sendHome()">
-                                <span>⌂</span> HOME
+                                <span>⌂</span> VỀ GỐC
                             </button>
                         </div>
                     </div>
@@ -929,7 +963,7 @@
                     <div class="sys-info-list">
                         <div class="sys-info-row"><span class="sys-lbl">Vi điều khiển</span><span class="sys-val">ESP32 DevKit V1</span></div>
                         <div class="sys-info-row"><span class="sys-lbl">Động cơ bước</span><span class="sys-val">NEMA 17 × 3</span></div>
-                        <div class="sys-info-row"><span class="sys-lbl">Driver</span><span class="sys-val">A4988 (1/8 step)</span></div>
+                             <div class="sys-info-row"><span class="sys-lbl">Bộ điều khiển</span><span class="sys-val">A4988 (1/8 bước)</span></div>
                         <div class="sys-info-row"><span class="sys-lbl">Cảm biến lưu lượng</span><span class="sys-val">YF-S201 × 3</span></div>
                         <div class="sys-info-row"><span class="sys-lbl">GPIO Van N</span><span class="sys-val n-val">13, 14, 15</span></div>
                         <div class="sys-info-row"><span class="sys-lbl">GPIO Van P</span><span class="sys-val p-val">16, 17, 18</span></div>
@@ -940,18 +974,18 @@
                 <!-- Calibration -->
                 <div class="iot-card">
                     <div class="iot-card-title">🎛️ Hiệu Chỉnh Cảm Biến</div>
-                    <p class="sys-note">ML_PER_PULSE: Lượng mL mỗi xung từ cảm biến YF-S201.</p>
+                    <p class="sys-note">mL/Xung: Thể tích mỗi xung từ cảm biến lưu lượng.</p>
                     <div class="threshold-grid">
                         <div class="threshold-item">
-                            <label>ML/Pulse Van N</label>
+                            <label>mL/Xung Van N</label>
                             <input type="number" id="calN" class="field" value="2.25" step="0.01" min="0.01">
                         </div>
                         <div class="threshold-item">
-                            <label>ML/Pulse Van P</label>
+                            <label>mL/Xung Van P</label>
                             <input type="number" id="calP" class="field" value="2.25" step="0.01" min="0.01">
                         </div>
                         <div class="threshold-item">
-                            <label>ML/Pulse Van K</label>
+                            <label>mL/Xung Van K</label>
                             <input type="number" id="calK" class="field" value="2.25" step="0.01" min="0.01">
                         </div>
                     </div>
@@ -963,10 +997,88 @@
                     <div class="iot-card-title">ℹ️ Phần Mềm</div>
                     <div class="sys-info-list">
                         <div class="sys-info-row"><span class="sys-lbl">Phiên bản</span><span class="sys-val">v2.1.0</span></div>
-                        <div class="sys-info-row"><span class="sys-lbl">Backend</span><span class="sys-val">Node.js + Express</span></div>
-                        <div class="sys-info-row"><span class="sys-lbl">Giao tiếp</span><span class="sys-val">MQTT + Socket.io</span></div>
-                        <div class="sys-info-row"><span class="sys-lbl">Frontend</span><span class="sys-val">Vanilla JS + Chart.js</span></div>
+                        <div class="sys-info-row"><span class="sys-lbl">Máy chủ</span><span class="sys-val">Node.js + Express</span></div>
+                        <div class="sys-info-row"><span class="sys-lbl">Giao tiếp</span><span class="sys-val">MQTT + Kết nối thời gian thực</span></div>
+                        <div class="sys-info-row"><span class="sys-lbl">Giao diện</span><span class="sys-val">JavaScript thuần + Đồ thị</span></div>
                         <div class="sys-info-row"><span class="sys-lbl">Luận văn</span><span class="sys-val">KHOA LUAN 2026</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================
+             PAGE: MÔ HÌNH 3D
+        ======================================== -->
+        <section class="page" id="page-model3d">
+            <div class="page-header">
+                <h2>🏗️ Mô Hình 3D Hệ Thống</h2>
+                <p>Mô hình 3D Hệ Thống Phối Trộn Phân Nhà Lưới</p>
+            </div>
+            <div class="model3d-layout">
+                <!-- Viewer Card -->
+                <div class="model3d-viewer-card iot-card">
+                    <div class="model3d-toolbar">
+                        <span class="model3d-hint">🖱️ Kéo xoay · Cuộn zoom · Phải di chuyển</span>
+                        <div class="model3d-btns">
+                            <button class="btn-sm" onclick="reset3DCamera()">🏠 Reset</button>
+                            <button class="btn-sm" onclick="set3DView('top')">⬆ Top</button>
+                            <button class="btn-sm" onclick="set3DView('front')">👁 Front</button>
+                            <button class="btn-sm" id="btn3dAutoRotate" onclick="toggle3DAutoRotate()">🔄 Tự quay</button>
+                        </div>
+                    </div>
+                    <div class="model3d-canvas-wrap" id="model3dCanvasWrap">
+                        <canvas id="model3dCanvas"></canvas>
+                        <div class="model3d-loading" id="model3dLoading">
+                            <div class="model3d-loading-inner">
+                                <div class="model3d-spinner"></div>
+                                <div class="model3d-load-title">Đang tải mô hình 3D...</div>
+                                <div class="model3d-progress-wrap">
+                                    <div class="model3d-progress-bar">
+                                        <div class="model3d-progress-fill" id="model3dProgressFill" style="width:0%"></div>
+                                    </div>
+                                    <span class="model3d-load-pct" id="model3dLoadPct">0%</span>
+                                </div>
+                                <div class="model3d-load-note">File lớn (~60MB), vui lòng chờ...</div>
+                            </div>
+                        </div>
+                        <div class="model3d-error hidden" id="model3dError">
+                            <div class="model3d-error-icon">⚠️</div>
+                            <div id="model3dErrorMsg">Không thể tải mô hình 3D</div>
+                            <button class="btn-sm" style="margin-top:12px" onclick="reload3DModel()">↻ Thử lại</button>
+                        </div>
+                    </div>
+                </div>
+                <!-- Info Column -->
+                <div class="model3d-info-col">
+                    <div class="iot-card">
+                        <div class="iot-card-title">📋 Thông Tin Mô Hình</div>
+                        <div class="sys-info-list">
+                            <div class="sys-info-row"><span class="sys-lbl">Tên</span><span class="sys-val">Trạm Pha Phân Nhà Lưới</span></div>
+                            <div class="sys-info-row"><span class="sys-lbl">Định dạng</span><span class="sys-val">Lưới 3D (OBJ)</span></div>
+                            <div class="sys-info-row"><span class="sys-lbl">Công cụ</span><span class="sys-val">SketchUp</span></div>
+                            <div class="sys-info-row"><span class="sys-lbl">Hiển thị</span><span class="sys-val">Trình duyệt đồ họa WebGL</span></div>
+                            <div class="sys-info-row"><span class="sys-lbl">Trạng thái</span><span class="sys-val" id="model3dStatus">Chờ tải...</span></div>
+                        </div>
+                    </div>
+                    <div class="iot-card">
+                        <div class="iot-card-title">🎨 Vật Liệu</div>
+                        <div class="model3d-mats">
+                            <div class="mat-item"><span class="mat-dot" style="background:rgba(195,255,107,0.9)"></span><span>Ống dẫn (VBO Pipe)</span></div>
+                            <div class="mat-item"><span class="mat-dot" style="background:#3a65a0"></span><span>Bồn nhựa (Plastic Barrel)</span></div>
+                            <div class="mat-item"><span class="mat-dot" style="background:#b3b3b3"></span><span>Khung nhôm (Aluminum)</span></div>
+                            <div class="mat-item"><span class="mat-dot" style="background:#ef4444"></span><span>Van/Động cơ đỏ (Color Red)</span></div>
+                            <div class="mat-item"><span class="mat-dot" style="background:#48cae4"></span><span>Kính xanh (Glass Blue)</span></div>
+                        </div>
+                    </div>
+                    <div class="iot-card">
+                        <div class="iot-card-title">🎮 Điều Khiển Camera</div>
+                        <div class="model3d-ctrl-list">
+                            <div class="ctrl-row"><span class="ctrl-key">🖱️ Kéo trái</span><span>Xoay mô hình</span></div>
+                            <div class="ctrl-row"><span class="ctrl-key">🖱️ Cuộn chuột</span><span>Phóng to / thu nhỏ</span></div>
+                            <div class="ctrl-row"><span class="ctrl-key">🖱️ Kéo phải</span><span>Di chuyển ngang</span></div>
+                            <div class="ctrl-row"><span class="ctrl-key">📱 1 ngón</span><span>Xoay</span></div>
+                            <div class="ctrl-row"><span class="ctrl-key">📱 2 ngón</span><span>Zoom & pan</span></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -998,6 +1110,10 @@
             <button class="bn-item" id="bn-history" onclick="showPage('history')">
                 <span class="bn-icon">📋</span>
                 <span class="bn-label">Lịch Sử</span>
+            </button>
+            <button class="bn-item" id="bn-model3d" onclick="showPage('model3d')">
+                <span class="bn-icon">🏗️</span>
+                <span class="bn-label">Mô Hình</span>
             </button>
         </div>
     </nav>
@@ -1262,6 +1378,290 @@ window.updateAlertBadge = function(count) {
     if (!bnBadge) return;
     if (count > 0) { bnBadge.textContent = count; bnBadge.classList.remove('hidden'); }
     else bnBadge.classList.add('hidden');
+};
+</script>
+
+<script>
+// ── Dashboard 2D Animated Diagram ──────────────────────────
+// Hook into socket.io status updates to animate 2D diagram
+const _hookSocket2D = () => {
+    if (!window.socket) { setTimeout(_hookSocket2D, 800); return; }
+    window.socket.on('status', (data) => {
+        const anyRunning = data.running === true;
+        
+        ['N', 'P', 'K'].forEach(k => {
+            const flowRate = data[`flow${k}`] || 0;
+            const active = data[`valve${k}`] === 'open' || data.phase === k || (anyRunning && flowRate > 0);
+            
+            // Flow text
+            const fEl = document.getElementById(`tFlow${k}`);
+            if (fEl) fEl.textContent = flowRate.toFixed(2) + ' L/ph';
+            
+            // Valve LED
+            const vEl = document.getElementById(`sValve${k}`);
+            if (vEl) {
+                if (active) vEl.classList.add('valve-open');
+                else vEl.classList.remove('valve-open');
+            }
+            
+            // Flow animation
+            const aEl = document.getElementById(`flowAnim${k}`);
+            if (aEl) {
+                if (active) aEl.classList.add('flowing');
+                else aEl.classList.remove('flowing');
+            }
+        });
+        
+        // Collector pipe & Pump & Mixer
+        const colEl = document.getElementById('flowAnimCollector');
+        const mEl = document.getElementById('flowAnimMain');
+        const pEl = document.getElementById('sysPump');
+        const stEl = document.getElementById('mixerStirrer');
+        const stLbl = document.getElementById('dash2dStatus');
+        
+        if (anyRunning) {
+            if (colEl) colEl.classList.add('flowing');
+            if (mEl) mEl.classList.add('flowing');
+            if (pEl) pEl.classList.add('pump-active');
+            if (stEl) stEl.classList.add('stirring');
+            if (stLbl) {
+                stLbl.textContent = '🟢 Đang chạy';
+                stLbl.className = 'status-chip running';
+            }
+        } else {
+            if (colEl) colEl.classList.remove('flowing');
+            if (mEl) mEl.classList.remove('flowing');
+            if (pEl) pEl.classList.remove('pump-active');
+            if (stEl) stEl.classList.remove('stirring');
+            if (stLbl) {
+                stLbl.textContent = '⚫ Chờ lệnh';
+                stLbl.className = 'status-chip idle';
+            }
+        }
+    });
+};
+setTimeout(_hookSocket2D, 1000);
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+let scene, camera, renderer, controls, model3dObj;
+let autoRotating = false;
+let viewer3dInited = false;
+
+function initViewer() {
+    if (viewer3dInited) return;
+    viewer3dInited = true;
+
+    const canvas = document.getElementById('model3dCanvas');
+    const wrap   = document.getElementById('model3dCanvasWrap');
+    const W = wrap.clientWidth  || 800;
+    const H = wrap.clientHeight || 500;
+
+    // Scene
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0f172a);
+    scene.fog = new THREE.FogExp2(0x0f172a, 0.003);
+
+    // Camera
+    camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 5000);
+    camera.position.set(0, 80, 250);
+
+    // Renderer
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+
+    // Lights
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const sun = new THREE.DirectionalLight(0xfff4e0, 1.4);
+    sun.position.set(150, 300, 200);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    scene.add(sun);
+    const fill = new THREE.DirectionalLight(0x4488cc, 0.4);
+    fill.position.set(-150, 50, -100);
+    scene.add(fill);
+
+    // Grid floor
+    const grid = new THREE.GridHelper(600, 50, 0x1e3a5f, 0x162032);
+    grid.material.opacity = 0.6;
+    grid.material.transparent = true;
+    scene.add(grid);
+
+    // Controls
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor  = 0.06;
+    controls.minDistance = 10;
+    controls.maxDistance = 1500;
+    controls.maxPolarAngle = Math.PI / 2 + 0.15;
+
+    window.addEventListener('resize', onResize3D);
+    animate3D();
+    loadModel();
+}
+
+function loadModel() {
+    const loadEl  = document.getElementById('model3dLoading');
+    const errEl   = document.getElementById('model3dError');
+    const statusEl= document.getElementById('model3dStatus');
+    const fillEl  = document.getElementById('model3dProgressFill');
+    const pctEl   = document.getElementById('model3dLoadPct');
+
+    if (loadEl) { loadEl.style.display = 'flex'; }
+    if (errEl)  { errEl.classList.add('hidden'); }
+    if (statusEl) statusEl.textContent = 'Đang tải vật liệu...';
+
+    const mtlLoader = new MTLLoader();
+    mtlLoader.setPath('/3d/');
+    mtlLoader.load('mohinh1.mtl', (mats) => {
+        mats.preload();
+        if (statusEl) statusEl.textContent = 'Đang tải mô hình...';
+        const objLoader = new OBJLoader();
+        objLoader.setMaterials(mats);
+        objLoader.setPath('/3d/');
+        objLoader.load('mohinh1.obj',
+            (obj) => onModelLoaded(obj, loadEl, statusEl),
+            (xhr) => {
+                if (xhr.total > 0) {
+                    const pct = Math.round(xhr.loaded / xhr.total * 100);
+                    if (fillEl) fillEl.style.width = pct + '%';
+                    if (pctEl)  pctEl.textContent  = pct + '%';
+                }
+            },
+            (err) => onModelError(err, loadEl, errEl, statusEl)
+        );
+    }, undefined, () => {
+        // MTL failed — load OBJ only
+        if (statusEl) statusEl.textContent = 'Tải OBJ (không texture)...';
+        const objLoader = new OBJLoader();
+        objLoader.setPath('/3d/');
+        objLoader.load('mohinh1.obj',
+            (obj) => onModelLoaded(obj, loadEl, statusEl),
+            (xhr) => {
+                if (xhr.total > 0) {
+                    const pct = Math.round(xhr.loaded / xhr.total * 100);
+                    if (fillEl) fillEl.style.width = pct + '%';
+                    if (pctEl)  pctEl.textContent  = pct + '%';
+                }
+            },
+            (err) => onModelError(err, loadEl, errEl, statusEl)
+        );
+    });
+}
+
+function onModelLoaded(obj, loadEl, statusEl) {
+    // Center & fit
+    const box    = new THREE.Box3().setFromObject(obj);
+    const center = box.getCenter(new THREE.Vector3());
+    const size   = box.getSize(new THREE.Vector3());
+    obj.position.sub(center);
+    obj.position.y += size.y / 2;
+
+    // Scale to fit 200 units
+    const maxDim = Math.max(size.x, size.y, size.z);
+    if (maxDim > 200) obj.scale.setScalar(180 / maxDim);
+
+    obj.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+    scene.add(obj);
+    model3dObj = obj;
+
+    // Fit camera
+    const nb  = new THREE.Box3().setFromObject(obj);
+    const ns  = nb.getSize(new THREE.Vector3());
+    const mx  = Math.max(ns.x, ns.y, ns.z);
+    camera.position.set(mx * 1.3, mx * 0.9, mx * 1.6);
+    controls.target.set(0, ns.y * 0.3, 0);
+    controls.update();
+
+    if (loadEl)  loadEl.style.display = 'none';
+    if (statusEl) statusEl.textContent = '✅ Tải thành công';
+}
+
+function onModelError(err, loadEl, errEl, statusEl) {
+    console.error('3D load error', err);
+    if (loadEl) loadEl.style.display = 'none';
+    if (errEl)  errEl.classList.remove('hidden');
+    if (statusEl) statusEl.textContent = '❌ Lỗi tải mô hình';
+    const msgEl = document.getElementById('model3dErrorMsg');
+    if (msgEl) msgEl.textContent = 'Lỗi: ' + (err.message || err);
+}
+
+function animate3D() {
+    requestAnimationFrame(animate3D);
+    if (autoRotating && model3dObj) model3dObj.rotation.y += 0.004;
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+function onResize3D() {
+    const wrap = document.getElementById('model3dCanvasWrap');
+    if (!wrap || !renderer) return;
+    const W = wrap.clientWidth, H = wrap.clientHeight;
+    camera.aspect = W / H;
+    camera.updateProjectionMatrix();
+    renderer.setSize(W, H);
+}
+
+// ── Global controls ──────────────────────────────────
+window.reset3DCamera = function() {
+    if (!model3dObj) return;
+    const b = new THREE.Box3().setFromObject(model3dObj);
+    const s = b.getSize(new THREE.Vector3());
+    const m = Math.max(s.x, s.y, s.z);
+    camera.position.set(m * 1.3, m * 0.9, m * 1.6);
+    controls.target.set(0, s.y * 0.3, 0);
+    controls.update();
+};
+
+window.set3DView = function(view) {
+    if (!model3dObj) return;
+    const b = new THREE.Box3().setFromObject(model3dObj);
+    const c = b.getCenter(new THREE.Vector3());
+    const s = b.getSize(new THREE.Vector3());
+    const m = Math.max(s.x, s.y, s.z);
+    if (view === 'top') {
+        camera.position.set(c.x, c.y + m * 2, c.z);
+    } else if (view === 'front') {
+        camera.position.set(c.x, c.y + s.y * 0.3, c.z + m * 1.8);
+    }
+    controls.target.copy(c);
+    controls.update();
+};
+
+window.toggle3DAutoRotate = function() {
+    autoRotating = !autoRotating;
+    const btn = document.getElementById('btn3dAutoRotate');
+    if (btn) btn.style.background = autoRotating ? 'var(--accent)' : '';
+};
+
+window.reload3DModel = function() {
+    if (!viewer3dInited) return;
+    const errEl = document.getElementById('model3dError');
+    if (errEl) errEl.classList.add('hidden');
+    loadModel();
+};
+
+// ── Hook into showPage ────────────────────────────────
+const _prev3D = window.showPage;
+window.showPage = function(page) {
+    if (_prev3D) _prev3D(page);
+    if (page === 'model3d') {
+        setTimeout(() => {
+            if (!viewer3dInited) initViewer();
+            else onResize3D();
+        }, 100);
+    }
 };
 </script>
 </body>

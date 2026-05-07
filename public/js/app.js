@@ -177,8 +177,8 @@ function setESPStatus(status) {
     }
 
     const s = document.getElementById('sysConnESP');
-    if(s) s.textContent = status ? 'Online' : 'Offline';
-    document.getElementById('sysESPState').textContent = status ? 'Đang hoạt động' : 'Offline';
+    if(s) s.textContent = status ? 'Trực tuyến' : 'Ngoại tuyến';
+    document.getElementById('sysESPState').textContent = status ? 'Đang hoạt động' : 'Ngoại tuyến';
 
     const diag = document.getElementById('diag-esp');
     if(diag) {
@@ -217,7 +217,7 @@ function updateUI(data) {
     const mTxt = document.getElementById('monStatusTxt');
     if(data.running) {
         mStat.className = 'conn-pill running active';
-        mTxt.textContent = 'ĐANG PHA TRỘN ' + (simMode ? '(ĐỒNG THỜI)' : `(PHASE ${data.phase})`);
+        mTxt.textContent = 'ĐANG PHA TRỘN ' + (simMode ? '(ĐỒNG THỜI)' : `(G.ĐOẠN ${data.phase})`);
     } else {
         mStat.className = 'conn-pill ' + (data.phase===4 ? 'done' : 'idle');
         mTxt.textContent = data.phase===4 ? 'HOÀN THÀNH' : 'SẴN SÀNG';
@@ -325,9 +325,9 @@ function initChart() {
         data: {
             labels: [],
             datasets: [
-                { label: 'N (L/p)', borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.1)', data: [], tension: 0.4, fill: true },
-                { label: 'P (L/p)', borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', data: [], tension: 0.4, fill: true },
-                { label: 'K (L/p)', borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', data: [], tension: 0.4, fill: true }
+                { label: 'Đạm (L/ph)', borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.1)', data: [], tension: 0.4, fill: true },
+                { label: 'Lân (L/ph)', borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', data: [], tension: 0.4, fill: true },
+                { label: 'Kali (L/ph)', borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', data: [], tension: 0.4, fill: true }
             ]
         },
         options: {
@@ -659,7 +659,7 @@ function clearHistory() {
 }
 function exportCSV() {
     fetch('/api/history').then(r=>r.json()).then(data => {
-        let csv = "Timestamp,Recipe,Mode,N_ml,P_ml,K_ml,Total_ml,Duration_s,Status\n";
+        let csv = "Thoi_gian,Cong_thuc,Che_do,N_ml,P_ml,K_ml,Tong_ml,Thoi_gian_s,Trang_thai\n";
         data.forEach(h => {
             csv += `${h.timestamp},${h.recipe_name},${h.mode},${h.N_ml||0},${h.P_ml||0},${h.K_ml||0},${h.total_ml},${h.duration_s},${h.status}\n`;
         });
