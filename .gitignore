@@ -1,4 +1,4 @@
-﻿# Node.js
+# Node.js
 node_modules/
 npm-debug.log*
 yarn-error.log
@@ -30,6 +30,8 @@ build/
 *.exe
 *.msi
 *.bat
+*.obj
+*.skp
 npm*
 npx*
 corepack*
