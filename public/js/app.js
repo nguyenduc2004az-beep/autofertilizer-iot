@@ -25,6 +25,7 @@ function doLogin(e) {
         sessionStorage.setItem('isLogged', '1');
         document.getElementById('loginPage').classList.add('hidden');
         document.getElementById('appShell').classList.remove('hidden');
+        document.getElementById('bottomNav').classList.remove('hidden');
         showPage('dashboard');
         initChart();
         loadHistory();
@@ -49,6 +50,7 @@ function doLogout() {
 if(sessionStorage.getItem('isLogged') === '1') {
     document.getElementById('loginPage').classList.add('hidden');
     document.getElementById('appShell').classList.remove('hidden');
+    document.getElementById('bottomNav').classList.remove('hidden');
     showPage('dashboard');
     initChart();
     loadHistory();
@@ -59,11 +61,11 @@ if(sessionStorage.getItem('isLogged') === '1') {
 function showPage(pageId) {
     // Hide all pages
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.bn-item').forEach(n => n.classList.remove('active'));
 
     // Show selected
     const p = document.getElementById('page-' + pageId);
-    const n = document.getElementById('nav-' + pageId);
+    const n = document.getElementById('bn-' + pageId);
     if(p) p.classList.add('active');
     if(n) n.classList.add('active');
 

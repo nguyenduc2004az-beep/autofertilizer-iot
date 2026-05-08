@@ -76,32 +76,6 @@
     <!-- Overlay khi sidebar mở trên mobile -->
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 
-    <!-- ── SIDEBAR ── -->
-    <!-- Bottom Navigation Thay Thế Sidebar -->
-    <nav class="bottom-nav" id="bottomNav">
-        <button class="bn-item active" id="bn-dashboard" onclick="showPage('dashboard')">
-            <span class="bn-icon">📊</span><span class="bn-label">Tổng Quan</span>
-        </button>
-        <button class="bn-item" id="bn-monitor" onclick="showPage('monitor')">
-            <span class="bn-icon">📡</span><span class="bn-label">Giám Sát</span>
-        </button>
-        <button class="bn-item" id="bn-settings" onclick="showPage('settings')">
-            <span class="bn-icon">⚙️</span><span class="bn-label">Điều Khiển</span>
-        </button>
-        <button class="bn-item" id="bn-recipes" onclick="showPage('recipes')">
-            <span class="bn-icon">💾</span><span class="bn-label">Công Thức</span>
-        </button>
-        <button class="bn-item" id="bn-history" onclick="showPage('history')">
-            <span class="bn-icon">📋</span><span class="bn-label">Lịch Sử</span>
-        </button>
-        <button class="bn-item" id="bn-system" onclick="showPage('system')">
-            <span class="bn-icon">🖥️</span><span class="bn-label">Hệ Thống</span>
-        </button>
-        <button class="bn-item logout-bn" onclick="doLogout()">
-            <span class="bn-icon">⏏</span><span class="bn-label">Thoát</span>
-        </button>
-    </nav>
-
     <!-- ── TOPBAR ── -->
     <div class="topbar">
         <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">☰</button>
@@ -1414,6 +1388,33 @@ const _hookSocket2D = () => {
 setTimeout(_hookSocket2D, 1000);
 </script>
 
+
+</div> <!-- Kết thúc appShell -->
+
+<!-- Bottom Navigation Di chuyển ra ngoài cùng để luôn hiển thị -->
+<nav class="bottom-nav hidden" id="bottomNav">
+    <button class="bn-item active" id="bn-dashboard" onclick="showPage('dashboard')">
+        <span class="bn-icon">📊</span><span class="bn-label">Tổng Quan</span>
+    </button>
+    <button class="bn-item" id="bn-monitor" onclick="showPage('monitor')">
+        <span class="bn-icon">📡</span><span class="bn-label">Giám Sát</span>
+    </button>
+    <button class="bn-item" id="bn-settings" onclick="showPage('settings')">
+        <span class="bn-icon">⚙️</span><span class="bn-label">Điều Khiển</span>
+    </button>
+    <button class="bn-item" id="bn-recipes" onclick="showPage('recipes')">
+        <span class="bn-icon">💾</span><span class="bn-label">Công Thức</span>
+    </button>
+    <button class="bn-item" id="bn-history" onclick="showPage('history')">
+        <span class="bn-icon">📋</span><span class="bn-label">Lịch Sử</span>
+    </button>
+    <button class="bn-item" id="bn-system" onclick="showPage('system')">
+        <span class="bn-icon">🖥️</span><span class="bn-label">Hệ Thống</span>
+    </button>
+    <button class="bn-item logout-bn" onclick="doLogout()">
+        <span class="bn-icon">⏏</span><span class="bn-label">Thoát</span>
+    </button>
+</nav>
 
 </body>
 </html>
