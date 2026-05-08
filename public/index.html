@@ -146,7 +146,7 @@
                             <div class="quick-step-num">1</div>
                             <div class="quick-step-icon">⚙️</div>
                             <div class="quick-step-title">Đặt lượng phân</div>
-                            <div class="quick-step-desc">Vào mục <strong>Điều Khiển</strong>, nhập số mL cho N, P, K</div>
+                            <div class="quick-step-desc">Vào mục <strong>Điều Khiển</strong>, nhập số mL cho Bồn 1, 2, 3</div>
                         </div>
                         <div class="quick-step-connector"></div>
                         <div class="quick-step">
@@ -219,7 +219,7 @@
                         <div class="tank-wrap n-tank">
                             <div class="tank-body">
                                 <div class="tank-liquid" id="tankLiqN"></div>
-                                <div class="tank-label">N - ĐẠM</div>
+                                <div class="tank-label">BỒN 1</div>
                                 <div class="tank-flow" id="tFlowN">0.00 L/ph</div>
                             </div>
                             <div class="pipe-vertical n-pipe">
@@ -231,7 +231,7 @@
                         <div class="tank-wrap p-tank">
                             <div class="tank-body">
                                 <div class="tank-liquid" id="tankLiqP"></div>
-                                <div class="tank-label">P - LÂN</div>
+                                <div class="tank-label">BỒN 2</div>
                                 <div class="tank-flow" id="tFlowP">0.00 L/ph</div>
                             </div>
                             <div class="pipe-vertical p-pipe">
@@ -243,7 +243,7 @@
                         <div class="tank-wrap k-tank">
                             <div class="tank-body">
                                 <div class="tank-liquid" id="tankLiqK"></div>
-                                <div class="tank-label">K - KALI</div>
+                                <div class="tank-label">BỒN 3</div>
                                 <div class="tank-flow" id="tFlowK">0.00 L/ph</div>
                             </div>
                             <div class="pipe-vertical k-pipe">
@@ -337,9 +337,9 @@
             <div class="valves-row">
                 <div class="valve-card" id="vcN">
                     <div class="vc-header n-header">
-                        <div class="vc-badge n-badge">N</div>
+                        <div class="vc-badge n-badge">1</div>
                         <div class="vc-info">
-                            <h3>🌿 Đạm (Nitrogen)</h3>
+                            <h3>🌿 Bồn Số 1</h3>
                             <div class="vc-state" id="stateN">
                                 <span class="state-dot closed-dot"></span>
                                 <span id="stateTxtN">Đã đóng</span>
@@ -385,9 +385,9 @@
 
                 <div class="valve-card" id="vcP">
                     <div class="vc-header p-header">
-                        <div class="vc-badge p-badge">P</div>
+                        <div class="vc-badge p-badge">2</div>
                         <div class="vc-info">
-                            <h3>🌾 Lân (Phosphorus)</h3>
+                            <h3>🌾 Bồn Số 2</h3>
                             <div class="vc-state" id="stateP">
                                 <span class="state-dot closed-dot"></span>
                                 <span id="stateTxtP">Đã đóng</span>
@@ -433,9 +433,9 @@
 
                 <div class="valve-card" id="vcK">
                     <div class="vc-header k-header">
-                        <div class="vc-badge k-badge">K</div>
+                        <div class="vc-badge k-badge">3</div>
                         <div class="vc-info">
-                            <h3>🍂 Kali (Potassium)</h3>
+                            <h3>🍂 Bồn Số 3</h3>
                             <div class="vc-state" id="stateK">
                                 <span class="state-dot closed-dot"></span>
                                 <span id="stateTxtK">Đã đóng</span>
@@ -539,20 +539,20 @@
                             <div class="smp-sub">Điền số mL cho mỗi loại phân, sau đó nhấn nút BẮT ĐẦU</div>
                             <div class="simple-npk-grid">
                                 <div class="simple-npk-item n-card">
-                                    <div class="simple-npk-letter n-val">N</div>
-                                    <div class="simple-npk-name">Phân Đạm</div>
+                                    <div class="simple-npk-letter n-val">1</div>
+                                    <div class="simple-npk-name">Bồn 1</div>
                                     <input type="number" id="simpleN" class="field" placeholder="0" min="0" step="100">
                                     <div class="simple-npk-unit">mL</div>
                                 </div>
                                 <div class="simple-npk-item p-card">
-                                    <div class="simple-npk-letter p-val">P</div>
-                                    <div class="simple-npk-name">Phân Lân</div>
+                                    <div class="simple-npk-letter p-val">2</div>
+                                    <div class="simple-npk-name">Bồn 2</div>
                                     <input type="number" id="simpleP" class="field" placeholder="0" min="0" step="100">
                                     <div class="simple-npk-unit">mL</div>
                                 </div>
                                 <div class="simple-npk-item k-card">
-                                    <div class="simple-npk-letter k-val">K</div>
-                                    <div class="simple-npk-name">Phân Kali</div>
+                                    <div class="simple-npk-letter k-val">3</div>
+                                    <div class="simple-npk-name">Bồn 3</div>
                                     <input type="number" id="simpleK" class="field" placeholder="0" min="0" step="100">
                                     <div class="simple-npk-unit">mL</div>
                                 </div>
@@ -566,7 +566,7 @@
                     <!-- ADVANCED MODE (default) -->
                     <div id="advancedModePanel">
                         <div class="mode-tabs">
-                            <button class="mode-tab active" id="tabSeq" onclick="switchMode('seq')">🔁 Tuần Tự (N→P→K)</button>
+                            <button class="mode-tab active" id="tabSeq" onclick="switchMode('seq')">🔁 Tuần Tự (1→2→3)</button>
                             <button class="mode-tab" id="tabSim" onclick="switchMode('sim')">⚡ Đồng Thời</button>
                         </div>
 
@@ -587,7 +587,7 @@
                             </div>
                             <div class="npk-grid">
                                 <div class="npk-card n-card">
-                                    <div class="npk-label n-label">N<span>🌿 Phân Đạm</span></div>
+                                    <div class="npk-label n-label">1<span>🌿 Bồn Số 1</span></div>
                                     <div class="npk-field">
                                         <input type="number" id="inputN" class="field" placeholder="0" min="0" step="100" oninput="onInputChange()">
                                         <span class="field-unit">mL</span>
@@ -599,7 +599,7 @@
                                     </div>
                                 </div>
                                 <div class="npk-card p-card">
-                                    <div class="npk-label p-label">P<span>🌾 Phân Lân</span></div>
+                                    <div class="npk-label p-label">2<span>🌾 Bồn Số 2</span></div>
                                     <div class="npk-field">
                                         <input type="number" id="inputP" class="field" placeholder="0" min="0" step="100" oninput="onInputChange()">
                                         <span class="field-unit">mL</span>
@@ -611,7 +611,7 @@
                                     </div>
                                 </div>
                                 <div class="npk-card k-card">
-                                    <div class="npk-label k-label">K<span>🍂 Phân Kali</span></div>
+                                    <div class="npk-label k-label">3<span>🍂 Bồn Số 3</span></div>
                                     <div class="npk-field">
                                         <input type="number" id="inputK" class="field" placeholder="0" min="0" step="100" oninput="onInputChange()">
                                         <span class="field-unit">mL</span>
@@ -659,15 +659,15 @@
                                 <table class="ratio-table">
                                     <thead><tr><th>Bồn phân</th><th>Tỉ lệ</th><th>Phần %</th><th>Thể tích (L)</th><th>L/phút</th></tr></thead>
                                     <tbody>
-                                        <tr><td><span class="vc-badge n-badge" style="width:auto;padding:4px 10px">N - Đạm</span></td>
+                                        <tr><td><span class="vc-badge n-badge" style="width:auto;padding:4px 10px">Bồn 1</span></td>
                                             <td><input type="number" id="ratioN" class="field ratio-inp" value="3" min="0" oninput="calcRatio()"></td>
                                             <td id="simPctN" class="n-val">50%</td>
                                             <td id="simVolN">5.00 L</td><td id="simLpmN" class="n-val">1.50</td></tr>
-                                        <tr><td><span class="vc-badge p-badge" style="width:auto;padding:4px 10px">P - Lân</span></td>
+                                        <tr><td><span class="vc-badge p-badge" style="width:auto;padding:4px 10px">Bồn 2</span></td>
                                             <td><input type="number" id="ratioP" class="field ratio-inp" value="2" min="0" oninput="calcRatio()"></td>
                                             <td id="simPctP" class="p-val">33%</td>
                                             <td id="simVolP">3.33 L</td><td id="simLpmP" class="p-val">1.00</td></tr>
-                                        <tr><td><span class="vc-badge k-badge" style="width:auto;padding:4px 10px">K - Kali</span></td>
+                                        <tr><td><span class="vc-badge k-badge" style="width:auto;padding:4px 10px">Bồn 3</span></td>
                                             <td><input type="number" id="ratioK" class="field ratio-inp" value="1" min="0" oninput="calcRatio()"></td>
                                             <td id="simPctK" class="k-val">17%</td>
                                             <td id="simVolK">1.67 L</td><td id="simLpmK" class="k-val">0.50</td></tr>
@@ -714,15 +714,15 @@
                             <input type="text" id="newRecipeName" class="field" placeholder="VD: NPK 20-20-20">
                         </div>
                         <div class="form-row">
-                            <label>N - Đạm (mL)</label>
+                            <label>Bồn 1 (mL)</label>
                             <input type="number" id="newRecipeN" class="field" placeholder="0" min="0">
                         </div>
                         <div class="form-row">
-                            <label>P - Lân (mL)</label>
+                            <label>Bồn 2 (mL)</label>
                             <input type="number" id="newRecipeP" class="field" placeholder="0" min="0">
                         </div>
                         <div class="form-row">
-                            <label>K - Kali (mL)</label>
+                            <label>Bồn 3 (mL)</label>
                             <input type="number" id="newRecipeK" class="field" placeholder="0" min="0">
                         </div>
                         <div class="form-row">
@@ -1273,9 +1273,9 @@ function showConfirmDialog(n, p, k, modeLabel) {
     const summary = document.getElementById('confirmSummary');
     summary.innerHTML = `
         <div class="confirm-summary-row"><span class="cs-label">Chế độ</span><span class="cs-val">${modeLabel}</span></div>
-        <div class="confirm-summary-row"><span class="cs-label">🌿 Đạm (N)</span><span class="cs-val n-val">${n.toFixed(0)} mL</span></div>
-        <div class="confirm-summary-row"><span class="cs-label">🌾 Lân (P)</span><span class="cs-val p-val">${p.toFixed(0)} mL</span></div>
-        <div class="confirm-summary-row"><span class="cs-label">🍂 Kali (K)</span><span class="cs-val k-val">${k.toFixed(0)} mL</span></div>
+        <div class="confirm-summary-row"><span class="cs-label">🌿 Bồn 1</span><span class="cs-val n-val">${n.toFixed(0)} mL</span></div>
+        <div class="confirm-summary-row"><span class="cs-label">🌾 Bồn 2</span><span class="cs-val p-val">${p.toFixed(0)} mL</span></div>
+        <div class="confirm-summary-row"><span class="cs-label">🍂 Bồn 3</span><span class="cs-val k-val">${k.toFixed(0)} mL</span></div>
         <div class="confirm-summary-row"><span class="cs-label">📊 Tổng cộng</span><span class="cs-val">${(n+p+k).toFixed(0)} mL</span></div>
     `;
     _pendingStartFn = _doActualStart;
