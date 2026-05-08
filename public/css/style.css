@@ -846,16 +846,16 @@ body {
 .bottom-nav {
     position: fixed;
     bottom: 0; left: 0; right: 0;
-    height: 70px;
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(20px);
-    border-top: 1px solid rgba(0,0,0,0.05);
+    height: 75px;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(25px);
+    border-top: 1px solid rgba(42, 125, 46, 0.15);
     display: flex;
-    justify-content: space-around;
+    justify-content: space-evenly;
     align-items: center;
     z-index: 1000;
-    padding: 0 10px;
-    box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
+    padding: 0;
+    box-shadow: 0 -8px 30px rgba(0,0,0,0.04);
 }
 
 .bn-item {
@@ -865,20 +865,49 @@ body {
     justify-content: center;
     background: transparent;
     border: none;
-    color: var(--txt-muted);
-    font-size: 11px;
-    font-weight: 600;
+    color: #6b7280; /* Màu xám nhẹ cho trạng thái chờ */
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: all 0.25s ease;
     flex: 1;
-    gap: 4px;
+    gap: 6px;
     height: 100%;
+    position: relative;
+    opacity: 0.6;
 }
 
-.bn-icon { font-size: 20px; transition: transform 0.3s; }
-.bn-item:hover .bn-icon { transform: translateY(-3px); }
-.bn-item.active { color: var(--primary-nlu); }
-.bn-item.active .bn-icon { transform: scale(1.2); }
+.bn-icon { 
+    font-size: 22px; 
+    transition: all 0.3s;
+    filter: grayscale(100%); /* Unified look */
+}
+
+.bn-item.active { 
+    color: var(--primary-nlu); 
+    opacity: 1;
+}
+
+.bn-item.active .bn-icon { 
+    transform: translateY(-4px); 
+    filter: grayscale(0%);
+    filter: drop-shadow(0 2px 8px rgba(42,125,46,0.2));
+}
+
+.bn-item.active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 20%; right: 20%;
+    height: 4px;
+    background: var(--primary-nlu);
+    border-radius: 0 0 4px 4px;
+    box-shadow: 0 2px 10px rgba(42,125,46,0.3);
+}
+
+.bn-item:hover { opacity: 0.9; color: var(--primary-nlu); }
 
 .sidebar { display: none !important; }
 .sidebar-overlay { display: none !important; }
