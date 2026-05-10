@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="/js/app.js"></script>
     <script type="importmap">
     {
       "imports": {
@@ -17,6 +18,7 @@
       }
     }
     </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -77,27 +79,66 @@
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 
     <!-- ── TOPBAR ── -->
-    <div class="topbar">
-        <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">☰</button>
-        <div class="topbar-breadcrumb">
-            <span id="topbarTitle">Tổng Quan</span>
+    <header class="topbar">
+        <div class="topbar-left">
+            <div class="sys-logo-circle">
+                <img src="https://i.pinimg.com/736x/a3/2f/18/a32f183353abc91feeb9cdd95bf5bd48.jpg" alt="HCMUAF Logo">
+            </div>
+            <div class="topbar-breadcrumb">
+                <span id="topbarTitle">Tổng Quan</span>
+            </div>
         </div>
-        <div class="topbar-right">
-            <button class="topbar-help-btn" onclick="showHelp()" title="Hướng dẫn sử dụng">
-                ❓ <span>Hướng dẫn</span>
+
+        <nav class="topbar-nav">
+            <button class="tn-item active" id="tn-dashboard" onclick="showPage('dashboard')" title="Tổng Quan">
+                <i class="fas fa-home"></i>
+                <div class="tn-active-indicator"></div>
             </button>
-            <div class="topbar-status" id="topbarStatus">
-                <div class="status-chip idle" id="systemChip">
+            <button class="tn-item" id="tn-monitor" onclick="showPage('monitor')" title="Giám Sát">
+                <i class="fas fa-chart-line"></i>
+                <div class="tn-active-indicator"></div>
+            </button>
+            <button class="tn-item" id="tn-settings" onclick="showPage('settings')" title="Điều Khiển">
+                <i class="fas fa-sliders-h"></i>
+                <div class="tn-active-indicator"></div>
+            </button>
+            <button class="tn-item" id="tn-recipes" onclick="showPage('recipes')" title="Công Thức">
+                <i class="fas fa-flask"></i>
+                <div class="tn-active-indicator"></div>
+            </button>
+            <button class="tn-item" id="tn-alerts" onclick="showPage('alerts')" title="Cảnh Báo">
+                <i class="fas fa-bell"></i>
+                <span class="tn-badge hidden" id="tn-badge-alerts">0</span>
+                <div class="tn-active-indicator"></div>
+            </button>
+            <button class="tn-item" id="tn-history" onclick="showPage('history')" title="Lịch Sử">
+                <i class="fas fa-history"></i>
+                <div class="tn-active-indicator"></div>
+            </button>
+            <button class="tn-item" id="tn-system" onclick="showPage('system')" title="Hệ Thống">
+                <i class="fas fa-info-circle"></i>
+                <div class="tn-active-indicator"></div>
+            </button>
+        </nav>
+
+        <div class="topbar-right">
+            <div class="topbar-info-group">
+                <div id="systemChip" class="status-chip idle">
                     <span id="systemChipTxt">CHỜ</span>
                 </div>
+                <div class="topbar-clock" id="topbarClock">00:00:00</div>
             </div>
-            <div class="topbar-clock" id="topbarClock">00:00:00</div>
-            <div class="topbar-user">
+            <button class="top-circle-btn" onclick="showHelp()" title="Hướng dẫn">
+                <i class="fas fa-question"></i>
+            </button>
+            <button class="top-circle-btn" onclick="doLogout()" title="Đăng xuất">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
+            <div class="user-avatar-btn">
                 <div class="user-avatar">A</div>
-                <span id="topbarUsername">Quản Trị</span>
             </div>
         </div>
-    </div>
+    </header>
 
     <!-- ── MAIN CONTENT AREA ── -->
     <main class="main-content">
@@ -106,177 +147,229 @@
              PAGE: DASHBOARD (Tổng Quan)
         ======================================== -->
         <section class="page active" id="page-dashboard">
-            <div class="page-header">
-                <h2>🌱 Tổng Quan Hệ Thống</h2>
-                <p>Chào mừng đến với Bảng Điều Khiển Hệ Thống</p>
-            </div>
+            <div class="ov-layout">
 
-            <div class="dashboard-main-layout">
-                <!-- Sidebar Hướng Dẫn (Vị trí cũ của Toolbar) -->
-                <aside class="quick-guide-sidebar">
-                    <div class="quick-guide-title">📖 Hướng Dẫn Nhanh</div>
-                    <div class="quick-steps-vertical">
-                        <div class="quick-step">
-                            <div class="quick-step-num">1</div>
-                            <div class="quick-step-icon">⚙️</div>
-                            <div class="quick-step-title">Đặt lượng phân</div>
-                            <div class="quick-step-desc">Vào mục <strong>Điều Khiển</strong>, nhập số mL cho Bồn 1, 2, 3</div>
-                        </div>
-                        <div class="quick-step-connector"></div>
-                        <div class="quick-step">
-                            <div class="quick-step-num">2</div>
-                            <div class="quick-step-icon">▶️</div>
-                            <div class="quick-step-title">Bắt đầu pha trộn</div>
-                            <div class="quick-step-desc">Nhấn <strong>BẮT ĐẦU PHA TRỘN</strong> và xác nhận</div>
-                        </div>
-                        <div class="quick-step-connector"></div>
-                        <div class="quick-step">
-                            <div class="quick-step-num">3</div>
-                            <div class="quick-step-icon">📡</div>
-                            <div class="quick-step-title">Theo dõi tiến trình</div>
-                            <div class="quick-step-desc">Vào mục <strong>Giám Sát</strong> để xem tiến độ bơm</div>
-                        </div>
-                    </div>
-                </aside>
+                <!-- ── SYSTEM TITLE ── -->
+                <div class="ov-system-title">
+                    <h1>HỆ THỐNG PHỐI TRỘN PHÂN TỰ ĐỘNG</h1>
+                </div>
 
-                <!-- Nội dung chính Dashboard -->
-                <div class="dashboard-content-area">
+                <!-- ── MAIN ROW: 2 COLUMNS ── -->
+                <div class="ov-main-area" style="flex-direction: row; align-items: stretch;">
 
-            <!-- Quick Stats -->
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-card-icon" style="background:var(--n-dim);color:var(--n-color)">💧</div>
-                    <div class="stat-card-info">
-                        <div class="stat-card-val" id="dsh-totalSessions">0</div>
-                        <div class="stat-card-lbl">Tổng Phiên Pha</div>
-                    </div>
-                    <div class="stat-card-trend n-val">↑</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-card-icon" style="background:var(--p-dim);color:var(--p-color)">🧪</div>
-                    <div class="stat-card-info">
-                        <div class="stat-card-val" id="dsh-totalMl">0 mL</div>
-                        <div class="stat-card-lbl">Tổng Đã Pha Trộn</div>
-                    </div>
-                    <div class="stat-card-trend p-val">↑</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-card-icon" style="background:var(--k-dim);color:var(--k-color)">📶</div>
-                    <div class="stat-card-info">
-                        <div class="stat-card-val" id="dsh-rssi">-- dBm</div>
-                        <div class="stat-card-lbl">Sóng WiFi Thiết Bị</div>
-                    </div>
-                    <div class="stat-card-trend" id="dsh-rssiTrend">—</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-card-icon" style="background:rgba(239,68,68,0.1);color:#ef4444">🔔</div>
-                    <div class="stat-card-info">
-                        <div class="stat-card-val" id="dsh-alertCount">0</div>
-                        <div class="stat-card-lbl">Cảnh Báo</div>
-                    </div>
-                    <div class="stat-card-trend" id="dsh-alertBadge"></div>
-                </div>
-            </div>
+                    <!-- ── LEFT COLUMN ── -->
+                    <div class="ov-left-col" style="display: flex; flex-direction: column; gap: 15px; width: 280px; flex-shrink: 0;">
 
-            <!-- 2D System Animated Diagram -->
-            <div class="iot-card dash2d-card">
-                <div class="dash2d-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
-                    <div class="iot-card-title" style="margin-bottom:0">🏗️ Sơ Đồ Hệ Thống — Trạng Thái Thời Gian Thực</div>
-                    <div class="dash2d-legend">
-                        <span id="dash2dStatus" class="status-chip idle" style="font-size:11px;">⚫ Chờ lệnh</span>
-                    </div>
-                </div>
-                
-                <div class="system-2d-diagram">
-                    <!-- Bể chứa -->
-                    <div class="tanks-container">
-                        <div class="tank-wrap n-tank">
-                            <div class="tank-body">
-                                <div class="tank-liquid" id="tankLiqN"></div>
-                                <div class="tank-label">BỒN 1</div>
-                                <div class="tank-flow" id="tFlowN">0.00 L/ph</div>
+                        <!-- STATUS BAR (Vertical) -->
+                        <div class="ov-status-bar" style="flex-direction: column; padding: 20px;">
+                            <div class="ov-status-chip" id="ov-chip-system">
+                                <span class="ov-chip-dot" id="ov-dot-system"></span>
+                                <span class="ov-chip-lbl">HỆ THỐNG</span>
+                                <span class="ov-chip-val" id="ov-sys-txt">CHờ LỆNH</span>
                             </div>
-                            <div class="pipe-vertical n-pipe">
-                                <div class="liquid-flow" id="flowAnimN"></div>
+                            <div class="ov-status-chip" id="ov-chip-pump">
+                                <span class="ov-chip-dot" id="ov-dot-pump"></span>
+                                <span class="ov-chip-lbl">BƠM NƯỚC</span>
+                                <span class="ov-chip-val" id="ov-pump-txt">DừNG</span>
                             </div>
-                            <div class="solenoid-valve" id="sValveN"><div class="valve-led"></div></div>
-                        </div>
-                        
-                        <div class="tank-wrap p-tank">
-                            <div class="tank-body">
-                                <div class="tank-liquid" id="tankLiqP"></div>
-                                <div class="tank-label">BỒN 2</div>
-                                <div class="tank-flow" id="tFlowP">0.00 L/ph</div>
+                            <div class="ov-status-chip" id="ov-chip-esp">
+                                <span class="ov-chip-dot" id="ov-dot-esp"></span>
+                                <span class="ov-chip-lbl">THIẾT BỊ</span>
+                                <span class="ov-chip-val" id="ov-esp-txt">NGOẠI TUYẾN</span>
                             </div>
-                            <div class="pipe-vertical p-pipe">
-                                <div class="liquid-flow" id="flowAnimP"></div>
+                            <div class="ov-status-chip" id="ov-chip-server">
+                                <span class="ov-chip-dot" id="ov-dot-server"></span>
+                                <span class="ov-chip-lbl">SERVER</span>
+                                <span class="ov-chip-val" id="ov-server-txt">NGOẠI TUYẾN</span>
                             </div>
-                            <div class="solenoid-valve" id="sValveP"><div class="valve-led"></div></div>
-                        </div>
-                        
-                        <div class="tank-wrap k-tank">
-                            <div class="tank-body">
-                                <div class="tank-liquid" id="tankLiqK"></div>
-                                <div class="tank-label">BỒN 3</div>
-                                <div class="tank-flow" id="tFlowK">0.00 L/ph</div>
+                            <div class="ov-status-timer" style="border-left: none; border-top: 2px dashed #cbd5e1; padding-left: 0; padding-top: 15px; margin-top: 5px; align-items: center;">
+                                <span class="ov-timer-lbl">THỜI GIAN CÒN LẠI</span>
+                                <span class="ov-timer-val" id="ov-timer-val">--:--</span>
                             </div>
-                            <div class="pipe-vertical k-pipe">
-                                <div class="liquid-flow" id="flowAnimK"></div>
-                            </div>
-                            <div class="solenoid-valve" id="sValveK"><div class="valve-led"></div></div>
                         </div>
-                    </div>
-                    
-                    <!-- Đường ống ngang gom -->
-                    <div class="collector-pipe">
-                        <div class="liquid-flow collector-flow" id="flowAnimCollector"></div>
-                    </div>
-                    
-                    <!-- Bơm và bồn trộn -->
-                    <div class="mixer-section">
-                        <div class="pump-module" id="sysPump">
-                            <div class="pump-icon">⚙️</div>
-                            <div class="pump-lbl">BƠM</div>
-                        </div>
-                        <div class="pipe-vertical main-pipe">
-                            <div class="liquid-flow main-flow" id="flowAnimMain"></div>
-                        </div>
-                        <div class="mixer-tank">
-                            <div class="mixer-liquid" id="mixerLiq"></div>
-                            <div class="mixer-stirrer" id="mixerStirrer"></div>
-                            <div class="mixer-label">BỒN PHA TRỘN</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
-            <div class="dsh-grid">
-                <div class="iot-card" style="display:none"></div>
+                        <!-- QUICK GUIDE (Vertical) -->
+                        <div class="ov-card ov-guide-card" style="flex-grow: 1;">
+                            <div class="ov-card-title">📖 HƯỚNG DẪN VẬN HÀNH</div>
+                            <div class="ov-guide-content" style="flex-direction: column;">
+                                <div class="ov-step"><span>1</span> Đi tới trang <b>Điều Khiển</b></div>
+                                <div class="ov-step"><span>2</span> Nhập mức dung dịch (mL)</div>
+                                <div class="ov-step"><span>3</span> Nhấn <b>BẮT ĐẦU</b> để chạy</div>
+                                <div class="ov-step"><span>4</span> Máy tự động dừng khi xong</div>
+                            </div>
+                        </div>
+                    </div>
 
-                <div class="iot-card">
-                    <div class="iot-card-title">ℹ️ Giới Thiệu Hệ Thống</div>
-                    <div class="intro-content">
-                        <div class="intro-item">
-                            <span class="intro-icon">🎯</span>
-                            <div>
-                                <strong>Mục tiêu</strong>
-                                <p>Tự động hóa quá trình phối trộn phân NPK với độ chính xác cao thông qua van kim điều khiển bằng động cơ bước</p>
+                    <!-- ── RIGHT COLUMN ── -->
+                    <div class="ov-right-col" style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0;">
+
+                    <!-- SCHEMATIC -->
+                    <div class="ov-schematic-card ov-card">
+                        <div class="ov-card-title">SƠ ĐỔ HỆ THỐNG</div>
+                        <div class="rd-diagram-area">
+                            <div class="rd-diag">
+                                <!-- Pipes -->
+                            <div class="rd-pipe-h rd-p-blue rd-main-pipe">
+                                <div class="flow-arr" id="flow-top-1" style="left:50px;">←</div>
+                                <div class="flow-arr" id="flow-top-2" style="left:200px;">←</div>
+                                <div class="flow-arr" id="flow-top-3" style="left:400px;">←</div>
+                                <div class="flow-arr" id="flow-top-4" style="left:600px;">←</div>
+                            </div>
+
+                            <div class="rd-pipe-h rd-p-blue rd-pipe-tank-out">
+                                <div class="flow-arr" id="flow-tank" style="left:20px;">←</div>
+                                <!-- Main Flow Sensor Icon -->
+                                <div class="rd-sensor-box" style="left: 45%; top: -15px;" id="sensor-main">
+                                    <div class="rd-sensor-val"><span id="rd-fTotal">0</span><small>L/h</small></div>
+                                    <div class="rd-sensor-lbl">CẢM BIẾN TỔNG</div>
+                                </div>
+                            </div>
+                            <div class="rd-pipe-v rd-p-blue-v rd-pump-up">
+                                <div class="flow-arr" id="flow-pump" style="top:40px; transform:rotate(-90deg)">→</div>
+                            </div>
+
+                            <!-- Nguồn nước -->
+                            <div class="rd-float-lbl" style="top:100px; left:20px; color:#3b82f6;">← HỆ THỐNG TƯỚI</div>
+
+                            <!-- Lọc Đĩa -->
+                            <div class="rd-filter"></div>
+                            <div class="rd-float-lbl" style="top:70px; left:95px;">LỌC ĐĨA</div>
+
+                            <!-- Van Cơ 1 -->
+                            <div class="rd-valve" style="top:118px; left:160px;"></div>
+                            <div class="rd-float-lbl" style="top:95px; left:150px;">VAN CƠ</div>
+
+                            <!-- Venturis -->
+                            <div class="rd-venturi-line rd-vl-1">
+                                <div class="rd-pipe-v rd-p-green-v" style="height:100%;"></div>
+                                <div class="rd-venturi"></div>
+                                <div class="rd-valve" style="top:80px; left:-4px;"></div>
+                                <div class="rd-float-lbl" style="top:10px; left:-65px;">VENTURI</div>
+                                <div class="rd-float-lbl" style="top:80px; left:-65px;">VAN KIM</div>
+                                <div class="flow-arr" id="flow-v1" style="top:50px; left:0; transform:rotate(-90deg)">→</div>
+                            </div>
+
+                            <div class="rd-venturi-line rd-vl-2">
+                                <div class="rd-pipe-v rd-p-green-v" style="height:100%;"></div>
+                                <div class="rd-venturi"></div>
+                                <div class="rd-valve" style="top:80px; left:-4px;"></div>
+                                <div class="flow-arr" id="flow-v2" style="top:50px; left:0; transform:rotate(-90deg)">→</div>
+                            </div>
+
+                            <div class="rd-venturi-line rd-vl-3">
+                                <div class="rd-pipe-v rd-p-green-v" style="height:100%;"></div>
+                                <div class="rd-venturi"></div>
+                                <div class="rd-valve" style="top:80px; left:-4px;"></div>
+                                <div class="flow-arr" id="flow-v3" style="top:50px; left:0; transform:rotate(-90deg)">→</div>
+                            </div>
+
+                            <!-- Xả Khí & Van 1 Chiều -->
+                             <!-- Xả Khí & Van 1 Chiều -->
+                             <div class="rd-valve" style="top:118px; right:330px; background:#475569; width:15px; height:15px;"></div>
+                             <div class="rd-float-lbl" style="top:95px; right:315px;">VAN 1 CHIỀU</div>
+                             
+                             <div class="rd-valve" style="top:118px; right:400px; background:#475569; width:20px; height:15px; border-radius:3px;"></div>
+                             <div class="rd-float-lbl" style="top:95px; right:395px;">XẢ KHÍ</div>
+
+                            <!-- Pump -->
+                            <div class="rd-pump-stand"></div>
+                            <div class="rd-pump" id="sysPump">BƠM NƯỚC
+                                <div class="rd-pump-motor"></div>
+                            </div>
+
+
+                            <!-- Big Tank -->
+                            <div class="rd-big-tank-stand"></div>
+                            <div class="rd-big-tank">
+                                <div class="rd-big-tank-lid"></div>
+                                <div class="rd-big-tank-txt">BỒN NƯỚC TƯỚI</div>
+                            </div>
+
+                            <!-- Small Barrels -->
+                            <div class="rd-barrels">
+                                <div class="rd-barrel">
+                                    <div class="rd-barrel-lid"></div>
+                                    <div class="rd-barrel-txt">DUNG DỊCH 1</div>
+                                    <div class="rd-barrel-stand"></div>
+                                </div>
+                                <div class="rd-barrel">
+                                    <div class="rd-barrel-lid"></div>
+                                    <div class="rd-barrel-txt">DUNG DỊCH 2</div>
+                                    <div class="rd-barrel-stand"></div>
+                                </div>
+                                <div class="rd-barrel">
+                                    <div class="rd-barrel-lid"></div>
+                                    <div class="rd-barrel-txt">DUNG DỊCH 3</div>
+                                    <div class="rd-barrel-stand"></div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                    <!-- /ov-right-col -->
+                    </div>
+                    <!-- /ov-main-area -->
+
+                    <!-- BOTTOM PANELS -->
+                    <div class="rd-bottom-row">
+                        <div class="rd-card">
+                            <div class="rd-card-title">MỨC DUNG DỊCH</div>
+                            <div class="rd-levels">
+                                <div class="rd-lvl-col">
+                                    <div class="rd-lvl-name n-val">DUNG DỊCH 1</div>
+                                    <div class="rd-lvl-val"><span id="rd-volN">0</span> L</div>
+                                    <div class="rd-lvl-bar-wrap">
+                                        <div class="rd-lvl-bar"><div class="rd-lvl-fill n-bg" id="rd-barN" style="width: 0%;"></div></div>
+                                        <div class="rd-lvl-pct" id="rd-pctN">0%</div>
+                                    </div>
+                                </div>
+                                <div class="rd-lvl-col">
+                                    <div class="rd-lvl-name p-val">DUNG DỊCH 2</div>
+                                    <div class="rd-lvl-val"><span id="rd-volP">0</span> L</div>
+                                    <div class="rd-lvl-bar-wrap">
+                                        <div class="rd-lvl-bar"><div class="rd-lvl-fill p-bg" id="rd-barP" style="width: 0%;"></div></div>
+                                        <div class="rd-lvl-pct" id="rd-pctP">0%</div>
+                                    </div>
+                                </div>
+                                <div class="rd-lvl-col">
+                                    <div class="rd-lvl-name k-val">DUNG DỊCH 3</div>
+                                    <div class="rd-lvl-val"><span id="rd-volK">0</span> L</div>
+                                    <div class="rd-lvl-bar-wrap">
+                                        <div class="rd-lvl-bar"><div class="rd-lvl-fill k-bg" id="rd-barK" style="width: 0%;"></div></div>
+                                        <div class="rd-lvl-pct" id="rd-pctK">0%</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div class="intro-item">
-                            <span class="intro-icon">⚡</span>
-                            <div>
-                                <strong>Công nghệ</strong>
-                                <p>ESP32 + MQTT + Node.js + Socket.io · Cảm biến lưu lượng YF-S201 · Driver A4988 + NEMA17</p>
+
+                        <div class="rd-card" style="flex: 2;">
+                            <div class="rd-card-title">THÔNG SỐ HOẠT ĐỘNG</div>
+                            <div class="rd-params-grid">
+                                <div class="rd-param-sub">
+                                    <span class="sub-lbl">💧 LƯU LƯỢNG (L/h)</span>
+                                    <div class="sub-row">
+                                        <div class="sub-item">D.DỊCH 1: <strong id="rd-fN" class="n-val">0</strong></div>
+                                        <div class="sub-item">D.DỊCH 2: <strong id="rd-fP" class="p-val">0</strong></div>
+                                        <div class="sub-item">D.DỊCH 3: <strong id="rd-fK" class="k-val">0</strong></div>
+                                    </div>
+                                </div>
+                                <div class="rd-param-sub">
+                                    <span class="sub-lbl">⚙ GÓC QUAY ĐỘNG CƠ (°)</span>
+                                    <div class="sub-row">
+                                        <div class="sub-item">MÔ TƠ 1: <strong id="rd-aN">0°</strong></div>
+                                        <div class="sub-item">MÔ TƠ 2: <strong id="rd-aP">0°</strong></div>
+                                        <div class="sub-item">MÔ TƠ 3: <strong id="rd-aK">0°</strong></div>
+                                    </div>
+                                </div>
+                                <div class="rd-param-sub" style="border-left: 2px dashed #cbd5e1; padding-left: 15px;">
+                                    <span class="sub-lbl">📊 LƯU LƯỢNG TỔNG (L/h)</span>
+                                    <div class="sub-row">
+                                        <div class="sub-item">CẢM BIẾN THỰC TẾ: <strong id="rd-fMain" style="color:#0ea5e9; font-size:18px;">0</strong></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div class="intro-item">
-                            <span class="intro-icon">📊</span>
-                            <div>
-                                <strong>Tính năng</strong>
-                                <p>2 chế độ: Tuần tự N→P→K và Đồng thời với điều khiển tự động · Lưu công thức · Cảnh báo lưu lượng</p>
-                            </div>
-                        </div>
+
                     </div>
                 </div>
             </div>
@@ -321,7 +414,7 @@
                         </div>
                         <div class="vc-flow-display">
                             <div class="flow-number" id="flowN">0.00</div>
-                            <div class="flow-unit">L/phút</div>
+                            <div class="flow-unit">LÍT/PHÚT</div>
                         </div>
                     </div>
                     <div class="vc-body">
@@ -341,13 +434,13 @@
                             <div class="stat-item">
                                 <span class="stat-lbl">Đã bơm</span>
                                 <span class="stat-val n-val" id="volN">0</span>
-                                <span class="stat-unit">mL</span>
+                                <span class="stat-unit">MILILÍT</span>
                             </div>
                             <div class="stat-sep">/</div>
                             <div class="stat-item">
                                 <span class="stat-lbl">Mục tiêu</span>
                                 <span class="stat-val" id="tgtN">0</span>
-                                <span class="stat-unit">mL</span>
+                                <span class="stat-unit">MILILÍT</span>
                             </div>
                         </div>
                         <div class="stepper-info">
@@ -369,7 +462,7 @@
                         </div>
                         <div class="vc-flow-display">
                             <div class="flow-number" id="flowP">0.00</div>
-                            <div class="flow-unit">L/phút</div>
+                            <div class="flow-unit">LÍT/PHÚT</div>
                         </div>
                     </div>
                     <div class="vc-body">
@@ -389,13 +482,13 @@
                             <div class="stat-item">
                                 <span class="stat-lbl">Đã bơm</span>
                                 <span class="stat-val p-val" id="volP">0</span>
-                                <span class="stat-unit">mL</span>
+                                <span class="stat-unit">MILILÍT</span>
                             </div>
                             <div class="stat-sep">/</div>
                             <div class="stat-item">
                                 <span class="stat-lbl">Mục tiêu</span>
                                 <span class="stat-val" id="tgtP">0</span>
-                                <span class="stat-unit">mL</span>
+                                <span class="stat-unit">MILILÍT</span>
                             </div>
                         </div>
                         <div class="stepper-info">
@@ -417,7 +510,7 @@
                         </div>
                         <div class="vc-flow-display">
                             <div class="flow-number" id="flowK">0.00</div>
-                            <div class="flow-unit">L/phút</div>
+                            <div class="flow-unit">LÍT/PHÚT</div>
                         </div>
                     </div>
                     <div class="vc-body">
@@ -437,18 +530,52 @@
                             <div class="stat-item">
                                 <span class="stat-lbl">Đã bơm</span>
                                 <span class="stat-val k-val" id="volK">0</span>
-                                <span class="stat-unit">mL</span>
+                                <span class="stat-unit">MILILÍT</span>
                             </div>
                             <div class="stat-sep">/</div>
                             <div class="stat-item">
                                 <span class="stat-lbl">Mục tiêu</span>
                                 <span class="stat-val" id="tgtK">0</span>
-                                <span class="stat-unit">mL</span>
+                                <span class="stat-unit">MILILÍT</span>
                             </div>
                         </div>
                         <div class="stepper-info">
                             <span>🔧 Góc van:</span>
                             <span id="stepsK">0 bước</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NEW: MAIN FLOW SENSOR CARD -->
+                <div class="valve-card main-flow-card" id="vcMain">
+                    <div class="vc-header main-header">
+                        <div class="vc-badge main-badge">Σ</div>
+                        <div class="vc-info">
+                            <h3>💧 ĐƯỜNG ỐNG CHÍNH</h3>
+                            <div class="vc-state" id="stateMain">
+                                <span class="state-dot closed-dot"></span>
+                                <span id="stateTxtMain">Đang dừng</span>
+                            </div>
+                        </div>
+                        <div class="vc-flow-display">
+                            <div class="flow-number" id="flowMain">0.00</div>
+                            <div class="flow-unit">LÍT/PHÚT</div>
+                        </div>
+                    </div>
+                    <div class="vc-body" style="padding-top: 10px;">
+                        <div style="font-size: 11px; color: #64748b; margin-bottom: 5px;">TỔNG LƯU LƯỢNG HỆ THỐNG</div>
+                        <div style="width: 100%; height: 100px; display: flex; align-items: center; justify-content: center; background: #f8fafc; border-radius: 12px; border: 1px dashed #cbd5e1;">
+                             <div style="text-align: center;">
+                                <div style="font-size: 32px; font-weight: 900; color: #0ea5e9;" id="flowMainLarge">0.0</div>
+                                <div style="font-size: 10px; font-weight: 800; color: #64748b;">LÍT / PHÚT</div>
+                             </div>
+                        </div>
+                        <div class="vc-stats" style="margin-top: 10px;">
+                            <div class="stat-item" style="flex: 1;">
+                                <span class="stat-lbl">TỔNG THỂ TÍCH TRONG PHIÊN</span>
+                                <span class="stat-val" id="volMain" style="font-size: 20px; color: #0ea5e9;">0</span>
+                                <span class="stat-unit">MILILÍT</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -488,6 +615,33 @@
             </div>
 
             <div class="settings-layout">
+                <!-- THÊM CHẾ ĐỘ TƯỚI & THỜI GIAN -->
+                <div class="iot-card">
+                    <div class="iot-card-title">🕹️ Cài Đặt Hệ Thống Tưới</div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                        <div style="flex: 1; min-width: 200px;">
+                            <label style="font-weight: 600; font-size: 14px; margin-bottom: 8px; display: block;">Chế độ tưới</label>
+                            <div class="rd-radio-list" style="background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                <label><input type="radio" name="rd-mode" value="manual"> Tưới thủ công</label>
+                                <label><input type="radio" name="rd-mode" value="auto" checked> Tưới tự động</label>
+                                <label><input type="radio" name="rd-mode" value="timer"> Hẹn giờ</label>
+                            </div>
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <label style="font-weight: 600; font-size: 14px; margin-bottom: 8px; display: block;">Thời gian tưới</label>
+                            <div style="background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                <div style="font-size: 11px; font-weight: 800; margin-bottom: 8px; color: #1e3a8a;">THỜI GIAN TƯỚI (PHÚT)</div>
+                                <div class="rd-inp-grp" style="display: flex; gap: 5px;">
+                                    <button class="rd-btn-sm" onclick="adjTimer(-1)" style="padding: 5px 10px; border: 1px solid #cbd5e1; background: white; border-radius: 4px; cursor: pointer; font-weight: bold;">-</button>
+                                    <input type="number" id="rd-inp-time" value="30" readonly style="width: 60px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: bold;">
+                                    <button class="rd-btn-sm" onclick="adjTimer(1)" style="padding: 5px 10px; border: 1px solid #cbd5e1; background: white; border-radius: 4px; cursor: pointer; font-weight: bold;">+</button>
+                                    <button class="rd-btn-save" onclick="saveTimer()" style="margin-left: 10px; background: #3b82f6; color: white; border: none; padding: 5px 15px; border-radius: 4px; font-weight: 600; cursor: pointer;">LƯU</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="iot-card">
                     <div class="iot-card-title">🧪 Chế Độ Pha Trộn</div>
 
@@ -516,19 +670,19 @@
                                     <div class="simple-npk-letter n-val">1</div>
                                     <div class="simple-npk-name">Bồn 1</div>
                                     <input type="number" id="simpleN" class="field" placeholder="0" min="0" step="100">
-                                    <div class="simple-npk-unit">mL</div>
+                                    <div class="simple-npk-unit">MILILÍT</div>
                                 </div>
                                 <div class="simple-npk-item p-card">
                                     <div class="simple-npk-letter p-val">2</div>
                                     <div class="simple-npk-name">Bồn 2</div>
                                     <input type="number" id="simpleP" class="field" placeholder="0" min="0" step="100">
-                                    <div class="simple-npk-unit">mL</div>
+                                    <div class="simple-npk-unit">MILILÍT</div>
                                 </div>
                                 <div class="simple-npk-item k-card">
                                     <div class="simple-npk-letter k-val">3</div>
                                     <div class="simple-npk-name">Bồn 3</div>
                                     <input type="number" id="simpleK" class="field" placeholder="0" min="0" step="100">
-                                    <div class="simple-npk-unit">mL</div>
+                                    <div class="simple-npk-unit">MILILÍT</div>
                                 </div>
                             </div>
                             <button class="simple-start-btn" onclick="startMixingSimple()">
@@ -564,7 +718,7 @@
                                     <div class="npk-label n-label">1<span>🌿 Bồn Số 1</span></div>
                                     <div class="npk-field">
                                         <input type="number" id="inputN" class="field" placeholder="0" min="0" step="100" oninput="onInputChange()">
-                                        <span class="field-unit">mL</span>
+                                        <span class="field-unit">MILILÍT</span>
                                     </div>
                                     <div class="speed-row">
                                         <label>Tốc độ bơm</label>
@@ -576,7 +730,7 @@
                                     <div class="npk-label p-label">2<span>🌾 Bồn Số 2</span></div>
                                     <div class="npk-field">
                                         <input type="number" id="inputP" class="field" placeholder="0" min="0" step="100" oninput="onInputChange()">
-                                        <span class="field-unit">mL</span>
+                                        <span class="field-unit">MILILÍT</span>
                                     </div>
                                     <div class="speed-row">
                                         <label>Tốc độ bơm</label>
@@ -588,7 +742,7 @@
                                     <div class="npk-label k-label">3<span>🍂 Bồn Số 3</span></div>
                                     <div class="npk-field">
                                         <input type="number" id="inputK" class="field" placeholder="0" min="0" step="100" oninput="onInputChange()">
-                                        <span class="field-unit">mL</span>
+                                        <span class="field-unit">MILILÍT</span>
                                     </div>
                                     <div class="speed-row">
                                         <label>Tốc độ bơm</label>
@@ -599,7 +753,7 @@
                             </div>
                             <div class="total-bar">
                                 <span>Tổng thể tích:</span>
-                                <strong id="totalVol">0 mL</strong>
+                                <strong id="totalVol">0 MILILÍT</strong>
                                 <button class="btn-link" onclick="saveCurrentRecipe()">💾 Lưu công thức</button>
                             </div>
                         </div>
@@ -614,14 +768,14 @@
                                     <label>💧 Tổng thể tích</label>
                                     <div class="npk-field">
                                         <input type="number" id="simTotalVol" class="field" value="10" min="0.1" step="0.5" oninput="calcRatio()">
-                                        <span class="field-unit">Lít</span>
+                                        <span class="field-unit">LÍT</span>
                                     </div>
                                 </div>
                                 <div class="sim-global-field">
                                     <label>⚙️ Lưu lượng tổng</label>
                                     <div class="npk-field">
                                         <input type="number" id="simTotalLpm" class="field" value="3.0" min="0.1" step="0.1" oninput="calcRatio()">
-                                        <span class="field-unit">L/phút</span>
+                                        <span class="field-unit">LÍT/PHÚT</span>
                                     </div>
                                 </div>
                                 <div class="sim-global-field">
@@ -1035,33 +1189,7 @@
 
     </main><!-- /main-content -->
 
-    <!-- ── BOTTOM NAV (Mobile only) ── -->
-    <nav class="bottom-nav" id="bottomNav">
-        <div class="bottom-nav-inner">
-            <button class="bn-item active" id="bn-dashboard" onclick="showPage('dashboard')">
-                <span class="bn-icon">📊</span>
-                <span class="bn-label">Tổng Quan</span>
-            </button>
-            <button class="bn-item" id="bn-monitor" onclick="showPage('monitor')">
-                <span class="bn-icon">📡</span>
-                <span class="bn-label">Giám Sát</span>
-                <span class="bn-badge hidden" id="bn-badge-monitor">●</span>
-            </button>
-            <button class="bn-item" id="bn-settings" onclick="showPage('settings')">
-                <span class="bn-icon">⚙️</span>
-                <span class="bn-label">Điều Khiển</span>
-            </button>
-            <button class="bn-item" id="bn-alerts" onclick="showPage('alerts')">
-                <span class="bn-icon">🔔</span>
-                <span class="bn-label">Cảnh Báo</span>
-                <span class="bn-badge hidden" id="bn-badge-alerts">0</span>
-            </button>
-            <button class="bn-item" id="bn-history" onclick="showPage('history')">
-                <span class="bn-icon">📋</span>
-                <span class="bn-label">Lịch Sử</span>
-            </button>
-        </div>
-    </nav>
+
 
 </div><!-- /appShell -->
 
@@ -1156,8 +1284,8 @@
 function closeSidebar() {
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');
-    sidebar.classList.remove('open');
-    overlay.classList.remove('show');
+    if (sidebar) sidebar.classList.remove('open');
+    if (overlay) overlay.classList.remove('show');
 }
 
 /* Patch toggleSidebar để thêm overlay */
@@ -1165,18 +1293,18 @@ const _origToggle = window.toggleSidebar;
 window.toggleSidebar = function() {
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');
-    sidebar.classList.toggle('open');
-    overlay.classList.toggle('show');
+    if (sidebar) sidebar.classList.toggle('open');
+    if (overlay) overlay.classList.toggle('show');
 };
 
 /* --- Bottom Nav active state sync --- */
 const _origShowPage = window.showPage;
 window.showPage = function(page) {
     if (_origShowPage) _origShowPage(page);
-    // sync bottom nav
-    document.querySelectorAll('.bn-item').forEach(b => b.classList.remove('active'));
-    const bnBtn = document.getElementById('bn-' + page);
-    if (bnBtn) bnBtn.classList.add('active');
+    // sync topbar nav
+    document.querySelectorAll('.tn-item').forEach(b => b.classList.remove('active'));
+    const tnBtn = document.getElementById('tn-' + page);
+    if (tnBtn) tnBtn.classList.add('active');
     // close sidebar on mobile after nav
     if (window.innerWidth <= 768) closeSidebar();
 };
@@ -1319,10 +1447,10 @@ window.closeHelpOnBg = function(e) {
 const _origUpdateAlerts = window.updateAlertBadge;
 window.updateAlertBadge = function(count) {
     if (_origUpdateAlerts) _origUpdateAlerts(count);
-    const bnBadge = document.getElementById('bn-badge-alerts');
-    if (!bnBadge) return;
-    if (count > 0) { bnBadge.textContent = count; bnBadge.classList.remove('hidden'); }
-    else bnBadge.classList.add('hidden');
+    const tnBadge = document.getElementById('tn-badge-alerts');
+    if (!tnBadge) return;
+    if (count > 0) { tnBadge.textContent = count; tnBadge.classList.remove('hidden'); }
+    else tnBadge.classList.add('hidden');
 };
 </script>
 
@@ -1387,34 +1515,6 @@ const _hookSocket2D = () => {
 };
 setTimeout(_hookSocket2D, 1000);
 </script>
-
-
-</div> <!-- Kết thúc appShell -->
-
-<!-- Bottom Navigation Di chuyển ra ngoài cùng để luôn hiển thị -->
-<nav class="bottom-nav hidden" id="bottomNav">
-    <button class="bn-item active" id="bn-dashboard" onclick="showPage('dashboard')">
-        <span class="bn-icon">📊</span><span class="bn-label">Tổng Quan</span>
-    </button>
-    <button class="bn-item" id="bn-monitor" onclick="showPage('monitor')">
-        <span class="bn-icon">📡</span><span class="bn-label">Giám Sát</span>
-    </button>
-    <button class="bn-item" id="bn-settings" onclick="showPage('settings')">
-        <span class="bn-icon">⚙️</span><span class="bn-label">Điều Khiển</span>
-    </button>
-    <button class="bn-item" id="bn-recipes" onclick="showPage('recipes')">
-        <span class="bn-icon">💾</span><span class="bn-label">Công Thức</span>
-    </button>
-    <button class="bn-item" id="bn-history" onclick="showPage('history')">
-        <span class="bn-icon">📋</span><span class="bn-label">Lịch Sử</span>
-    </button>
-    <button class="bn-item" id="bn-system" onclick="showPage('system')">
-        <span class="bn-icon">🖥️</span><span class="bn-label">Hệ Thống</span>
-    </button>
-    <button class="bn-item logout-bn" onclick="doLogout()">
-        <span class="bn-icon">⏏</span><span class="bn-label">Thoát</span>
-    </button>
-</nav>
 
 </body>
 </html>

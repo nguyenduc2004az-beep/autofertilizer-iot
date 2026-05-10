@@ -30,7 +30,7 @@ const PORT   = process.env.PORT || 3000;
 // MQTT Broker:
 //   - Local:   mqtt://127.0.0.1:1883  (Mosquitto)
 //   - Railway: mqtt://broker.hivemq.com:1883 (HiveMQ public broker)
-const MQTT_URL = process.env.MQTT_URL || 'mqtt://127.0.0.1:1883';
+const MQTT_URL = process.env.MQTT_URL || (process.env.RAILWAY_ENVIRONMENT ? 'mqtt://broker.hivemq.com:1883' : 'mqtt://127.0.0.1:1883');
 
 // MQTT Topic prefix — đặt giá trị riêng để tránh xung đột trên broker dùng chung
 // VD: MQTT_TOPIC_PREFIX=autofert_khoa2026

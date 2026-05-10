@@ -21,11 +21,10 @@ function doLogin(e) {
     e.preventDefault();
     const u = document.getElementById('loginUser').value;
     const p = document.getElementById('loginPass').value;
-    if(u === 'admin' && p === 'admin123') {
+    if(u === 'admin' && p === '123') {
         sessionStorage.setItem('isLogged', '1');
         document.getElementById('loginPage').classList.add('hidden');
         document.getElementById('appShell').classList.remove('hidden');
-        document.getElementById('bottomNav').classList.remove('hidden');
         showPage('dashboard');
         initChart();
         loadHistory();
@@ -50,7 +49,6 @@ function doLogout() {
 if(sessionStorage.getItem('isLogged') === '1') {
     document.getElementById('loginPage').classList.add('hidden');
     document.getElementById('appShell').classList.remove('hidden');
-    document.getElementById('bottomNav').classList.remove('hidden');
     showPage('dashboard');
     initChart();
     loadHistory();
@@ -61,11 +59,11 @@ if(sessionStorage.getItem('isLogged') === '1') {
 function showPage(pageId) {
     // Hide all pages
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    document.querySelectorAll('.bn-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.tn-item').forEach(n => n.classList.remove('active'));
 
     // Show selected
     const p = document.getElementById('page-' + pageId);
-    const n = document.getElementById('bn-' + pageId);
+    const n = document.getElementById('tn-' + pageId);
     if(p) p.classList.add('active');
     if(n) n.classList.add('active');
 
@@ -77,7 +75,10 @@ function showPage(pageId) {
     document.getElementById('topbarTitle').textContent = titles[pageId] || 'AutoFertilizer';
 
     // Clear monitor badge if viewing monitor
-    if(pageId === 'monitor') document.getElementById('badge-monitor').classList.add('hidden');
+    if(pageId === 'monitor') {
+        const bm = document.getElementById('tn-badge-monitor');
+        if(bm) bm.classList.add('hidden');
+    }
 
     if(window.innerWidth <= 768) toggleSidebar(false);
 
@@ -86,6 +87,7 @@ function showPage(pageId) {
 
 function toggleSidebar(forceForce) {
     const sb = document.getElementById('sidebar');
+    if(!sb) return; // Fix: Prevent error if sidebar is missing
     if(typeof forceForce === 'boolean') {
         if(forceForce) sb.classList.add('open');
         else sb.classList.remove('open');
@@ -200,6 +202,18 @@ function setESPStatus(status) {
 let currentPhase = 0;
 let isRunning = false;
 
+// Activity Log
+function addDshActivity(msg) {
+    const log = document.getElementById('dsh-activity-log');
+    if(!log) return;
+    const item = document.createElement('div');
+    item.className = 'activity-item';
+    const time = new Date().toLocaleTimeString('vi-VN', {hour12:false});
+    item.textContent = `[${time}] ${msg.toUpperCase()}`;
+    log.prepend(item);
+    if(log.children.length > 20) log.lastElementChild.remove();
+}
+
 function updateUI(data) {
     // Topbar Chip
     const chip = document.getElementById('systemChip');
@@ -225,15 +239,65 @@ function updateUI(data) {
         mTxt.textContent = data.phase===4 ? 'HOÀN THÀNH' : 'SẴN SÀNG';
     }
 
-    // Timer
-    if(data.duration_sec !== undefined) {
-        document.getElementById('monTimer').classList.remove('hidden');
-        document.getElementById('monTimerVal').textContent = formatTime(data.duration_sec);
+    // Realistic Dashboard Sync
+    const rdSysTxt = document.getElementById('rd-sys-txt');
+    const rdSysDot = document.getElementById('rd-sys-dot');
+    const rdPumpTxt = document.getElementById('rd-pump-txt');
+    const rdPumpDot = document.getElementById('rd-pump-dot');
+    const rdPState = document.getElementById('rd-p-state');
+    
+    if(rdSysTxt) {
+        rdSysTxt.textContent = data.running ? 'Đang hoạt động' : (data.phase === 4 ? 'Hoàn thành' : 'Chờ lệnh');
+        if(data.running) { rdSysTxt.className = 'rd-hl'; rdSysDot.className = 'rd-dot green'; }
+        else { rdSysTxt.className = ''; rdSysDot.className = 'rd-dot gray'; }
+    }
+    
+    // Update individual flows and angles
+    ['N','P','K'].forEach(ch => {
+        const fEl = document.getElementById(`rd-f${ch}`);
+        const aEl = document.getElementById(`rd-aEl${ch}`); // Note: fixing a small potential typo if it exists, but keeping consistency with index.html
+        const valveData = data.valves ? data.valves[ch] : null;
+        if(fEl && valveData) fEl.textContent = ((valveData.flow_lpm||0) * 60).toFixed(0);
+        const steps = valveData ? (valveData.steps || 0) : 0;
+        const angleEl = document.getElementById(`rd-a${ch}`);
+        if(angleEl) angleEl.textContent = Math.round((steps % 200) * 1.8) + '°';
+    });
+
+    // Main Flow Sensor Update
+    const mainFlowLpm = data.main_flow_lpm || 0;
+    const rdMainF = document.getElementById('rd-fMain');
+    const rdTotalF = document.getElementById('rd-fTotal');
+    if(rdMainF) rdMainF.textContent = (mainFlowLpm * 60).toFixed(0);
+    if(rdTotalF) rdTotalF.textContent = (mainFlowLpm * 60).toFixed(0);
+
+    const monMainF = document.getElementById('flowMain');
+    const monMainFLarge = document.getElementById('flowMainLarge');
+    const monMainVol = document.getElementById('volMain');
+    if(monMainF) monMainF.textContent = mainFlowLpm.toFixed(2);
+    if(monMainFLarge) monMainFLarge.textContent = mainFlowLpm.toFixed(1);
+    if(monMainVol) monMainVol.textContent = Math.round(data.total_volume_ml || 0);
+
+    const stMain = document.getElementById('stateMain');
+    if(stMain) {
+        const isFlowing = mainFlowLpm > 0.05;
+        stMain.innerHTML = `<span class="state-dot ${isFlowing?'open-dot':'closed-dot'}"></span> <span>${isFlowing?'Đang chảy':'Đang dừng'}</span>`;
     }
 
-    // RSSI Dashboard
-    document.getElementById('dsh-rssi').textContent = data.wifi_rssi ? data.wifi_rssi + ' dBm' : '--dBm';
-    document.getElementById('sysRSSI').textContent = data.wifi_rssi ? data.wifi_rssi + ' dBm' : '--';
+    // Timer
+    if(data.duration_sec !== undefined) {
+        const tEl = document.getElementById('monTimer');
+        if(tEl) tEl.classList.remove('hidden');
+        const tvEl = document.getElementById('monTimerVal');
+        if(tvEl) tvEl.textContent = formatTime(data.duration_sec);
+        
+        const rdTimer = document.getElementById('rd-timer-val');
+        if(rdTimer) rdTimer.textContent = formatTime(data.duration_sec);
+    }
+
+    // System Info
+    const sysRSSI = document.getElementById('sysRSSI');
+    if(sysRSSI) sysRSSI.textContent = data.wifi_rssi ? data.wifi_rssi + ' DBM' : '--';
+    
     if(data.wifi_rssi && data.wifi_rssi < sysThresholds.minRSSI) {
         addAlert(`Tín hiệu WiFi yếu: ${data.wifi_rssi}dBm`, 'warning');
     }
@@ -241,14 +305,36 @@ function updateUI(data) {
     const V = data.valves;
     if(!V) return;
 
+    // Dashboard Stats Update
+    if(document.getElementById('dsh-volN')) {
+        // Volume (Current / Target)
+        document.getElementById('dsh-volN').textContent = Math.round(V.N.volume_ml||0);
+        document.getElementById('dsh-tgtN').textContent = Math.round(V.N.target_ml||0);
+        document.getElementById('dsh-volP').textContent = Math.round(V.P.volume_ml||0);
+        document.getElementById('dsh-tgtP').textContent = Math.round(V.P.target_ml||0);
+        document.getElementById('dsh-volK').textContent = Math.round(V.K.volume_ml||0);
+        document.getElementById('dsh-tgtK').textContent = Math.round(V.K.target_ml||0);
+
+        // Flow Velocity
+        document.getElementById('dsh-flowN').textContent = parseFloat(V.N.flow_lpm||0).toFixed(2);
+        document.getElementById('dsh-flowP').textContent = parseFloat(V.P.flow_lpm||0).toFixed(2);
+        document.getElementById('dsh-flowK').textContent = parseFloat(V.K.flow_lpm||0).toFixed(2);
+        
+        // Stepper Angle (Steps)
+        document.getElementById('dsh-step1').textContent = V.N.steps || 0;
+        document.getElementById('dsh-step2').textContent = V.P.steps || 0;
+        document.getElementById('dsh-step3').textContent = V.K.steps || 0;
+    }
+
     // Phase Cards Highlight
     ['N', 'P', 'K'].forEach((ch, idx) => {
         const c = document.getElementById(`vc${ch}`);
         if(c) {
             if(data.running && (data.phase === idx+1 || data.phase === 10)) { // 10 is SIM
                 c.className = `valve-card active-${ch.toLowerCase()}`;
-                if(!document.getElementById('page-monitor').classList.contains('active')) {
-                    document.getElementById('badge-monitor').classList.remove('hidden');
+                const badge = document.getElementById('tn-badge-monitor');
+                if(badge && !document.getElementById('page-monitor').classList.contains('active')) {
+                    badge.classList.remove('hidden');
                 }
             } else {
                 c.className = 'valve-card';
@@ -268,6 +354,7 @@ function updateUI(data) {
         chart.data.datasets[0].data.push(V.N.flow_lpm || 0);
         chart.data.datasets[1].data.push(V.P.flow_lpm || 0);
         chart.data.datasets[2].data.push(V.K.flow_lpm || 0);
+        chart.data.datasets[3].data.push(data.main_flow_lpm || 0);
         if(chart.data.labels.length > 50) {
             chart.data.labels.shift();
             chart.data.datasets.forEach(d => d.data.shift());
@@ -280,32 +367,85 @@ function updateUI(data) {
         ['N', 'P', 'K'].forEach(ch => {
             const v = V[ch];
             if(v.target_ml > 0 && v.steps > 1000) {
-                if(v.flow_lpm < sysThresholds.minFlow) addAlert(`Lưu lượng ${ch} rát thấp: ${v.flow_lpm} L/p`, 'error');
-                if(v.flow_lpm > sysThresholds.maxFlow) addAlert(`Lưu lượng ${ch} quá cao: ${v.flow_lpm} L/p`, 'error');
+                if(v.flow_lpm < sysThresholds.minFlow) addAlert(`LƯU LƯỢNG ${ch} RẤT THẤP: ${v.flow_lpm} LÍT/PHÚT`, 'error');
+                if(v.flow_lpm > sysThresholds.maxFlow) addAlert(`LƯU LƯỢNG ${ch} QUÁ CAO: ${v.flow_lpm} LÍT/PHÚT`, 'error');
             }
         });
     }
 
-    document.getElementById('sysPhase').textContent = data.phase === 10 ? 'Đồng thời (10)' : data.phase;
-    document.getElementById('sysLastTs').textContent = new Date().toLocaleTimeString();
+    const sysPhase = document.getElementById('sysPhase');
+    if(sysPhase) sysPhase.textContent = data.phase === 10 ? 'Đồng thời (10)' : data.phase;
+    const sysLastTs = document.getElementById('sysLastTs');
+    if(sysLastTs) sysLastTs.textContent = new Date().toLocaleTimeString();
+
+    // Blueprint Animation
+    const flowT1 = document.getElementById('flow-top-1');
+    const flowT2 = document.getElementById('flow-top-2');
+    const flowT3 = document.getElementById('flow-top-3');
+    const flowT4 = document.getElementById('flow-top-4');
+    const flowD1 = document.getElementById('flow-down-1');
+    const flowTank = document.getElementById('flow-tank');
+    const flowPump = document.getElementById('flow-pump');
+    const flowV1 = document.getElementById('flow-v1');
+    const flowV2 = document.getElementById('flow-v2');
+    const flowV3 = document.getElementById('flow-v3');
+    const sysPump = document.getElementById('sysPump');
+    const toggleFlow = (el, run) => { if(el) run ? el.classList.add('running') : el.classList.remove('running'); };
+
+    if(data.running) {
+        toggleFlow(flowT1, true); toggleFlow(flowT2, true); toggleFlow(flowT3, true); toggleFlow(flowT4, true);
+        toggleFlow(flowD1, true); toggleFlow(flowTank, true); toggleFlow(flowPump, true);
+        toggleFlow(flowV1, V.N.valve === 'open'); toggleFlow(flowV2, V.P.valve === 'open'); toggleFlow(flowV3, V.K.valve === 'open');
+        if(sysPump) sysPump.style.filter = 'hue-rotate(90deg)';
+        if(rdPumpTxt) { rdPumpTxt.textContent = 'Đang chạy'; rdPumpDot.className = 'rd-dot blue'; }
+        
+    } else {
+        toggleFlow(flowT1, false); toggleFlow(flowT2, false); toggleFlow(flowT3, false); toggleFlow(flowT4, false);
+        toggleFlow(flowD1, false); toggleFlow(flowTank, false); toggleFlow(flowPump, false);
+        toggleFlow(flowV1, false); toggleFlow(flowV2, false); toggleFlow(flowV3, false);
+        if(sysPump) sysPump.style.filter = 'none';
+        if(rdPumpTxt) { rdPumpTxt.textContent = 'Dừng'; rdPumpDot.className = 'rd-dot gray'; }
+    }
+    
+    // Aggregated params
+    let totFlow = (V.N.flow_lpm||0) + (V.P.flow_lpm||0) + (V.K.flow_lpm||0);
+    const rdFlow = document.getElementById('rd-flow-txt');
+    const rdPFlow = document.getElementById('rd-p-flow');
+    if(rdFlow) rdFlow.textContent = (totFlow * 60).toFixed(0) + ' L/h';
+    if(rdPFlow) rdPFlow.textContent = (totFlow * 60).toFixed(0) + ' L/h';
 }
 
 function updateValve(ch, d) {
     if(!d) return;
-    document.getElementById(`flow${ch}`).textContent = parseFloat(d.flow_lpm||0).toFixed(2);
-    document.getElementById(`vol${ch}`).textContent = Math.round(d.volume_ml||0);
-    document.getElementById(`tgt${ch}`).textContent = Math.round(d.target_ml||0);
-    document.getElementById(`steps${ch}`).textContent = d.steps + ' bước';
+    document.getElementById(`flow${ch}`).textContent = parseFloat(d.flow_lpm||0).toFixed(2) + ' LÍT/PHÚT';
+    document.getElementById(`vol${ch}`).textContent = Math.round(d.volume_ml||0) + ' MILILÍT';
+    document.getElementById(`tgt${ch}`).textContent = Math.round(d.target_ml||0) + ' MILILÍT';
+    document.getElementById(`steps${ch}`).textContent = d.steps + ' BƯỚC';
 
     const p = d.target_ml > 0 ? Math.min(100, (d.volume_ml / d.target_ml) * 100) : 0;
     document.getElementById(`pct${ch}`).textContent = Math.round(p) + '%';
 
-    const offset = 314 - (314 * p) / 100;
-    document.getElementById(`ring${ch}`).style.strokeDashoffset = offset;
+    const ring = document.getElementById(`ring${ch}`);
+    if(ring) {
+        const offset = 314 - (314 * p) / 100;
+        ring.style.strokeDashoffset = offset;
+    }
 
     const op = d.steps > 0;
     const st = document.getElementById(`state${ch}`);
-    st.innerHTML = `<span class="state-dot ${op?'open-dot':'closed-dot'}"></span> <span>${op?'Đang mở':'Đã đóng'}</span>`;
+    if(st) st.innerHTML = `<span class="state-dot ${op?'open-dot':'closed-dot'}"></span> <span>${op?'Đang mở':'Đã đóng'}</span>`;
+
+    // Flow animation in diagram for suction lines
+    const rdVol = document.getElementById(`rd-vol${ch}`);
+    const rdBar = document.getElementById(`rd-bar${ch}`);
+    const rdPct = document.getElementById(`rd-pct${ch}`);
+    if(rdVol) {
+        const remaining = Math.max(0, d.target_ml - d.volume_ml);
+        rdVol.textContent = (remaining / 1000).toFixed(1);
+        const rmPct = 100 - p;
+        rdBar.style.width = rmPct + '%';
+        rdPct.textContent = Math.round(rmPct) + '%';
+    }
 }
 
 function formatTime(s) {
@@ -329,7 +469,8 @@ function initChart() {
             datasets: [
                 { label: 'Đạm (L/ph)', borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.1)', data: [], tension: 0.4, fill: true },
                 { label: 'Lân (L/ph)', borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', data: [], tension: 0.4, fill: true },
-                { label: 'Kali (L/ph)', borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', data: [], tension: 0.4, fill: true }
+                { label: 'Kali (L/ph)', borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', data: [], tension: 0.4, fill: true },
+                { label: 'TỔNG (L/ph)', borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.1)', data: [], tension: 0.4, fill: false, borderDash: [5, 5] }
             ]
         },
         options: {
@@ -476,11 +617,12 @@ function loadRecipes() {
         `).join('');
 
         rdd.innerHTML = data.map(r => `
-            <div class="recipe-item" onclick="applyRecipe(${r.N_ml},${r.P_ml},${r.K_ml},'${r.name}'); toggleRecipeList(true)">
-                <div>
+            <div class="recipe-item">
+                <div onclick="applyRecipe(${r.N_ml},${r.P_ml},${r.K_ml},'${r.name}'); toggleRecipeList(true)" style="flex:1">
                     <div class="recipe-item-name">${r.name}</div>
                     <div class="recipe-item-desc">N:${r.N_ml} | P:${r.P_ml} | K:${r.K_ml}</div>
                 </div>
+                <div class="recipe-del-btn" onclick="event.stopPropagation(); delRecipe('${r.id}')">XÓA</div>
             </div>
         `).join('');
     });
@@ -510,7 +652,7 @@ function submitNewRecipe() {
     });
 }
 function delRecipe(id) {
-    if(!confirm('Xóa công thức này?')) return;
+    // Xóa xác nhận trình duyệt để tránh treo agent/browser và tối ưu trải nghiệm
     fetch('/api/recipes/'+id, {method:'DELETE'}).then(()=>{
         showToast('Đã xóa', 'info'); loadRecipes();
     });
@@ -550,13 +692,16 @@ function addAlert(msg, type='error') {
     renderAlerts();
 
     // Alert Badge
-    const b1 = document.getElementById('badge-alerts');
+    const b1 = document.getElementById('tn-badge-alerts');
     const b2 = document.getElementById('dsh-alertBadge');
     const b3 = document.getElementById('dsh-alertCount');
-    let c = parseInt(b1.textContent) || 0;
-    c++;
-    b1.textContent = c; b1.classList.remove('hidden');
-    b3.textContent = c; b2.textContent = 'Mới!'; b2.style.color = '#ef4444';
+    if (b1) {
+        let c = parseInt(b1.textContent) || 0;
+        c++;
+        b1.textContent = c; b1.classList.remove('hidden');
+    }
+    if (b3) b3.textContent = (parseInt(b3.textContent)||0) + 1;
+    if (b2) { b2.textContent = 'Mới!'; b2.style.color = '#ef4444'; }
 }
 
 function renderAlerts() {
@@ -590,10 +735,15 @@ function renderAlerts() {
 function clearAlertLog() {
     alertLog = [];
     renderAlerts();
-    document.getElementById('badge-alerts').textContent = '0';
-    document.getElementById('badge-alerts').classList.add('hidden');
-    document.getElementById('dsh-alertCount').textContent = '0';
-    document.getElementById('dsh-alertBadge').textContent = '';
+    const b1 = document.getElementById('tn-badge-alerts');
+    if (b1) {
+        b1.textContent = '0';
+        b1.classList.add('hidden');
+    }
+    const b3 = document.getElementById('dsh-alertCount');
+    if (b3) b3.textContent = '0';
+    const b2 = document.getElementById('dsh-alertBadge');
+    if (b2) b2.textContent = '';
 }
 
 // ==========================================
@@ -646,9 +796,9 @@ function loadHistory() {
 
         window.cachedTotalMl = data.reduce((s,i) => s+(i.total_ml||0), 0);
         window.cachedTotalSess = data.length;
-        document.getElementById('historySummary').textContent = `Tổng: ${data.length} phiên | Đã pha: ${window.cachedTotalMl} mL`;
-        document.getElementById('dsh-totalSessions').textContent = data.length;
-        document.getElementById('dsh-totalMl').textContent = window.cachedTotalMl + ' mL';
+        document.getElementById('historySummary').textContent = `TỔNG: ${data.length} PHIÊN | ĐÃ PHA: ${window.cachedTotalMl} MILILÍT`;
+        const tc = document.getElementById('dsh-totalConsumed');
+        if(tc) tc.textContent = window.cachedTotalMl + ' MILILÍT';
     });
 }
 
