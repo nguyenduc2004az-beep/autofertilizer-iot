@@ -6,7 +6,7 @@
  * ║     - MQTT client kết nối Mosquitto broker                 ║
  * ║     - Express REST API                                     ║
  * ║     - Socket.io real-time push tới trình duyệt            ║
- * ║     - Database: JSON file (db.json) - không cần native     ║
+ * ║     - Database: MySQL (Cấu hình tự tạo Database)           ║
  * ║                                                            ║
  * ║   Cổng: 3000                                               ║
  * ║   MQTT Broker: localhost:1883 (Mosquitto)                  ║
@@ -20,64 +20,107 @@ const http     = require('http');
 const { Server } = require('socket.io');
 const mqtt     = require('mqtt');
 const path     = require('path');
-const fs       = require('fs');
+const mysql    = require('mysql2/promise');
 
 // ================================================================
 // CẤU HÌNH — Đọc từ biến môi trường (Railway) hoặc dùng giá trị mặc định (localhost)
 // ================================================================
 const PORT   = process.env.PORT || 3000;
 
-// MQTT Broker:
-//   - Local:   mqtt://127.0.0.1:1883  (Mosquitto)
-//   - Railway: mqtt://broker.hivemq.com:1883 (HiveMQ public broker)
 const MQTT_URL = process.env.MQTT_URL || (process.env.RAILWAY_ENVIRONMENT ? 'mqtt://broker.hivemq.com:1883' : 'mqtt://127.0.0.1:1883');
-
-// MQTT Topic prefix — đặt giá trị riêng để tránh xung đột trên broker dùng chung
-// VD: MQTT_TOPIC_PREFIX=autofert_khoa2026
 const TOPIC_PREFIX = process.env.MQTT_TOPIC_PREFIX || 'autofert';
 const TOPIC_CMD    = `${TOPIC_PREFIX}/cmd`;
 const TOPIC_STATUS = `${TOPIC_PREFIX}/status`;
 
-const DB_PATH = path.join(__dirname, 'db.json');
-
 console.log(`[CONFIG] PORT=${PORT} | MQTT=${MQTT_URL} | TOPICS=${TOPIC_PREFIX}/*`);
 
 // ================================================================
-// DATABASE JSON - Đọc/Ghi file db.json
+// DATABASE MYSQL
 // ================================================================
-function loadDB() {
-    if (!fs.existsSync(DB_PATH)) {
-        const initial = {
-            sessions: [],
-            recipes: [
-                { id: '1', name: 'NPK 20-20-20',       N_ml: 2000, P_ml: 2000, K_ml: 2000, description: 'Công thức cân bằng',   created_at: new Date().toISOString() },
-                { id: '2', name: 'Bón gốc (N nhiều)',  N_ml: 3000, P_ml: 1500, K_ml: 1500, description: 'Tăng sinh trưởng',     created_at: new Date().toISOString() },
-                { id: '3', name: 'Ra hoa (P-K cao)',   N_ml: 1000, P_ml: 2500, K_ml: 2500, description: 'Kích thích ra hoa',    created_at: new Date().toISOString() }
-            ]
-        };
-        saveDB(initial);
-        console.log('[DB] Tạo db.json mới với dữ liệu mẫu');
-        return initial;
-    }
+const DB_CONFIG = {
+    host: 'localhost',
+    user: 'root',
+    password: '',
+    database: 'csdl_phoi_tron_phan'
+};
+
+let pool; // MySQL connection pool
+
+async function initDB() {
     try {
-        return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-    } catch (e) {
-        console.error('[DB] Lỗi đọc db.json:', e.message);
-        return { sessions: [], recipes: [] };
+        // 1. Kết nối không cần Database trước để tạo Database nếu chưa có
+        const connection = await mysql.createConnection({
+            host: DB_CONFIG.host,
+            user: DB_CONFIG.user,
+            password: DB_CONFIG.password
+        });
+        
+        await connection.query(`CREATE DATABASE IF NOT EXISTS \`${DB_CONFIG.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+        await connection.end();
+
+        // 2. Khởi tạo Pool kết nối tới Database
+        pool = mysql.createPool({
+            ...DB_CONFIG,
+            waitForConnections: true,
+            connectionLimit: 10,
+            queueLimit: 0
+        });
+
+        // 3. Tạo bảng cong_thuc
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS cong_thuc (
+                ma_cong_thuc VARCHAR(255) PRIMARY KEY,
+                ten_cong_thuc VARCHAR(255) NOT NULL,
+                the_tich_bon1_ml FLOAT DEFAULT 0,
+                the_tich_bon2_ml FLOAT DEFAULT 0,
+                the_tich_bon3_ml FLOAT DEFAULT 0,
+                mo_ta TEXT,
+                ngay_tao DATETIME
+            )
+        `);
+
+        // 4. Tạo bảng lich_su_tron
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS lich_su_tron (
+                ma_lich_su BIGINT PRIMARY KEY,
+                thoi_gian_tron DATETIME,
+                ten_cong_thuc_da_dung VARCHAR(255),
+                che_do_tron VARCHAR(50),
+                ti_le_bon1 FLOAT DEFAULT 0,
+                ti_le_bon2 FLOAT DEFAULT 0,
+                ti_le_bon3 FLOAT DEFAULT 0,
+                thuc_te_bon1_ml INT DEFAULT 0,
+                thuc_te_bon2_ml INT DEFAULT 0,
+                thuc_te_bon3_ml INT DEFAULT 0,
+                tong_the_tich_ml INT DEFAULT 0,
+                thoi_gian_chay_s INT DEFAULT 0,
+                trang_thai VARCHAR(50),
+                wifi_rssi INT DEFAULT 0
+            )
+        `);
+
+        // 5. Thêm dữ liệu mẫu nếu bảng cong_thuc trống
+        const [rows] = await pool.query('SELECT COUNT(*) as count FROM cong_thuc');
+        if (rows[0].count === 0) {
+            const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+            await pool.query(`
+                INSERT INTO cong_thuc (ma_cong_thuc, ten_cong_thuc, the_tich_bon1_ml, the_tich_bon2_ml, the_tich_bon3_ml, mo_ta, ngay_tao)
+                VALUES 
+                ('1', 'Cân bằng B1-B2-B3', 2000, 2000, 2000, 'Công thức cân bằng', ?),
+                ('2', 'Bón gốc (Bồn 1 nhiều)', 3000, 1500, 1500, 'Tăng sinh trưởng', ?),
+                ('3', 'Ra hoa (Bồn 2-3 cao)', 1000, 2500, 2500, 'Kích thích ra hoa', ?)
+            `, [now, now, now]);
+            console.log('[DB] Đã tạo các công thức mẫu ban đầu.');
+        }
+
+        console.log('[DB] ✓ Đã kết nối MySQL và khởi tạo cấu trúc (Tiếng Việt).');
+    } catch (err) {
+        console.error('[DB] Lỗi khởi tạo MySQL:', err.message);
     }
 }
 
-function saveDB(data) {
-    try {
-        fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
-    } catch (e) {
-        console.error('[DB] Lỗi ghi db.json:', e.message);
-    }
-}
-
-// Khởi tạo DB
-let db = loadDB();
-console.log(`[DB] ✓ Database: ${DB_PATH} | Sessions: ${db.sessions.length} | Recipes: ${db.recipes.length}`);
+// Gọi hàm khởi tạo DB
+initDB();
 
 // ================================================================
 // TRẠNG THÁI HỆ THỐNG (in-memory)
@@ -122,7 +165,7 @@ mqttClient.on('error',     (e) => console.error('[MQTT] Lỗi:', e.message));
 mqttClient.on('offline',   ()  => console.warn('[MQTT] Broker offline'));
 
 // ---- Xử lý tin nhắn từ ESP32 ----
-mqttClient.on('message', (topic, message) => {
+mqttClient.on('message', async (topic, message) => {
     if (topic !== TOPIC_STATUS) return;
 
     let data;
@@ -135,9 +178,9 @@ mqttClient.on('message', (topic, message) => {
 
     lastDeviceStatus = data;
 
-    // Cập nhật trạng thái online của ESP32
     if (!deviceOnline) {
         deviceOnline = true;
+        io.emit('device_online', true);
         console.log('[ESP32] ✓ Thiết bị online');
     }
     clearTimeout(deviceTimeoutTimer);
@@ -147,15 +190,16 @@ mqttClient.on('message', (topic, message) => {
         console.log('[ESP32] ✗ Thiết bị offline (timeout)');
     }, 5000);
 
-    // Phát real-time tới tất cả browser đang kết nối
     io.emit('device_status', { ...data, online: true });
 
     // Kiểm tra nếu phiên vừa hoàn thành (phase=4, running=false)
     if (currentSession && !data.running && data.phase === 4) {
         const sess = currentSession;
+        const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        
         const record = {
             id:          Date.now(),
-            timestamp:   new Date().toISOString(),
+            timestamp:   timestamp,
             recipe_name: sess.recipe_name,
             mode:        sess.mode || 'sequential',
             ratio_n:     sess.ratio?.N || 0,
@@ -170,15 +214,28 @@ mqttClient.on('message', (topic, message) => {
             wifi_rssi:   data.wifi_rssi || 0
         };
 
-        // Lưu vào JSON
-        db = loadDB();
-        db.sessions.unshift(record);  // Thêm vào đầu (mới nhất trước)
-        if (db.sessions.length > 200) db.sessions = db.sessions.slice(0, 200); // Giới hạn 200 records
-        saveDB(db);
+        try {
+            if (pool) {
+                const query = `
+                    INSERT INTO lich_su_tron 
+                    (ma_lich_su, thoi_gian_tron, ten_cong_thuc_da_dung, che_do_tron, ti_le_bon1, ti_le_bon2, ti_le_bon3, thuc_te_bon1_ml, thuc_te_bon2_ml, thuc_te_bon3_ml, tong_the_tich_ml, thoi_gian_chay_s, trang_thai, wifi_rssi)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `;
+                const values = [
+                    record.id, record.timestamp, record.recipe_name, record.mode, 
+                    record.ratio_n, record.ratio_p, record.ratio_k, 
+                    record.N_ml, record.P_ml, record.K_ml, record.total_ml, 
+                    record.duration_s, record.status, record.wifi_rssi
+                ];
+                await pool.query(query, values);
+                console.log(`[DB] Đã lưu phiên: "${record.recipe_name}" | ${record.total_ml} mL | ${record.duration_s}s`);
+            }
+        } catch (err) {
+            console.error('[DB] Lỗi lưu session:', err.message);
+        }
 
         io.emit('session_completed', record);
         io.emit('history_updated');
-        console.log(`[DB] Đã lưu phiên: "${record.recipe_name}" | ${record.total_ml} mL | ${record.duration_s}s`);
         currentSession = null;
     }
 });
@@ -187,7 +244,6 @@ mqttClient.on('message', (topic, message) => {
 // REST API
 // ================================================================
 
-// GET /api/status - Trạng thái hệ thống
 app.get('/api/status', (req, res) => {
     res.json({
         device_online:   deviceOnline,
@@ -197,7 +253,6 @@ app.get('/api/status', (req, res) => {
     });
 });
 
-// POST /api/start - Bắt đầu pha trộn
 app.post('/api/start', (req, res) => {
     const body = req.body;
     const mode = body.mode || 'seq';
@@ -205,9 +260,6 @@ app.post('/api/start', (req, res) => {
     let mqttCmd, sessionInfo;
 
     if (mode === 'sim') {
-        // ============================================================
-        // CHẾ ĐỘ ĐỒNG THỜI với ĐIỀU KHIỂN TỈ LỆ
-        // ============================================================
         const ratioN = parseFloat(body.ratio_N) || 0;
         const ratioP = parseFloat(body.ratio_P) || 0;
         const ratioK = parseFloat(body.ratio_K) || 0;
@@ -256,9 +308,6 @@ app.post('/api/start', (req, res) => {
 
         console.log(`[SIM] ${sessionInfo.recipe_name} | N:${cN.target_ml}mL | P:${cP.target_ml}mL | K:${cK.target_ml}mL`);
     } else {
-        // ============================================================
-        // CHẾ ĐỘ TUẦN TỰ (N → P → K)
-        // ============================================================
         const nMl = parseFloat(body.N_ml) || 0;
         const pMl = parseFloat(body.P_ml) || 0;
         const kMl = parseFloat(body.K_ml) || 0;
@@ -283,7 +332,6 @@ app.post('/api/start', (req, res) => {
         };
     }
 
-    // Gửi lệnh MQTT
     mqttClient.publish(TOPIC_CMD, JSON.stringify(mqttCmd), { qos: 1 }, (err) => {
         if (err) return res.status(500).json({ error: 'Lỗi MQTT: ' + err.message });
         currentSession = sessionInfo;
@@ -293,16 +341,16 @@ app.post('/api/start', (req, res) => {
     });
 });
 
-// POST /api/stop - Dừng khẩn cấp
-app.post('/api/stop', (req, res) => {
-    mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'stop' }), { qos: 1 }, (err) => {
+app.post('/api/stop', async (req, res) => {
+    mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'stop' }), { qos: 1 }, async (err) => {
         if (err) return res.status(500).json({ error: err.message });
 
         if (currentSession) {
             const sess = currentSession;
+            const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
             const record = {
                 id:          Date.now(),
-                timestamp:   new Date().toISOString(),
+                timestamp:   timestamp,
                 recipe_name: sess.recipe_name + ' [HỦY]',
                 mode:        sess.mode || 'sequential',
                 ratio_n: sess.ratio?.N || 0,
@@ -316,9 +364,25 @@ app.post('/api/stop', (req, res) => {
                 status:      'cancelled',
                 wifi_rssi:   lastDeviceStatus?.wifi_rssi || 0
             };
-            db = loadDB();
-            db.sessions.unshift(record);
-            saveDB(db);
+            
+            try {
+                if (pool) {
+                    const query = `
+                        INSERT INTO lich_su_tron 
+                        (ma_lich_su, thoi_gian_tron, ten_cong_thuc_da_dung, che_do_tron, ti_le_bon1, ti_le_bon2, ti_le_bon3, thuc_te_bon1_ml, thuc_te_bon2_ml, thuc_te_bon3_ml, tong_the_tich_ml, thoi_gian_chay_s, trang_thai, wifi_rssi)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    `;
+                    const values = [
+                        record.id, record.timestamp, record.recipe_name, record.mode, 
+                        record.ratio_n, record.ratio_p, record.ratio_k, 
+                        record.N_ml, record.P_ml, record.K_ml, record.total_ml, 
+                        record.duration_s, record.status, record.wifi_rssi
+                    ];
+                    await pool.query(query, values);
+                }
+            } catch (e) {
+                console.error('[DB] Lỗi lưu session [HỦY]:', e.message);
+            }
             io.emit('history_updated');
             currentSession = null;
         }
@@ -329,80 +393,133 @@ app.post('/api/stop', (req, res) => {
     });
 });
 
-// POST /api/home - Đưa van về vị trí gốc
 app.post('/api/home', (req, res) => {
     mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'home' }), { qos: 1 });
     res.json({ success: true });
 });
 
-// GET /api/history - Lịch sử pha trộn
-app.get('/api/history', (req, res) => {
-    db = loadDB();
-    const limit = parseInt(req.query.limit) || 50;
-    res.json(db.sessions.slice(0, limit));
+app.get('/api/history', async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 50;
+        const query = `
+            SELECT ma_lich_su AS id, thoi_gian_tron AS timestamp, ten_cong_thuc_da_dung AS recipe_name, 
+                   che_do_tron AS mode, ti_le_bon1 AS ratio_n, ti_le_bon2 AS ratio_p, ti_le_bon3 AS ratio_k, 
+                   thuc_te_bon1_ml AS N_ml, thuc_te_bon2_ml AS P_ml, thuc_te_bon3_ml AS K_ml, 
+                   tong_the_tich_ml AS total_ml, thoi_gian_chay_s AS duration_s, trang_thai AS status, 
+                   wifi_rssi 
+            FROM lich_su_tron 
+            ORDER BY thoi_gian_tron DESC 
+            LIMIT ?
+        `;
+        const [rows] = await pool.query(query, [limit]);
+        res.json(rows);
+    } catch (e) {
+        console.error('[DB] Lỗi GET /history:', e.message);
+        res.status(500).json({ error: 'Lỗi Database' });
+    }
 });
 
-// DELETE /api/history - Xóa toàn bộ lịch sử
-app.delete('/api/history', (req, res) => {
-    db = loadDB();
-    db.sessions = [];
-    saveDB(db);
-    io.emit('history_updated');
-    console.log('[DB] Đã xóa toàn bộ lịch sử');
-    res.json({ success: true });
+app.delete('/api/history', async (req, res) => {
+    try {
+        await pool.query('TRUNCATE TABLE lich_su_tron');
+        io.emit('history_updated');
+        console.log('[DB] Đã xóa toàn bộ lịch sử');
+        res.json({ success: true });
+    } catch (e) {
+        console.error('[DB] Lỗi DELETE /history:', e.message);
+        res.status(500).json({ error: 'Lỗi Database' });
+    }
 });
 
-// GET /api/recipes - Danh sách công thức
-app.get('/api/recipes', (req, res) => {
-    db = loadDB();
-    res.json(db.recipes);
+app.get('/api/recipes', async (req, res) => {
+    try {
+        const query = `
+            SELECT ma_cong_thuc AS id, ten_cong_thuc AS name, 
+                   the_tich_bon1_ml AS N_ml, the_tich_bon2_ml AS P_ml, the_tich_bon3_ml AS K_ml, 
+                   mo_ta AS description, ngay_tao AS created_at 
+            FROM cong_thuc
+        `;
+        const [rows] = await pool.query(query);
+        res.json(rows);
+    } catch (e) {
+        console.error('[DB] Lỗi GET /recipes:', e.message);
+        res.status(500).json({ error: 'Lỗi Database' });
+    }
 });
 
-// POST /api/recipes - Thêm công thức mới
-app.post('/api/recipes', (req, res) => {
-    const { name, N_ml, P_ml, K_ml, description } = req.body;
-    if (!name) return res.status(400).json({ error: 'Thiếu tên công thức' });
+app.post('/api/recipes', async (req, res) => {
+    try {
+        const { name, N_ml, P_ml, K_ml, description } = req.body;
+        if (!name) return res.status(400).json({ error: 'Thiếu tên công thức' });
 
-    const recipe = {
-        id:          Date.now().toString(),
-        name,
-        N_ml:        parseFloat(N_ml)  || 0,
-        P_ml:        parseFloat(P_ml)  || 0,
-        K_ml:        parseFloat(K_ml)  || 0,
-        description: description || '',
-        created_at:  new Date().toISOString()
-    };
+        const id = Date.now().toString();
+        const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const recipe = {
+            id,
+            name,
+            N_ml: parseFloat(N_ml) || 0,
+            P_ml: parseFloat(P_ml) || 0,
+            K_ml: parseFloat(K_ml) || 0,
+            description: description || '',
+            created_at: timestamp
+        };
 
-    db = loadDB();
-    db.recipes.push(recipe);
-    saveDB(db);
-    console.log(`[DB] Công thức mới: "${recipe.name}"`);
-    res.json(recipe);
+        const query = `
+            INSERT INTO cong_thuc (ma_cong_thuc, ten_cong_thuc, the_tich_bon1_ml, the_tich_bon2_ml, the_tich_bon3_ml, mo_ta, ngay_tao)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `;
+        const values = [
+            recipe.id, recipe.name, recipe.N_ml, recipe.P_ml, recipe.K_ml, 
+            recipe.description, recipe.created_at
+        ];
+        
+        await pool.query(query, values);
+        console.log(`[DB] Công thức mới: "${recipe.name}"`);
+        res.json(recipe);
+    } catch (e) {
+        console.error('[DB] Lỗi POST /recipes:', e.message);
+        res.status(500).json({ error: 'Lỗi Database' });
+    }
 });
 
-// DELETE /api/recipes/:id - Xóa công thức
-app.delete('/api/recipes/:id', (req, res) => {
-    db = loadDB();
-    const idx = db.recipes.findIndex(r => r.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'Không tìm thấy công thức' });
-    db.recipes.splice(idx, 1);
-    saveDB(db);
-    console.log(`[DB] Đã xóa công thức id=${req.params.id}`);
-    res.json({ success: true });
+app.delete('/api/recipes/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM cong_thuc WHERE ma_cong_thuc = ?', [req.params.id]);
+        console.log(`[DB] Đã xóa công thức id=${req.params.id}`);
+        res.json({ success: true });
+    } catch (e) {
+        console.error('[DB] Lỗi DELETE /recipes/:id:', e.message);
+        res.status(500).json({ error: 'Lỗi Database' });
+    }
 });
 
-// GET /api/db-stats - Thống kê DB
-app.get('/api/db-stats', (req, res) => {
-    db = loadDB();
-    const completed = db.sessions.filter(s => s.status === 'completed');
-    const totalMl   = completed.reduce((sum, s) => sum + (s.total_ml || 0), 0);
-    res.json({
-        db_file:        DB_PATH,
-        sessions_count: db.sessions.length,
-        recipes_count:  db.recipes.length,
-        total_ml_mixed: Math.round(totalMl),
-        last_session:   db.sessions[0] || null
-    });
+app.get('/api/db-stats', async (req, res) => {
+    try {
+        const [sessionsCount] = await pool.query('SELECT COUNT(*) as count FROM lich_su_tron');
+        const [recipesCount] = await pool.query('SELECT COUNT(*) as count FROM cong_thuc');
+        const [totalMlRow] = await pool.query('SELECT SUM(tong_the_tich_ml) as sum FROM lich_su_tron WHERE trang_thai = "completed"');
+        const [lastSessionRow] = await pool.query(`
+            SELECT ma_lich_su AS id, thoi_gian_tron AS timestamp, ten_cong_thuc_da_dung AS recipe_name, 
+                   che_do_tron AS mode, ti_le_bon1 AS ratio_n, ti_le_bon2 AS ratio_p, ti_le_bon3 AS ratio_k, 
+                   thuc_te_bon1_ml AS N_ml, thuc_te_bon2_ml AS P_ml, thuc_te_bon3_ml AS K_ml, 
+                   tong_the_tich_ml AS total_ml, thoi_gian_chay_s AS duration_s, trang_thai AS status, 
+                   wifi_rssi 
+            FROM lich_su_tron 
+            ORDER BY thoi_gian_tron DESC 
+            LIMIT 1
+        `);
+
+        res.json({
+            db_file:        'MySQL (csdl_phoi_tron_phan)',
+            sessions_count: sessionsCount[0].count,
+            recipes_count:  recipesCount[0].count,
+            total_ml_mixed: Math.round(totalMlRow[0].sum || 0),
+            last_session:   lastSessionRow[0] || null
+        });
+    } catch (e) {
+        console.error('[DB] Lỗi GET /db-stats:', e.message);
+        res.status(500).json({ error: 'Lỗi Database' });
+    }
 });
 
 // ================================================================
@@ -449,14 +566,18 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log('╠══════════════════════════════════════════════════════════╣');
     console.log(`║   MQTT Broker: ${MQTT_URL.padEnd(41)}║`);
     console.log(`║   MQTT Topics: ${TOPIC_PREFIX}/cmd, ${TOPIC_PREFIX}/status`.padEnd(59) + '║');
-    console.log(`║   DB: ${DB_PATH.padEnd(50)}║`);
+    console.log(`║   DB: MySQL (csdl_phoi_tron_phan)`.padEnd(59) + '║');
     console.log('╚══════════════════════════════════════════════════════════╝\n');
 });
 
 // Graceful shutdown
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
     console.log('\n[Server] Đang tắt...');
     mqttClient.end();
+    if (pool) {
+        await pool.end();
+        console.log('[DB] Đã ngắt kết nối MySQL.');
+    }
     server.close(() => {
         console.log('[Server] Đã tắt.');
         process.exit(0);

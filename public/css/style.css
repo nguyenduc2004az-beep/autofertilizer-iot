@@ -2263,3 +2263,53 @@ input, textarea, .topbar-clock, .stat-card-val, .flow-number, .ring-pct, .stat-v
     display: flex;
     gap: 15px; /* Trả về khoảng cách cũ */
 }
+
+/* ================================================================
+   DASHBOARD OVERVIEW STATUS CHIPS (ov-*)
+   ================================================================ */
+.ov-status-chip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.ov-chip-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #94a3b8; /* Default Gray (Offline) */
+    box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.2);
+    margin-right: 10px;
+    transition: all 0.3s ease;
+    display: inline-block;
+}
+
+.ov-chip-dot.green {
+    background-color: #22c55e !important; /* Green (Online) */
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6) !important;
+}
+
+.ov-chip-lbl {
+    flex: 1;
+    color: var(--txt-muted);
+}
+
+.ov-chip-val {
+    color: var(--txt-main);
+    font-weight: 700;
+}
+
+.ov-timer-lbl {
+    font-size: 11px;
+    color: var(--txt-muted);
+    font-weight: 800;
+}
+
+.ov-timer-val {
+    font-size: 22px;
+    font-weight: 900;
+    color: #1d4ed8;
+}

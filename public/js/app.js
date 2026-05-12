@@ -29,6 +29,7 @@ function doLogin(e) {
         initChart();
         loadHistory();
         loadRecipes();
+        initWatering();
         showToast('Đăng nhập thành công!', 'success');
         updateClock();
         setInterval(updateClock, 1000);
@@ -53,6 +54,7 @@ if(sessionStorage.getItem('isLogged') === '1') {
     initChart();
     loadHistory();
     loadRecipes();
+    initWatering();
     setInterval(updateClock, 1000);
 }
 
@@ -117,6 +119,11 @@ function showToast(msg, type='info') {
 // ==========================================
 socket.on('connect', () => {
     isOnline = true;
+    const srvTxt = document.getElementById('ov-server-txt');
+    const srvDot = document.getElementById('ov-dot-server');
+    if(srvTxt) srvTxt.textContent = 'TRỰC TUYẾN';
+    if(srvDot) srvDot.className = 'ov-chip-dot green';
+
     document.querySelectorAll('.conn-item')[0].classList.add('online');
     document.getElementById('monMQTT').classList.add('online');
     document.getElementById('sysConnMQTT').textContent = 'Đã kết nối';
@@ -125,11 +132,33 @@ socket.on('connect', () => {
 
 socket.on('disconnect', () => {
     isOnline = false;
+    const srvTxt = document.getElementById('ov-server-txt');
+    const srvDot = document.getElementById('ov-dot-server');
+    if(srvTxt) srvTxt.textContent = 'NGOẠI TUYẾN';
+    if(srvDot) srvDot.className = 'ov-chip-dot';
+    
     document.querySelectorAll('.conn-item')[0].classList.remove('online');
     document.getElementById('monMQTT').classList.remove('online');
     document.getElementById('sysConnMQTT').textContent = 'Mất kết nối';
     setESPStatus(false);
 });
+
+// Thêm hàm đồng bộ trạng thái thủ công để tránh race condition
+function syncStatus() {
+    fetch('/api/status').then(r => r.json()).then(data => {
+        isOnline = true; // Nếu fetch thành công thì server online
+        const srvTxt = document.getElementById('ov-server-txt');
+        const srvDot = document.getElementById('ov-dot-server');
+        if(srvTxt) srvTxt.textContent = 'TRỰC TUYẾN';
+        if(srvDot) srvDot.className = 'ov-chip-dot green';
+
+        setESPStatus(data.device_online);
+        if(data.last_status) updateUI(data.last_status);
+    }).catch(err => {
+        console.warn('Sync status failed:', err);
+    });
+}
+
 
 socket.on('device_online', (status) => setESPStatus(status));
 
@@ -138,7 +167,10 @@ socket.on('init', (data) => {
     if(data.last_status) updateUI(data.last_status);
 });
 
-socket.on('device_status', (data) => updateUI(data));
+socket.on('device_status', (data) => {
+    if (!espOnline) setESPStatus(true);
+    updateUI(data);
+});
 
 socket.on('session_started', (sess) => {
     showToast(`Bắt đầu trộn: ${sess.recipe_name}`, 'success');
@@ -169,6 +201,13 @@ socket.on('history_updated', () => loadHistory());
 
 function setESPStatus(status) {
     espOnline = status;
+    
+    // Dashboard status update
+    const espTxt = document.getElementById('ov-esp-txt');
+    const espDot = document.getElementById('ov-dot-esp');
+    if(espTxt) espTxt.textContent = status ? 'TRỰC TUYẾN' : 'NGOẠI TUYẾN';
+    if(espDot) espDot.className = 'ov-chip-dot ' + (status ? 'green' : '');
+
     const items = document.querySelectorAll('.conn-item');
     if(items[1]) {
         if(status) items[1].classList.add('online');
@@ -182,7 +221,8 @@ function setESPStatus(status) {
 
     const s = document.getElementById('sysConnESP');
     if(s) s.textContent = status ? 'Trực tuyến' : 'Ngoại tuyến';
-    document.getElementById('sysESPState').textContent = status ? 'Đang hoạt động' : 'Ngoại tuyến';
+    const sState = document.getElementById('sysESPState');
+    if(sState) sState.textContent = status ? 'Đang hoạt động' : 'Ngoại tuyến';
 
     const diag = document.getElementById('diag-esp');
     if(diag) {
@@ -240,24 +280,22 @@ function updateUI(data) {
     }
 
     // Realistic Dashboard Sync
-    const rdSysTxt = document.getElementById('rd-sys-txt');
-    const rdSysDot = document.getElementById('rd-sys-dot');
-    const rdPumpTxt = document.getElementById('rd-pump-txt');
-    const rdPumpDot = document.getElementById('rd-pump-dot');
-    const rdPState = document.getElementById('rd-p-state');
+    const rdSysTxt = document.getElementById('ov-sys-txt');
+    const rdSysDot = document.getElementById('ov-dot-system');
+    const rdPumpTxt = document.getElementById('ov-pump-txt');
+    const rdPumpDot = document.getElementById('ov-dot-pump');
     
     if(rdSysTxt) {
         rdSysTxt.textContent = data.running ? 'Đang hoạt động' : (data.phase === 4 ? 'Hoàn thành' : 'Chờ lệnh');
-        if(data.running) { rdSysTxt.className = 'rd-hl'; rdSysDot.className = 'rd-dot green'; }
-        else { rdSysTxt.className = ''; rdSysDot.className = 'rd-dot gray'; }
+        if(rdSysDot) rdSysDot.className = 'ov-chip-dot ' + (data.running ? 'green' : (data.phase === 4 ? 'blue' : ''));
     }
     
     // Update individual flows and angles
     ['N','P','K'].forEach(ch => {
         const fEl = document.getElementById(`rd-f${ch}`);
-        const aEl = document.getElementById(`rd-aEl${ch}`); // Note: fixing a small potential typo if it exists, but keeping consistency with index.html
         const valveData = data.valves ? data.valves[ch] : null;
         if(fEl && valveData) fEl.textContent = ((valveData.flow_lpm||0) * 60).toFixed(0);
+        
         const steps = valveData ? (valveData.steps || 0) : 0;
         const angleEl = document.getElementById(`rd-a${ch}`);
         if(angleEl) angleEl.textContent = Math.round((steps % 200) * 1.8) + '°';
@@ -275,7 +313,7 @@ function updateUI(data) {
     const monMainVol = document.getElementById('volMain');
     if(monMainF) monMainF.textContent = mainFlowLpm.toFixed(2);
     if(monMainFLarge) monMainFLarge.textContent = mainFlowLpm.toFixed(1);
-    if(monMainVol) monMainVol.textContent = Math.round(data.total_volume_ml || 0);
+    if(monMainVol) monMainVol.textContent = Math.round((data.main_volume_ml ?? data.total_volume_ml) || 0);
 
     const stMain = document.getElementById('stateMain');
     if(stMain) {
@@ -290,7 +328,7 @@ function updateUI(data) {
         const tvEl = document.getElementById('monTimerVal');
         if(tvEl) tvEl.textContent = formatTime(data.duration_sec);
         
-        const rdTimer = document.getElementById('rd-timer-val');
+        const rdTimer = document.getElementById('ov-timer-val');
         if(rdTimer) rdTimer.textContent = formatTime(data.duration_sec);
     }
 
@@ -395,16 +433,22 @@ function updateUI(data) {
     if(data.running) {
         toggleFlow(flowT1, true); toggleFlow(flowT2, true); toggleFlow(flowT3, true); toggleFlow(flowT4, true);
         toggleFlow(flowD1, true); toggleFlow(flowTank, true); toggleFlow(flowPump, true);
-        toggleFlow(flowV1, V.N.valve === 'open'); toggleFlow(flowV2, V.P.valve === 'open'); toggleFlow(flowV3, V.K.valve === 'open');
+        toggleFlow(flowV1, V.N.steps > 0); toggleFlow(flowV2, V.P.steps > 0); toggleFlow(flowV3, V.K.steps > 0);
         if(sysPump) sysPump.style.filter = 'hue-rotate(90deg)';
-        if(rdPumpTxt) { rdPumpTxt.textContent = 'Đang chạy'; rdPumpDot.className = 'rd-dot blue'; }
+        if(rdPumpTxt) { 
+            rdPumpTxt.textContent = 'Đang chạy'; 
+            if(rdPumpDot) rdPumpDot.className = 'ov-chip-dot green';
+        }
         
     } else {
         toggleFlow(flowT1, false); toggleFlow(flowT2, false); toggleFlow(flowT3, false); toggleFlow(flowT4, false);
         toggleFlow(flowD1, false); toggleFlow(flowTank, false); toggleFlow(flowPump, false);
         toggleFlow(flowV1, false); toggleFlow(flowV2, false); toggleFlow(flowV3, false);
         if(sysPump) sysPump.style.filter = 'none';
-        if(rdPumpTxt) { rdPumpTxt.textContent = 'Dừng'; rdPumpDot.className = 'rd-dot gray'; }
+        if(rdPumpTxt) { 
+            rdPumpTxt.textContent = 'Dừng'; 
+            if(rdPumpDot) rdPumpDot.className = 'ov-chip-dot';
+        }
     }
     
     // Aggregated params
@@ -833,3 +877,42 @@ function refreshSysInfo() {
         document.getElementById('sysUptime').textContent = Math.floor(performance.now()/1000) + 's (client)';
     });
 }
+
+// ==========================================
+// 9. WATERING CONTROLS
+// ==========================================
+function adjTimer(delta) {
+    const el = document.getElementById('rd-inp-time');
+    if(!el) return;
+    let val = parseInt(el.value) || 0;
+    val = Math.max(1, val + delta);
+    el.value = val;
+}
+
+function saveTimer() {
+    const el = document.getElementById('rd-inp-time');
+    if(!el) return;
+    const val = parseInt(el.value) || 30;
+    localStorage.setItem('wateringTime', val);
+    
+    // Update display in Overview
+    const txt = document.getElementById('ov-timer-txt');
+    if(txt) txt.textContent = val + ':00';
+    
+    showToast(`Đã lưu thời gian tưới: ${val} phút`, 'success');
+}
+
+function initWatering() {
+    const saved = localStorage.getItem('wateringTime');
+    const val = saved ? parseInt(saved) : 30;
+    const el = document.getElementById('rd-inp-time');
+    if(el) el.value = val;
+    
+    const txt = document.getElementById('ov-timer-txt');
+    if(txt) txt.textContent = val + ':00';
+}
+
+// Khởi tạo khi tải trang
+initWatering();
+syncStatus(); 
+setInterval(syncStatus, 10000); // Đồng bộ lại mỗi 10 giây cho chắc chắn

@@ -1,92 +1,44 @@
-/**
- * ╔══════════════════════════════════════════════════════════════╗
- * ║      HỆ THỐNG PHỐI TRỘN PHÂN TỰ ĐỘNG - ESP32 FIRMWARE      ║
- * ║                                                              ║
- * ║  Phần cứng:                                                  ║
- * ║    - 3x Động cơ bước NEMA 17 + Driver A4988/DRV8825          ║
- * ║    - 3x Van kim 1/4 vòng (Needle Valve 1/4 turn)             ║
- * ║    - 3x Cảm biến lưu lượng YF-S201                          ║
- * ║    - ESP32 DevKit V1                                         ║
- * ║                                                              ║
- * ║  Hai chế độ hoạt động:                                       ║
- * ║    [A] TUẦN TỰ  (start_seq): N → P → K lần lượt             ║
- * ║    [B] ĐỒNG THỜI(start_sim): 3 van mở cùng lúc với          ║
- * ║         P-controller điều chỉnh bước step theo lưu lượng    ║
- * ║                                                              ║
- * ║  MQTT:                                                       ║
- * ║    Subscribe: fert/cmd    Publish: fert/status               ║
- * ║                                                              ║
- * ║  Thư viện cài trong Arduino IDE → Library Manager:           ║
- * ║    1. PubSubClient  by Nick O'Leary  (v2.8+)                 ║
- * ║    2. ArduinoJson   by Benoit Blanchon (v7+)                 ║
- * ╚══════════════════════════════════════════════════════════════╝
- *
- * ┌─────────────────────────────────────────────────────────────┐
- * │  NGUYÊN LÝ ĐIỀU KHIỂN THEO TỈ LỆ (Chế độ Đồng Thời)        │
- * │                                                              │
- * │  Web nhập: tỉ lệ N:P:K = 3:2:1, tổng=10L, tổng=3 L/phút   │
- * │  Server tính:                                                │
- * │    N → target_ml=5000, target_lpm=1.50                      │
- * │    P → target_ml=3333, target_lpm=1.00                      │
- * │    K → target_ml=1667, target_lpm=0.50                      │
- * │                                                              │
- * │  ESP32 điều khiển:                                           │
- * │    1. Mở van ban đầu: steps = (target_lpm/Q_MAX)×MAX_STEPS  │
- * │    2. Mỗi 1 giây:                                            │
- * │       error = target_lpm - actual_lpm                        │
- * │       adj   = Kp × error   (Kp = KP_CONTROL bước/L_phút)   │
- * │       new_steps = old_steps + adj  (clamp 0..MAX_OPEN_STEPS) │
- * │       move motor to new_steps                                │
- * │    3. Khi volume_ml ≥ target_ml → đóng van                  │
- * └─────────────────────────────────────────────────────────────┘
- */
-
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
-// ================================================================
-// ★ CẤU HÌNH WIFI & MQTT - CHỈNH SỬA PHẦN NÀY ★
-// ================================================================
-const char* WIFI_SSID     = "TEN_WIFI_CUA_BAN";       // Tên WiFi
-const char* WIFI_PASSWORD = "MAT_KHAU_WIFI";           // Mật khẩu WiFi
-const char* MQTT_SERVER   = "192.168.1.100";           // IP của laptop chạy server
+// CẤU HÌNH WIFI & MQTT - CHỈNH SỬA PHẦN NÀY
+
+const char* WIFI_SSID     = "huuduc";       // Tên WiFi
+const char* WIFI_PASSWORD = "19052004";           // Mật khẩu WiFi
+const char* MQTT_SERVER   = "192.168.137.1";           // IP laptop khi dùng Mobile Hotspot
 const int   MQTT_PORT     = 1883;
 const char* MQTT_USER     = "";    // Để trống nếu không dùng xác thực
 const char* MQTT_PASS     = "";
 
-// ================================================================
 // CHÂN GPIO - ĐỘNG CƠ BƯỚC
-// ================================================================
-//  Van N (Đạm - Nitrogen)
+
+//  Van N
 #define STEP_N     13
 #define DIR_N      14
 #define EN_N       15
 
-// Van P (Lân - Phosphorus)
+// Van P
 #define STEP_P     16
 #define DIR_P      17
 #define EN_P       18
 
-// Van K (Kali - Potassium)
+// Van K
 #define STEP_K     19
 #define DIR_K      21
 #define EN_K       22
 
-// ================================================================
 // CHÂN GPIO - CẢM BIẾN LƯU LƯỢNG (YF-S201)
-// ================================================================
 // Lưu ý: Các chân này phải hỗ trợ interrupt
 #define FLOW_N     25
 #define FLOW_P     26
 #define FLOW_K     27
+#define FLOW_MAIN  33
 
-// LED trạng thái (chân 2 = LED tích hợp trên hầu hết ESP32 DevKit)
+// LED trạng thái
 #define STATUS_LED  2
 
-// ================================================================
 // THÔNG SỐ PHẦN CỨNG
-// ================================================================
 // NEMA 17: 200 bước/vòng (1.8°/bước)
 // A4988: chế độ vi bước 1/8 → 1600 micro-bước/vòng
 // MAX_OPEN_STEPS: 1/4 vòng = mở hoàn toàn van kim
@@ -106,9 +58,7 @@ const char* MQTT_PASS     = "";
 #define PUBLISH_INTERVAL    500
 #define FLOW_CALC_INTERVAL  1000
 
-// ================================================================
 // THÔNG SỐ ĐIỀU KHIỂN PHẢN HỒI (P-Controller)
-// ================================================================
 // Q_MAX_LPM: Lưu lượng tối đa (L/phút) khi van mở hoàn toàn.
 //   *** ĐO THỰC NGHIỆM rồi chỉnh giá trị này! ***
 //   Cách đo: mở van 100%, đặt bình 1 lít, bấm giờ → Q_max = 1/thời_gian_phút
@@ -128,18 +78,17 @@ const char* MQTT_PASS     = "";
 // Chu kỳ vòng điều khiển (ms)
 #define CONTROL_INTERVAL_MS  1000
 
-// ================================================================
 // BIẾN TOÀN CỤC
-// ================================================================
 
 // --- Bộ đếm xung cảm biến (PHẢI khai báo volatile vì dùng trong ISR) ---
 volatile uint32_t pulseN = 0;
 volatile uint32_t pulseP = 0;
 volatile uint32_t pulseK = 0;
+volatile uint32_t pulseMain = 0;
 
 // Snapshot để tính flow rate
-uint32_t snapPulseN = 0, snapPulseP = 0, snapPulseK = 0;
-float    flowLpmN = 0.0f, flowLpmP = 0.0f, flowLpmK = 0.0f;
+uint32_t snapPulseN = 0, snapPulseP = 0, snapPulseK = 0, snapPulseMain = 0;
+float    flowLpmN = 0.0f, flowLpmP = 0.0f, flowLpmK = 0.0f, flowLpmMain = 0.0f;
 
 // Mục tiêu thể tích (mL)
 float targetN = 0.0f, targetP = 0.0f, targetK = 0.0f;
@@ -174,29 +123,22 @@ unsigned long lastFlowCalc   = 0;
 unsigned long lastReconnectTry = 0;
 
 // MQTT Topics
-const char* TOPIC_CMD    = "fert/cmd";
-const char* TOPIC_STATUS = "fert/status";
+const char* TOPIC_CMD    = "autofert/cmd";
+const char* TOPIC_STATUS = "autofert/status";
 
 // Clients
 WiFiClient   espClient;
 PubSubClient mqttClient(espClient);
-
-// ================================================================
 // NGẮT CẢM BIẾN LƯU LƯỢNG (ISR - Interrupt Service Routine)
-// ================================================================
 void IRAM_ATTR onFlowN() { pulseN++; }
 void IRAM_ATTR onFlowP() { pulseP++; }
 void IRAM_ATTR onFlowK() { pulseK++; }
-
-// ================================================================
+void IRAM_ATTR onFlowMain() { pulseMain++; }
 // ĐIỀU KHIỂN ĐỘNG CƠ BƯỚC
-// ================================================================
+//Di chuyển stepper motor một số bước chỉ định.
+ //steps > 0 → hướng mở van
+ //steps < 0 → hướng đóng van
 
-/**
- * Di chuyển stepper motor một số bước chỉ định.
- *   steps > 0 → hướng mở van
- *   steps < 0 → hướng đóng van
- */
 void moveStepper(uint8_t stepPin, uint8_t dirPin, uint8_t enPin, int steps) {
     if (steps == 0) return;
 
@@ -223,10 +165,7 @@ void moveStepper(uint8_t stepPin, uint8_t dirPin, uint8_t enPin, int steps) {
         }
     }
 }
-
-/**
- * Mở van đến phần trăm mong muốn (0% = đóng, 100% = mở hoàn toàn).
- */
+//Mở van đến phần trăm mong muốn (0% = đóng, 100% = mở hoàn toàn).
 void openValve(int valve, int percent) {
     int targetSteps = (MAX_OPEN_STEPS * constrain(percent, 0, 100)) / 100;
 
@@ -257,10 +196,7 @@ void openValve(int valve, int percent) {
         }
     }
 }
-
-/**
- * Đóng hoàn toàn một van và tắt driver để tiết kiệm điện.
- */
+//Đóng hoàn toàn một van và tắt driver để tiết kiệm điện.
 void closeValve(int valve) {
     openValve(valve, 0);
     switch (valve) {
@@ -269,10 +205,7 @@ void closeValve(int valve) {
         case 3: digitalWrite(EN_K, HIGH); break;
     }
 }
-
-/**
- * Dừng khẩn cấp: đóng tất cả van ngay lập tức.
- */
+// Dừng khẩn cấp: đóng tất cả van ngay lập tức.
 void emergencyStop() {
     Serial.println("\n!!! DỪNG KHẨN CẤP - Đóng tất cả van ngay lập tức !!!\n");
     systemRunning = false;
@@ -283,23 +216,17 @@ void emergencyStop() {
     closeValve(2);
     closeValve(3);
 }
-
-// ================================================================
 // MQTT CALLBACK - Nhận lệnh từ server
-// ================================================================
-// ================================================================
 // ĐIỀU KHIỂN TỈ LỆ - CHẠY ĐỒNG THỜI (P-Controller)
 // Gọi trong loop() mỗi CONTROL_INTERVAL_MS ms
-// ================================================================
 void controlSimultaneous() {
-    // Đọc thể tích tích lũy
+// Đọc thể tích tích lũy
     noInterrupts();
     float volN = pulseN * ML_PER_PULSE;
     float volP = pulseP * ML_PER_PULSE;
     float volK = pulseK * ML_PER_PULSE;
     interrupts();
-
-    // ---- Van N ----
+// Van N
     if (!doneN && targetN > 0) {
         if (volN >= targetN) {
             closeValve(1);
@@ -322,7 +249,7 @@ void controlSimultaneous() {
         }
     }
 
-    // ---- Van P ----
+// Van P 
     if (!doneP && targetP > 0) {
         if (volP >= targetP) {
             closeValve(2);
@@ -344,8 +271,7 @@ void controlSimultaneous() {
             }
         }
     }
-
-    // ---- Van K ----
+// Van K 
     if (!doneK && targetK > 0) {
         if (volK >= targetK) {
             closeValve(3);
@@ -367,8 +293,7 @@ void controlSimultaneous() {
             }
         }
     }
-
-    // Kiểm tra hoàn thành tất cả van
+// Kiểm tra hoàn thành tất cả van
     bool nOk = doneN || targetN <= 0;
     bool pOk = doneP || targetP <= 0;
     bool kOk = doneK || targetK <= 0;
@@ -379,7 +304,6 @@ void controlSimultaneous() {
         Serial.println("[SIM✓✓] Hoàn thành toàn bộ - chế độ đồng thời!");
     }
 }
-
 // ================================================================
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
     char buf[513];
@@ -398,8 +322,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
     const char* cmd = doc["cmd"];
     if (!cmd) return;
-
-    // ---- Lệnh BẮT ĐẦU TUẦN TỰ (N→P→K) ----
+// ---- Lệnh BẮT ĐẦU TUẦN TỰ (N→P→K) ----
     if (strcmp(cmd, "start_seq") == 0 || strcmp(cmd, "start") == 0) {
         if (systemRunning) {
             Serial.println("[!] Hệ thống đang chạy. Bỏ qua lệnh start.");
@@ -500,10 +423,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         }
     }
 }
-
-// ================================================================
 // KẾT NỐI MQTT
-// ================================================================
 void mqttReconnect() {
     if (millis() - lastReconnectTry < 5000) return;
     lastReconnectTry = millis();
@@ -529,41 +449,37 @@ void mqttReconnect() {
         digitalWrite(STATUS_LED, LOW);
     }
 }
-
-// ================================================================
 // TÍNH LƯU LƯỢNG (L/phút)
-// ================================================================
 void calculateFlowRates() {
     unsigned long now = millis();
     float dt_s = (now - lastFlowCalc) / 1000.0f;
     if (dt_s < 0.01f) return;
-
-    // Lấy snapshot xung, tắt interrupt tạm thời
+// Lấy snapshot xung, tắt interrupt tạm thời
     noInterrupts();
     uint32_t pN = pulseN;
     uint32_t pP = pulseP;
     uint32_t pK = pulseK;
+    uint32_t pMain = pulseMain;
     interrupts();
 
     uint32_t dN = pN - snapPulseN;
     uint32_t dP = pP - snapPulseP;
     uint32_t dK = pK - snapPulseK;
+    uint32_t dMain = pMain - snapPulseMain;
 
     snapPulseN = pN;
     snapPulseP = pP;
     snapPulseK = pK;
-
-    // YF-S201: Q(L/min) = F(Hz) / 7.5  →  Q = (xung/dt_s) / 7.5
+    snapPulseMain = pMain;
+ // YF-S201: Q(L/min) = F(Hz) / 7.5  →  Q = (xung/dt_s) / 7.5
     flowLpmN = (dN / dt_s) / 7.5f;
     flowLpmP = (dP / dt_s) / 7.5f;
     flowLpmK = (dK / dt_s) / 7.5f;
+    flowLpmMain = (dMain / dt_s) / 7.5f;
 
     lastFlowCalc = now;
 }
-
-// ================================================================
 // XỬ LÝ LOGIC BƠM (gọi liên tục trong loop)
-// ================================================================
 void processDispensing() {
     if (!systemRunning) return;
 
@@ -625,15 +541,13 @@ void processDispensing() {
             break;
     }
 }
-
-// ================================================================
 // PUBLISH TRẠNG THÁI LÊN MQTT
-// ================================================================
 void publishStatus() {
     noInterrupts();
     float volN = pulseN * ML_PER_PULSE;
     float volP = pulseP * ML_PER_PULSE;
     float volK = pulseK * ML_PER_PULSE;
+    float volMain = pulseMain * ML_PER_PULSE;
     interrupts();
 
     JsonDocument doc;
@@ -657,6 +571,8 @@ void publishStatus() {
     mkValve("P", volP, targetP, flowLpmP, posP, currentPhase == 2);
     mkValve("K", volK, targetK, flowLpmK, posK, currentPhase == 3);
 
+    doc["main_flow_lpm"] = roundf(flowLpmMain * 100.0f) / 100.0f;
+    doc["main_volume_ml"] = roundf(volMain);
     doc["total_target_ml"] = targetN + targetP + targetK;
     doc["total_volume_ml"] = volN + volP + volK;
 
@@ -664,10 +580,7 @@ void publishStatus() {
     size_t len = serializeJson(doc, buffer);
     mqttClient.publish(TOPIC_STATUS, (uint8_t*)buffer, len, false);
 }
-
-// ================================================================
 // SETUP
-// ================================================================
 void setup() {
     Serial.begin(115200);
     delay(500);
@@ -692,9 +605,11 @@ void setup() {
     pinMode(FLOW_N, INPUT);
     pinMode(FLOW_P, INPUT);
     pinMode(FLOW_K, INPUT);
+    pinMode(FLOW_MAIN, INPUT);
     attachInterrupt(digitalPinToInterrupt(FLOW_N), onFlowN, RISING);
     attachInterrupt(digitalPinToInterrupt(FLOW_P), onFlowP, RISING);
     attachInterrupt(digitalPinToInterrupt(FLOW_K), onFlowK, RISING);
+    attachInterrupt(digitalPinToInterrupt(FLOW_MAIN), onFlowMain, RISING);
     Serial.println(F("[OK] Cảm biến lưu lượng đã kích hoạt interrupt"));
 
     // Kết nối WiFi
@@ -728,9 +643,7 @@ void setup() {
     Serial.println(F("[OK] Hệ thống sẵn sàng!\n"));
 }
 
-// ================================================================
 // LOOP
-// ================================================================
 void loop() {
     // Kiểm tra WiFi
     if (WiFi.status() != WL_CONNECTED) {
