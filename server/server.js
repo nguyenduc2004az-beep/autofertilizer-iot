@@ -21,6 +21,7 @@ const { Server } = require('socket.io');
 const mqtt     = require('mqtt');
 const path     = require('path');
 const mysql    = require('mysql2/promise');
+const cron     = require('node-cron');
 
 // ================================================================
 // CẤU HÌNH — Đọc từ biến môi trường (Railway) hoặc dùng giá trị mặc định (localhost)
@@ -99,7 +100,25 @@ async function initDB() {
             )
         `);
 
-        // 5. Thêm dữ liệu mẫu nếu bảng cong_thuc trống
+        
+        // 5. Tạo bảng lich_hen
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS lich_hen (
+                ma_lich_hen VARCHAR(255) PRIMARY KEY,
+                mo_ta VARCHAR(255),
+                kieu_lich VARCHAR(50),
+                cong_thuc_id VARCHAR(255),
+                thoi_gian_bat_dau DATETIME NULL,
+                gio_bat_dau TIME NULL,
+                so_lan_ngay INT DEFAULT 1,
+                cach_nhau_gio INT DEFAULT 2,
+                ngay_lap VARCHAR(50) NULL,
+                thoi_gian_tuoi_phut INT DEFAULT 30,
+                trang_thai VARCHAR(50) DEFAULT 'active'
+            )
+        `);
+
+        // 6. Thêm dữ liệu mẫu nếu bảng cong_thuc trống
         const [rows] = await pool.query('SELECT COUNT(*) as count FROM cong_thuc');
         if (rows[0].count === 0) {
             const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -510,6 +529,52 @@ app.delete('/api/recipes/:id', async (req, res) => {
     }
 });
 
+
+// ================================================================
+// QUẢN LÝ LỊCH HẸN
+// ================================================================
+app.get('/api/schedules', async (req, res) => {
+    try {
+        const [rows] = await pool.query("SELECT * FROM lich_hen ORDER BY kieu_lich, thoi_gian_bat_dau");
+        res.json(rows);
+    } catch (e) {
+        console.error('[DB] Lỗi GET /schedules:', e.message);
+        res.status(500).json({ error: 'Lỗi Database' });
+    }
+});
+
+app.post('/api/schedules', async (req, res) => {
+    try {
+        const data = req.body;
+        const id = Date.now().toString();
+        const query = `
+            INSERT INTO lich_hen (ma_lich_hen, mo_ta, kieu_lich, cong_thuc_id, thoi_gian_bat_dau, gio_bat_dau, so_lan_ngay, cach_nhau_gio, ngay_lap, thoi_gian_tuoi_phut, trang_thai)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+        `;
+        const values = [
+            id, data.mo_ta, data.kieu_lich, data.cong_thuc_id,
+            data.thoi_gian_bat_dau || null, data.gio_bat_dau || null,
+            data.so_lan_ngay || 1, data.cach_nhau_gio || 2,
+            data.ngay_lap || null, data.thoi_gian_tuoi_phut || 30
+        ];
+        await pool.query(query, values);
+        res.json({ success: true, id });
+    } catch (e) {
+        console.error('[DB] Lỗi POST /schedules:', e.message);
+        res.status(500).json({ error: 'Lỗi Database' });
+    }
+});
+
+app.delete('/api/schedules/:id', async (req, res) => {
+    try {
+        await pool.query("DELETE FROM lich_hen WHERE ma_lich_hen = ?", [req.params.id]);
+        res.json({ success: true });
+    } catch (e) {
+        console.error('[DB] Lỗi DELETE /schedules:', e.message);
+        res.status(500).json({ error: 'Lỗi Database' });
+    }
+});
+
 app.get('/api/db-stats', async (req, res) => {
     try {
         const [sessionsCount] = await pool.query('SELECT COUNT(*) as count FROM lich_su_tron');
@@ -554,6 +619,131 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log(`[WS] Browser ngắt kết nối: ${socket.id}`);
     });
+});
+
+
+// ================================================================
+// LẬP LỊCH HẸN GIỜ (CRON-JOB)
+// ================================================================
+cron.schedule('* * * * *', async () => {
+    if (!pool) return;
+    try {
+        const now = new Date();
+        const currentDay = now.getDay(); // 0: CN, 1: T2...
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+
+        const [rows] = await pool.query("SELECT * FROM lich_hen WHERE trang_thai = 'active'");
+        for (const s of rows) {
+            let shouldRun = false;
+            if (s.kieu_lich === 'one') {
+                if (s.thoi_gian_bat_dau) {
+                    const dt = new Date(s.thoi_gian_bat_dau);
+                    if (dt.getFullYear() === now.getFullYear() && dt.getMonth() === now.getMonth() && dt.getDate() === now.getDate() && dt.getHours() === currentHour && dt.getMinutes() === currentMinute) {
+                        shouldRun = true;
+                        await pool.query("DELETE FROM lich_hen WHERE ma_lich_hen = ?", [s.ma_lich_hen]);
+                    }
+                }
+            } else if (s.kieu_lich === 'cyc') {
+                if (s.ngay_lap) {
+                    const days = s.ngay_lap.split(',');
+                    if (days.includes(currentDay.toString()) && s.gio_bat_dau) {
+                        const parts = s.gio_bat_dau.split(':');
+                        if (parts.length >= 2) {
+                            const sHour = parseInt(parts[0], 10);
+                            const sMin = parseInt(parts[1], 10);
+                            for (let i = 0; i < s.so_lan_ngay; i++) {
+                                let runHour = sHour + (i * s.cach_nhau_gio);
+                                if (runHour === currentHour && sMin === currentMinute) {
+                                    shouldRun = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (shouldRun && !currentSession) {
+                console.log(`[CRON] Kích hoạt lịch hẹn: ${s.mo_ta}`);
+                
+                let mqttCmd = {};
+                let sessionInfo = {};
+                
+                if (s.cong_thuc_id && s.cong_thuc_id !== 'water_only') {
+                    const [recipes] = await pool.query("SELECT * FROM cong_thuc WHERE ma_cong_thuc = ?", [s.cong_thuc_id]);
+                    if (recipes.length > 0) {
+                        const r = recipes[0];
+                        mqttCmd = {
+                            cmd: 'start_seq',
+                            recipe: {
+                                N: { target_ml: r.the_tich_bon1_ml || 0, speed_percent: 60 },
+                                P: { target_ml: r.the_tich_bon2_ml || 0, speed_percent: 60 },
+                                K: { target_ml: r.the_tich_bon3_ml || 0, speed_percent: 60 }
+                            }
+                        };
+                        sessionInfo = {
+                            recipe_name: `${r.ten_cong_thuc} (Hẹn giờ)`,
+                            mode: 'sequential',
+                            start_time: Date.now(),
+                            N_ml: r.the_tich_bon1_ml || 0, P_ml: r.the_tich_bon2_ml || 0, K_ml: r.the_tich_bon3_ml || 0,
+                            duration_sec: s.thoi_gian_tuoi_phut * 60
+                        };
+                    }
+                }
+                
+                if (!sessionInfo.recipe_name) {
+                    mqttCmd = {
+                        cmd: 'start_seq',
+                        recipe: {
+                            N: { target_ml: 0, speed_percent: 60 },
+                            P: { target_ml: 0, speed_percent: 60 },
+                            K: { target_ml: 0, speed_percent: 60 }
+                        }
+                    };
+                    sessionInfo = {
+                        recipe_name: 'Chỉ tưới nước (Hẹn giờ)',
+                        mode: 'sequential',
+                        start_time: Date.now(),
+                        N_ml: 0, P_ml: 0, K_ml: 0,
+                        duration_sec: s.thoi_gian_tuoi_phut * 60
+                    };
+                }
+
+                mqttClient.publish(TOPIC_CMD, JSON.stringify(mqttCmd), { qos: 1 });
+                currentSession = sessionInfo;
+                io.emit('session_started', sessionInfo);
+                
+                if (sessionInfo.recipe_name.startsWith('Chỉ tưới nước')) {
+                    mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 1 }), { qos: 1 });
+                    mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 1 }), { qos: 1 });
+                    
+                    setTimeout(() => {
+                        mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 0 }), { qos: 1 });
+                        mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 0 }), { qos: 1 });
+                        const record = {
+                            id: Date.now(),
+                            timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                            recipe_name: sessionInfo.recipe_name,
+                            mode: sessionInfo.mode,
+                            N_ml: 0, P_ml: 0, K_ml: 0, total_ml: 0,
+                            duration_s: s.thoi_gian_tuoi_phut * 60,
+                            status: 'completed',
+                            wifi_rssi: 0
+                        };
+                        io.emit('session_completed', record);
+                        io.emit('history_updated');
+                        currentSession = null;
+                        
+                        pool.query(`INSERT INTO lich_su_tron (ma_lich_su, thoi_gian_tron, ten_cong_thuc_da_dung, che_do_tron, tong_the_tich_ml, thoi_gian_chay_s, trang_thai) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                            [record.id, record.timestamp, record.recipe_name, record.mode, 0, record.duration_s, 'completed']);
+                    }, s.thoi_gian_tuoi_phut * 60 * 1000);
+                }
+            }
+        }
+    } catch (e) {
+        console.error('[CRON] Lỗi:', e.message);
+    }
 });
 
 // ================================================================

@@ -30,6 +30,7 @@ function doLogin(e) {
         loadHistory();
         loadRecipes();
         initWatering();
+    loadSchedules();
         showToast('Đăng nhập thành công!', 'success');
         updateClock();
         setInterval(updateClock, 1000);
@@ -55,6 +56,7 @@ if(sessionStorage.getItem('isLogged') === '1') {
     loadHistory();
     loadRecipes();
     initWatering();
+    loadSchedules();
     setInterval(updateClock, 1000);
 }
 
@@ -965,16 +967,60 @@ function saveTimer() {
 }
 
 // Logic lập lịch hẹn (Giao diện tạm)
-let schedules = [];
+
+function loadSchedules() {
+    fetch('/api/schedules').then(r=>r.json()).then(data => {
+        const list = document.getElementById('scheduleList');
+        if(data.length === 0) {
+            list.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 20px; font-style: italic;">Chưa có lịch hẹn nào.</div>';
+            return;
+        }
+        
+        list.innerHTML = data.map(s => `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #f1f5f9;">
+                <div>
+                    <strong style="color: #334155;">${s.mo_ta}</strong>
+                    <div style="font-size: 12px; color: #64748b;">Chạy trong: ${s.thoi_gian_tuoi_phut} phút</div>
+                </div>
+                <button onclick="delSchedule('${s.ma_lich_hen}')" style="background: #ef4444; color: white; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer;">Xóa</button>
+            </div>
+        `).join('');
+    });
+    
+    // Also load recipes into timer dropdown
+    fetch('/api/recipes').then(r=>r.json()).then(recipes => {
+        const sel = document.getElementById('timer-recipe');
+        if(!sel) return;
+        const oldVal = sel.value;
+        sel.innerHTML = '<option value="water_only">💧 Chỉ tưới nước (Không pha phân)</option>' + 
+            recipes.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+        if(recipes.some(r=>r.id===oldVal)) sel.value = oldVal;
+    });
+}
+
+function delSchedule(id) {
+    fetch('/api/schedules/'+id, {method:'DELETE'}).then(()=>{
+        showToast('Đã xóa lịch', 'info'); loadSchedules();
+    });
+}
+
 function addSchedule() {
     const isOne = document.getElementById('timerTab-one').classList.contains('active');
     const duration = document.getElementById('rd-inp-time').value;
+    const recipeId = document.getElementById('timer-recipe') ? document.getElementById('timer-recipe').value : 'water_only';
     
     let schedStr = '';
+    let payload = {
+        kieu_lich: isOne ? 'one' : 'cyc',
+        cong_thuc_id: recipeId,
+        thoi_gian_tuoi_phut: parseInt(duration) || 30
+    };
+
     if (isOne) {
         const dt = document.getElementById('timer-datetime').value;
         if(!dt) { showToast('Vui lòng chọn ngày giờ', 'warning'); return; }
         schedStr = `Tưới 1 lần lúc: ${dt.replace('T', ' ')}`;
+        payload.thoi_gian_bat_dau = dt;
     } else {
         const time = document.getElementById('timer-time').value;
         if(!time) { showToast('Vui lòng chọn giờ bắt đầu', 'warning'); return; }
@@ -984,34 +1030,33 @@ function addSchedule() {
         
         const checks = document.querySelectorAll('.day-chk input:checked');
         if(checks.length === 0) { showToast('Vui lòng chọn ngày lặp lại', 'warning'); return; }
-        let days = Array.from(checks).map(c => c.parentElement.textContent.trim()).join(', ');
+        let daysText = Array.from(checks).map(c => c.parentElement.textContent.trim()).join(', ');
+        let daysVal = Array.from(checks).map(c => c.value).join(',');
         
-        let freqStr = count > 1 ? ` (Tưới ${count} lần/ngày, cách nhau ${interval} tiếng)` : ` (Tưới 1 lần/ngày)`;
-        schedStr = `Lặp lại từ ${time} vào (${days})${freqStr}`;
+        let freqStr = count > 1 ? ` (${count} lần/ngày, cách nhau ${interval}h)` : ` (1 lần/ngày)`;
+        schedStr = `Lặp lại từ ${time} vào (${daysText})${freqStr}`;
+        
+        payload.gio_bat_dau = time;
+        payload.so_lan_ngay = count;
+        payload.cach_nhau_gio = interval;
+        payload.ngay_lap = daysVal;
     }
     
-    schedules.push({ desc: schedStr, duration: duration });
-    renderSchedules();
-    showToast('Đã thêm lịch hẹn', 'success');
+    payload.mo_ta = schedStr;
+    
+    fetch('/api/schedules', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    }).then(r=>r.json()).then(data=>{
+        if(data.success) {
+            showToast('Đã thêm lịch hẹn', 'success');
+            loadSchedules();
+        } else {
+            showToast('Lỗi lưu lịch hẹn', 'error');
+        }
+    });
 }
 
-function renderSchedules() {
-    const list = document.getElementById('scheduleList');
-    if(schedules.length === 0) {
-        list.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 20px; font-style: italic;">Chưa có lịch hẹn nào.</div>';
-        return;
-    }
-    
-    list.innerHTML = schedules.map((s, i) => `
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #f1f5f9;">
-            <div>
-                <strong style="color: #334155;">${s.desc}</strong>
-                <div style="font-size: 12px; color: #64748b;">Thời gian chạy: ${s.duration} phút</div>
-            </div>
-            <button onclick="schedules.splice(${i}, 1); renderSchedules()" style="background: #ef4444; color: white; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer;">Xóa</button>
-        </div>
-    `).join('');
-}
 
 function initWatering() {
     const saved = localStorage.getItem('wateringTime');
@@ -1025,5 +1070,5 @@ function initWatering() {
 
 // Khởi tạo khi tải trang
 initWatering();
-syncStatus(); 
+syncStatus();
 setInterval(syncStatus, 10000); // Đồng bộ lại mỗi 10 giây cho chắc chắn

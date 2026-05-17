@@ -908,6 +908,16 @@
                                     </div>
                                 </div>
 
+                                
+                                <!-- Chọn công thức -->
+                                <div style="flex: 1; min-width: 250px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px;">
+                                    <label style="font-weight: 700; font-size: 14px; margin-bottom: 8px; display: block; color: #1e3a8a;">🧪 CÔNG THỨC PHA TRỘN</label>
+                                    <div class="smp-sub">Hệ thống sẽ bơm nước và phân theo công thức (Nếu có).</div>
+                                    <select id="timer-recipe" class="field" style="width: 100%; margin-top: 10px;">
+                                        <option value="water_only">💧 Chỉ tưới nước (Không pha phân)</option>
+                                    </select>
+                                </div>
+
                                 <!-- Chọn loại Lịch -->
                                 <div style="flex: 1; min-width: 250px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px;">
                                     <label style="font-weight: 700; font-size: 14px; margin-bottom: 12px; display: block; color: #1e3a8a;">📅 KIỂU LỊCH HẸN</label>
@@ -1219,7 +1229,7 @@
                         <div class="sys-info-row"><span class="sys-lbl">Vi điều khiển</span><span class="sys-val">ESP32 DevKit V1</span></div>
                         <div class="sys-info-row"><span class="sys-lbl">Động cơ bước</span><span class="sys-val">NEMA 17 × 3</span></div>
                              <div class="sys-info-row"><span class="sys-lbl">Bộ điều khiển</span><span class="sys-val">A4988 (1/8 bước)</span></div>
-                        <div class="sys-info-row"><span class="sys-lbl">Cảm biến lưu lượng</span><span class="sys-val">YF-S201 × 3</span></div>
+                        <div class="sys-info-row"><span class="sys-lbl">Cảm biến lưu lượng</span><span class="sys-val">YF-S401 × 3</span></div>
                         <div class="sys-info-row"><span class="sys-lbl">GPIO Van N</span><span class="sys-val n-val">13, 14, 15</span></div>
                         <div class="sys-info-row"><span class="sys-lbl">GPIO Van P</span><span class="sys-val p-val">16, 17, 18</span></div>
                         <div class="sys-info-row"><span class="sys-lbl">GPIO Van K</span><span class="sys-val k-val">19, 21, 22</span></div>
@@ -1233,15 +1243,15 @@
                     <div class="threshold-grid">
                         <div class="threshold-item">
                             <label>mL/Xung Van N</label>
-                            <input type="number" id="calN" class="field" value="2.25" step="0.01" min="0.01">
+                            <input type="number" id="calN" class="field" value="0.17" step="0.01" min="0.01">
                         </div>
                         <div class="threshold-item">
                             <label>mL/Xung Van P</label>
-                            <input type="number" id="calP" class="field" value="2.25" step="0.01" min="0.01">
+                            <input type="number" id="calP" class="field" value="0.17" step="0.01" min="0.01">
                         </div>
                         <div class="threshold-item">
                             <label>mL/Xung Van K</label>
-                            <input type="number" id="calK" class="field" value="2.25" step="0.01" min="0.01">
+                            <input type="number" id="calK" class="field" value="0.17" step="0.01" min="0.01">
                         </div>
                     </div>
                     <p class="sys-note" style="margin-top:10px">⚠️ Thay đổi cần nạp lại firmware ESP32.</p>

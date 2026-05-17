@@ -142,7 +142,7 @@ function buildColumn(k) {
     // ─ Pipe motor→sensor ─
     mesh(cyl(0.11, 0.11, 0.9, 8), mat(0x4a5568, 0.3, 0.8), g).position.y = 1.4;
 
-    // ─ Cảm biến lưu lượng YF-S201 ─
+    // ─ Cảm biến lưu lượng YF-S401 ─
     const sensor = new THREE.Mesh(torus(0.32, 0.11, 8, 18), mat(0x6b7280, 0.3, 0.7));
     sensor.rotation.x = Math.PI / 2; sensor.position.y = 0.95;
     sensor.castShadow = true; g.add(sensor); C[`sensor${k}`] = sensor;

@@ -35,7 +35,7 @@ du_an_web/
 | 2 | Động cơ bước NEMA 17 | 3 | 200 step/rev, 1.8°/step |
 | 3 | Driver A4988 / DRV8825 | 3 | Điều khiển stepper |
 | 4 | Van kim (Needle Valve) | 3 | Van N, P, K |
-| 5 | Cảm biến lưu lượng YF-S201 | 3 | 1 cảm biến/van |
+| 5 | Cảm biến lưu lượng YF-S401 | 3 | 1 cảm biến/van |
 | 6 | Nguồn 12V DC | 1 | Cấp cho stepper motor |
 | 7 | Module DC-DC (12V→5V) | 1 | Cấp cho ESP32 |
 
@@ -59,7 +59,7 @@ Van K (Kali):
   GPIO 21 → DIR
   GPIO 22 → ENABLE
 
-Cảm biến lưu lượng YF-S201:
+Cảm biến lưu lượng YF-S401:
   GPIO 25 → Signal (Van N)
   GPIO 26 → Signal (Van P)
   GPIO 27 → Signal (Van K)
@@ -255,7 +255,7 @@ Truy cập: **http://localhost:3000** (hoặc `http://<IP-laptop>:3000` từ thi
         ↓ MQTT
 [ESP32] Nhận lệnh → Mở Van N (stepper motor)
         ↓
-[YF-S201] Đếm xung → Tính thể tích
+[YF-S401] Đếm xung → Tính thể tích
         ↓
 [ESP32] So sánh với mục tiêu → Đạt đủ → Đóng Van N
         ↓
@@ -279,7 +279,7 @@ Truy cập: **http://localhost:3000** (hoặc `http://<IP-laptop>:3000` từ thi
 | Flow sensor = 0 | Kiểm tra kết nối GPIO 25/26/27, nước có chảy? |
 | Lượng bơm không chính xác | Hiệu chỉnh hằng số ML_PER_PULSE trong .ino |
 
-### Hiệu chỉnh cảm biến YF-S201
+### Hiệu chỉnh cảm biến YF-S401
 
 Đặt lượng nước đã biết (VD: 1000 mL) vào bình đo chính xác, chạy hệ thống và xem trong Serial Monitor:
 ```

@@ -2,8 +2,7 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
-// CẤU HÌNH WIFI & MQTT - CHỈNH SỬA PHẦN NÀY
-
+// CẤU HÌNH WIFI & MQTT
 const char* WIFI_SSID     = "huuduc";       // Điền tên WiFi ở Nhà lưới vào đây
 const char* WIFI_PASSWORD = "19052004";     // Điền mật khẩu WiFi ở Nhà lưới vào đây
 const char* MQTT_SERVER   = "broker.hivemq.com"; // Sử dụng Cloud MQTT
@@ -13,27 +12,30 @@ const char* MQTT_PASS     = "";
 
 // CHÂN GPIO - ĐỘNG CƠ BƯỚC
 
-//  Van N
+//BỒN 1
 #define STEP_N     13
 #define DIR_N      14
 #define EN_N       15
 
-// Van P
+//BỒN 2
 #define STEP_P     16
 #define DIR_P      17
 #define EN_P       18
 
-// Van K
+//BỒN 3
 #define STEP_K     19
 #define DIR_K      21
 #define EN_K       22
 
-// CHÂN GPIO - CẢM BIẾN LƯU LƯỢNG (YF-S201)
-// Lưu ý: Các chân này phải hỗ trợ interrupt
+// CHÂN GPIO - CẢM BIẾN LƯU LƯỢNG 
 #define FLOW_N     25
 #define FLOW_P     26
 #define FLOW_K     27
 #define FLOW_MAIN  33
+
+// CHÂN GPIO - BƠM VÀ VAN CHÍNH
+#define PUMP_PIN   4
+#define VALVE_PIN  5
 
 // LED trạng thái
 #define STATUS_LED  2
@@ -47,12 +49,12 @@ const char* MQTT_PASS     = "";
 #define MAX_OPEN_STEPS  (STEPS_PER_REV * MICROSTEP / 4)   // = 400 bước = 90°
 
 // Độ trễ giữa các micro-bước (µs) - giảm để nhanh hơn, tăng để an toàn hơn
-#define STEP_DELAY_US   1000   // 1ms per micro-step edge
+#define STEP_DELAY_US   300   // 300us per micro-step edge (đã giảm từ 1000 để chạy nhanh và mượt hơn)
 
-// YF-S201 Flow Sensor:
-//   Đặc tính: F(Hz) = 7.5 × Q(L/min)
-//   Thể tích mỗi xung = 1 / (7.5 × 60) L = 2.222 mL/xung
-#define ML_PER_PULSE    2.222f
+// YF-S401 Flow Sensor:
+//   Đặc tính: F(Hz) = 98 × Q(L/min)
+//   Thể tích mỗi xung = 1 / (98 × 60) L = 0.170 mL/xung
+#define ML_PER_PULSE    0.170f
 
 // Chu kỳ publish và tính flow rate (ms)
 #define PUBLISH_INTERVAL    500
@@ -413,13 +415,42 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     // ---- Lệnh DỪNG ----
     else if (strcmp(cmd, "stop") == 0) {
         emergencyStop();
+        // Tắt luôn bơm và van nếu đang bật thủ công
+        digitalWrite(PUMP_PIN, LOW);
+        digitalWrite(VALVE_PIN, LOW);
     }
     // ---- Lệnh VỀ HOME (đặt lại vị trí gốc) ----
     else if (strcmp(cmd, "home") == 0) {
         if (!systemRunning) {
+            // Giả lập đang mở tối đa để ép van xoay lùi về tận cùng
+            posN = posP = posK = MAX_OPEN_STEPS;
             closeValve(1); closeValve(2); closeValve(3);
-            posN = posP = posK = 0;
-            Serial.println("[HOME] Đã về vị trí gốc.");
+            Serial.println("[HOME] Đã ép đóng toàn bộ van về vị trí gốc.");
+        }
+    }
+    // ---- Lệnh ĐIỀU KHIỂN THỦ CÔNG (Bơm, Van điện từ) ----
+    else if (strcmp(cmd, "manual") == 0) {
+        const char* device = doc["device"];
+        bool state = doc["state"];
+        if (device) {
+            if (strcmp(device, "pump") == 0) {
+                digitalWrite(PUMP_PIN, state ? HIGH : LOW);
+                Serial.printf("[MANUAL] Bơm nước: %s\n", state ? "BẬT" : "TẮT");
+            } else if (strcmp(device, "main_valve") == 0) {
+                digitalWrite(VALVE_PIN, state ? HIGH : LOW);
+                Serial.printf("[MANUAL] Van chính: %s\n", state ? "BẬT" : "TẮT");
+            }
+        }
+    }
+    // ---- Lệnh KIỂM TRA ĐỘNG CƠ BƯỚC (Manual) ----
+    else if (strcmp(cmd, "stepper") == 0) {
+        const char* type = doc["type"];
+        int steps = doc["steps"] | 0;
+        if (type && steps > 0) {
+            if (strcmp(type, "N") == 0) moveStepper(STEP_N, DIR_N, EN_N, steps);
+            else if (strcmp(type, "P") == 0) moveStepper(STEP_P, DIR_P, EN_P, steps);
+            else if (strcmp(type, "K") == 0) moveStepper(STEP_K, DIR_K, EN_K, steps);
+            Serial.printf("[MANUAL] Test stepper %s: %d bước\n", type, steps);
         }
     }
 }
@@ -471,11 +502,11 @@ void calculateFlowRates() {
     snapPulseP = pP;
     snapPulseK = pK;
     snapPulseMain = pMain;
- // YF-S201: Q(L/min) = F(Hz) / 7.5  →  Q = (xung/dt_s) / 7.5
-    flowLpmN = (dN / dt_s) / 7.5f;
-    flowLpmP = (dP / dt_s) / 7.5f;
-    flowLpmK = (dK / dt_s) / 7.5f;
-    flowLpmMain = (dMain / dt_s) / 7.5f;
+ // YF-S401: Q(L/min) = F(Hz) / 98  →  Q = (xung/dt_s) / 98
+    flowLpmN = (dN / dt_s) / 98.0f;
+    flowLpmP = (dP / dt_s) / 98.0f;
+    flowLpmK = (dK / dt_s) / 98.0f;
+    flowLpmMain = (dMain / dt_s) / 98.0f;
 
     lastFlowCalc = now;
 }
@@ -596,16 +627,22 @@ void setup() {
     int stepperPins[] = {STEP_N, DIR_N, EN_N, STEP_P, DIR_P, EN_P, STEP_K, DIR_K, EN_K};
     for (int pin : stepperPins) pinMode(pin, OUTPUT);
 
-    // Tắt tất cả driver (ENABLE = HIGH → disable)
-    digitalWrite(EN_N, HIGH);
-    digitalWrite(EN_P, HIGH);
-    digitalWrite(EN_K, HIGH);
+    // Ép đóng toàn bộ van khi khởi động để đề phòng mất điện đột ngột
+    Serial.println(F("[HOME] Khởi tạo vị trí gốc cho các van kim..."));
+    posN = MAX_OPEN_STEPS; posP = MAX_OPEN_STEPS; posK = MAX_OPEN_STEPS;
+    closeValve(1); closeValve(2); closeValve(3);
 
-    // Khởi tạo cảm biến lưu lượng
-    pinMode(FLOW_N, INPUT);
-    pinMode(FLOW_P, INPUT);
-    pinMode(FLOW_K, INPUT);
-    pinMode(FLOW_MAIN, INPUT);
+    // Khởi tạo chân bơm và van chính
+    pinMode(PUMP_PIN, OUTPUT);
+    pinMode(VALVE_PIN, OUTPUT);
+    digitalWrite(PUMP_PIN, LOW); // Mặc định tắt (giả sử active HIGH)
+    digitalWrite(VALVE_PIN, LOW);
+
+    // Khởi tạo cảm biến lưu lượng (Dùng PULLUP nội bộ để chống nhiễu)
+    pinMode(FLOW_N, INPUT_PULLUP);
+    pinMode(FLOW_P, INPUT_PULLUP);
+    pinMode(FLOW_K, INPUT_PULLUP);
+    pinMode(FLOW_MAIN, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(FLOW_N), onFlowN, RISING);
     attachInterrupt(digitalPinToInterrupt(FLOW_P), onFlowP, RISING);
     attachInterrupt(digitalPinToInterrupt(FLOW_K), onFlowK, RISING);
