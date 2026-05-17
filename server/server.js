@@ -38,26 +38,35 @@ console.log(`[CONFIG] PORT=${PORT} | MQTT=${MQTT_URL} | TOPICS=${TOPIC_PREFIX}/*
 // ================================================================
 // DATABASE MYSQL
 // ================================================================
+// Railway inject tự động: MYSQLHOST, MYSQLUSER, MYSQLPASSWORD, MYSQLPORT, MYSQLDATABASE
+// Local fallback: localhost / root / '' / csdl_phoi_tron_phan
 const DB_CONFIG = {
-    host: 'localhost',
-    user: 'root',
-    password: '',
-    database: 'csdl_phoi_tron_phan'
+    host:     process.env.MYSQLHOST     || 'localhost',
+    port:     process.env.MYSQLPORT     || 3306,
+    user:     process.env.MYSQLUSER     || 'root',
+    password: process.env.MYSQLPASSWORD || '',
+    database: process.env.MYSQLDATABASE || 'csdl_phoi_tron_phan'
 };
 
 let pool; // MySQL connection pool
 
 async function initDB() {
     try {
-        // 1. Kết nối không cần Database trước để tạo Database nếu chưa có
-        const connection = await mysql.createConnection({
-            host: DB_CONFIG.host,
-            user: DB_CONFIG.user,
-            password: DB_CONFIG.password
-        });
-        
-        await connection.query(`CREATE DATABASE IF NOT EXISTS \`${DB_CONFIG.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-        await connection.end();
+        // 1. Tạo Database nếu chưa có (CHỈ local — Railway tự tạo sẵn)
+        const isRailway = !!process.env.MYSQLHOST;
+        if (!isRailway) {
+            const connection = await mysql.createConnection({
+                host: DB_CONFIG.host,
+                port: DB_CONFIG.port,
+                user: DB_CONFIG.user,
+                password: DB_CONFIG.password
+            });
+            await connection.query(`CREATE DATABASE IF NOT EXISTS \`${DB_CONFIG.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+            await connection.end();
+            console.log('[DB] Local: Đã tạo/kiểm tra database.');
+        } else {
+            console.log('[DB] Railway: Sử dụng database đã được tạo sẵn bởi MySQL plugin.');
+        }
 
         // 2. Khởi tạo Pool kết nối tới Database
         pool = mysql.createPool({
