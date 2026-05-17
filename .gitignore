@@ -32,6 +32,12 @@ build/
 *.bat
 *.obj
 *.skp
+*.mtl
+*.dgn
 npm*
 npx*
 corepack*
+
+# 3D model files (large, not needed on server)
+3d/
+public/3d/
