@@ -879,8 +879,70 @@ function refreshSysInfo() {
 }
 
 // ==========================================
-// 9. WATERING CONTROLS
+// 9. ĐIỀU KHIỂN & LẬP LỊCH (TABS)
 // ==========================================
+
+function switchCtrlTab(tabId) {
+    // Hide all
+    document.querySelectorAll('.ctrl-panel').forEach(p => p.classList.add('hidden'));
+    document.querySelectorAll('.ctrl-tab').forEach(t => {
+        t.classList.remove('active');
+        t.style.fontWeight = '600';
+        t.style.color = '#64748b';
+        t.style.borderBottomColor = 'transparent';
+        t.style.background = 'transparent';
+    });
+    
+    // Show active
+    document.getElementById('ctrl-' + tabId).classList.remove('hidden');
+    const actBtn = document.getElementById('cTab-' + tabId);
+    actBtn.classList.add('active');
+    actBtn.style.fontWeight = '700';
+    actBtn.style.color = '#3b82f6';
+    actBtn.style.borderBottomColor = '#3b82f6';
+    actBtn.style.background = 'white';
+}
+
+function switchTimerMode(mode) {
+    document.getElementById('timerMode-one').classList.add('hidden');
+    document.getElementById('timerMode-cyc').classList.add('hidden');
+    document.getElementById('timerTab-one').classList.remove('active');
+    document.getElementById('timerTab-cyc').classList.remove('active');
+
+    document.getElementById('timerMode-' + mode).classList.remove('hidden');
+    document.getElementById('timerTab-' + mode).classList.add('active');
+}
+
+// Gửi lệnh điều khiển thủ công (Manual)
+function testDevice(device, state) {
+    fetch('/api/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cmd: 'manual', device: device, state: state ? 1 : 0 })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if(data.success) showToast(`Đã gửi lệnh: ${device} -> ${state ? 'BẬT' : 'TẮT'}`, 'info');
+        else showToast('Lỗi gửi lệnh', 'error');
+    })
+    .catch(e => showToast('Chưa kết nối Server', 'error'));
+}
+
+function testStepper(type) {
+    const steps = parseInt(document.getElementById('test-steps-' + type).value) || 0;
+    fetch('/api/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cmd: 'stepper', type: type, steps: steps })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if(data.success) showToast(`Test Stepper ${type}: ${steps} bước`, 'info');
+        else showToast('Lỗi gửi lệnh', 'error');
+    })
+    .catch(e => showToast('Chưa kết nối Server', 'error'));
+}
+
 function adjTimer(delta) {
     const el = document.getElementById('rd-inp-time');
     if(!el) return;
@@ -896,10 +958,59 @@ function saveTimer() {
     localStorage.setItem('wateringTime', val);
     
     // Update display in Overview
-    const txt = document.getElementById('ov-timer-txt');
+    const txt = document.getElementById('ov-timer-val');
     if(txt) txt.textContent = val + ':00';
     
     showToast(`Đã lưu thời gian tưới: ${val} phút`, 'success');
+}
+
+// Logic lập lịch hẹn (Giao diện tạm)
+let schedules = [];
+function addSchedule() {
+    const isOne = document.getElementById('timerTab-one').classList.contains('active');
+    const duration = document.getElementById('rd-inp-time').value;
+    
+    let schedStr = '';
+    if (isOne) {
+        const dt = document.getElementById('timer-datetime').value;
+        if(!dt) { showToast('Vui lòng chọn ngày giờ', 'warning'); return; }
+        schedStr = `Tưới 1 lần lúc: ${dt.replace('T', ' ')}`;
+    } else {
+        const time = document.getElementById('timer-time').value;
+        if(!time) { showToast('Vui lòng chọn giờ bắt đầu', 'warning'); return; }
+        
+        const count = parseInt(document.getElementById('timer-count').value) || 1;
+        const interval = parseInt(document.getElementById('timer-interval').value) || 2;
+        
+        const checks = document.querySelectorAll('.day-chk input:checked');
+        if(checks.length === 0) { showToast('Vui lòng chọn ngày lặp lại', 'warning'); return; }
+        let days = Array.from(checks).map(c => c.parentElement.textContent.trim()).join(', ');
+        
+        let freqStr = count > 1 ? ` (Tưới ${count} lần/ngày, cách nhau ${interval} tiếng)` : ` (Tưới 1 lần/ngày)`;
+        schedStr = `Lặp lại từ ${time} vào (${days})${freqStr}`;
+    }
+    
+    schedules.push({ desc: schedStr, duration: duration });
+    renderSchedules();
+    showToast('Đã thêm lịch hẹn', 'success');
+}
+
+function renderSchedules() {
+    const list = document.getElementById('scheduleList');
+    if(schedules.length === 0) {
+        list.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 20px; font-style: italic;">Chưa có lịch hẹn nào.</div>';
+        return;
+    }
+    
+    list.innerHTML = schedules.map((s, i) => `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #f1f5f9;">
+            <div>
+                <strong style="color: #334155;">${s.desc}</strong>
+                <div style="font-size: 12px; color: #64748b;">Thời gian chạy: ${s.duration} phút</div>
+            </div>
+            <button onclick="schedules.splice(${i}, 1); renderSchedules()" style="background: #ef4444; color: white; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer;">Xóa</button>
+        </div>
+    `).join('');
 }
 
 function initWatering() {

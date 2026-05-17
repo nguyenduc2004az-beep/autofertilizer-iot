@@ -4,9 +4,9 @@
 
 // CẤU HÌNH WIFI & MQTT - CHỈNH SỬA PHẦN NÀY
 
-const char* WIFI_SSID     = "huuduc";       // Tên WiFi
-const char* WIFI_PASSWORD = "19052004";           // Mật khẩu WiFi
-const char* MQTT_SERVER   = "192.168.137.1";           // IP laptop khi dùng Mobile Hotspot
+const char* WIFI_SSID     = "huuduc";       // Điền tên WiFi ở Nhà lưới vào đây
+const char* WIFI_PASSWORD = "19052004";     // Điền mật khẩu WiFi ở Nhà lưới vào đây
+const char* MQTT_SERVER   = "broker.hivemq.com"; // Sử dụng Cloud MQTT
 const int   MQTT_PORT     = 1883;
 const char* MQTT_USER     = "";    // Để trống nếu không dùng xác thực
 const char* MQTT_PASS     = "";
@@ -122,9 +122,9 @@ unsigned long lastPublish    = 0;
 unsigned long lastFlowCalc   = 0;
 unsigned long lastReconnectTry = 0;
 
-// MQTT Topics
-const char* TOPIC_CMD    = "autofert/cmd";
-const char* TOPIC_STATUS = "autofert/status";
+// MQTT Topics (Đã đổi để tránh bị trùng với người khác trên public broker)
+const char* TOPIC_CMD    = "autofert_khoaluan2026/cmd";
+const char* TOPIC_STATUS = "autofert_khoaluan2026/status";
 
 // Clients
 WiFiClient   espClient;

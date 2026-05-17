@@ -27,8 +27,8 @@ const mysql    = require('mysql2/promise');
 // ================================================================
 const PORT   = process.env.PORT || 3000;
 
-const MQTT_URL = process.env.MQTT_URL || (process.env.RAILWAY_ENVIRONMENT ? 'mqtt://broker.hivemq.com:1883' : 'mqtt://127.0.0.1:1883');
-const TOPIC_PREFIX = process.env.MQTT_TOPIC_PREFIX || 'autofert';
+const MQTT_URL = process.env.MQTT_URL || 'mqtt://broker.hivemq.com:1883'; // Đã chuyển sang Cloud MQTT
+const TOPIC_PREFIX = process.env.MQTT_TOPIC_PREFIX || 'autofert_khoaluan2026'; // Đổi topic để tránh nhiễu trên public broker
 const TOPIC_CMD    = `${TOPIC_PREFIX}/cmd`;
 const TOPIC_STATUS = `${TOPIC_PREFIX}/status`;
 
@@ -397,6 +397,23 @@ app.post('/api/home', (req, res) => {
     mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'home' }), { qos: 1 });
     res.json({ success: true });
 });
+
+app.post('/api/manual', (req, res) => {
+    const body = req.body;
+    let mqttCmd = {};
+    if (body.cmd === 'manual') {
+        mqttCmd = { cmd: 'manual', device: body.device, state: body.state };
+    } else if (body.cmd === 'stepper') {
+        mqttCmd = { cmd: 'stepper', type: body.type, steps: body.steps };
+    }
+    
+    mqttClient.publish(TOPIC_CMD, JSON.stringify(mqttCmd), { qos: 1 }, (err) => {
+        if (err) return res.status(500).json({ error: 'Lỗi MQTT: ' + err.message });
+        console.log(`[MANUAL] Lệnh điều khiển thủ công đã gửi: ${JSON.stringify(mqttCmd)}`);
+        res.json({ success: true, command: mqttCmd });
+    });
+});
+
 
 app.get('/api/history', async (req, res) => {
     try {

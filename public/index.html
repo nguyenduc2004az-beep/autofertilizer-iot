@@ -313,27 +313,27 @@
                     <!-- BOTTOM PANELS -->
                     <div class="rd-bottom-row">
                         <div class="rd-card">
-                            <div class="rd-card-title">MỨC DUNG DỊCH</div>
+                            <div class="rd-card-title">THỂ TÍCH PHÂN BÓN CÒN LẠI TRONG BỒN</div>
                             <div class="rd-levels">
                                 <div class="rd-lvl-col">
-                                    <div class="rd-lvl-name n-val">DUNG DỊCH 1</div>
-                                    <div class="rd-lvl-val"><span id="rd-volN">0</span> L</div>
+                                    <div class="rd-lvl-name n-val">BỒN 1 (N)</div>
+                                    <div class="rd-lvl-val"><span id="rd-volN">0</span> Lít</div>
                                     <div class="rd-lvl-bar-wrap">
                                         <div class="rd-lvl-bar"><div class="rd-lvl-fill n-bg" id="rd-barN" style="width: 0%;"></div></div>
                                         <div class="rd-lvl-pct" id="rd-pctN">0%</div>
                                     </div>
                                 </div>
                                 <div class="rd-lvl-col">
-                                    <div class="rd-lvl-name p-val">DUNG DỊCH 2</div>
-                                    <div class="rd-lvl-val"><span id="rd-volP">0</span> L</div>
+                                    <div class="rd-lvl-name p-val">BỒN 2 (P)</div>
+                                    <div class="rd-lvl-val"><span id="rd-volP">0</span> Lít</div>
                                     <div class="rd-lvl-bar-wrap">
                                         <div class="rd-lvl-bar"><div class="rd-lvl-fill p-bg" id="rd-barP" style="width: 0%;"></div></div>
                                         <div class="rd-lvl-pct" id="rd-pctP">0%</div>
                                     </div>
                                 </div>
                                 <div class="rd-lvl-col">
-                                    <div class="rd-lvl-name k-val">DUNG DỊCH 3</div>
-                                    <div class="rd-lvl-val"><span id="rd-volK">0</span> L</div>
+                                    <div class="rd-lvl-name k-val">BỒN 3 (K)</div>
+                                    <div class="rd-lvl-val"><span id="rd-volK">0</span> Lít</div>
                                     <div class="rd-lvl-bar-wrap">
                                         <div class="rd-lvl-bar"><div class="rd-lvl-fill k-bg" id="rd-barK" style="width: 0%;"></div></div>
                                         <div class="rd-lvl-pct" id="rd-pctK">0%</div>
@@ -343,28 +343,28 @@
                         </div>
 
                         <div class="rd-card" style="flex: 2;">
-                            <div class="rd-card-title">THÔNG SỐ HOẠT ĐỘNG</div>
+                            <div class="rd-card-title">THÔNG SỐ BƠM & LƯU LƯỢNG THỰC TẾ</div>
                             <div class="rd-params-grid">
                                 <div class="rd-param-sub">
-                                    <span class="sub-lbl">💧 LƯU LƯỢNG (L/h)</span>
+                                    <span class="sub-lbl">💧 LƯU LƯỢNG HÚT PHÂN (Lít/giờ)</span>
                                     <div class="sub-row">
-                                        <div class="sub-item">D.DỊCH 1: <strong id="rd-fN" class="n-val">0</strong></div>
-                                        <div class="sub-item">D.DỊCH 2: <strong id="rd-fP" class="p-val">0</strong></div>
-                                        <div class="sub-item">D.DỊCH 3: <strong id="rd-fK" class="k-val">0</strong></div>
+                                        <div class="sub-item">BỒN 1: <strong id="rd-fN" class="n-val">0</strong></div>
+                                        <div class="sub-item">BỒN 2: <strong id="rd-fP" class="p-val">0</strong></div>
+                                        <div class="sub-item">BỒN 3: <strong id="rd-fK" class="k-val">0</strong></div>
                                     </div>
                                 </div>
                                 <div class="rd-param-sub">
-                                    <span class="sub-lbl">⚙ GÓC QUAY ĐỘNG CƠ (°)</span>
+                                    <span class="sub-lbl">⚙ ĐỘ MỞ VAN KIM (Góc Động cơ bước)</span>
                                     <div class="sub-row">
-                                        <div class="sub-item">MÔ TƠ 1: <strong id="rd-aN">0°</strong></div>
-                                        <div class="sub-item">MÔ TƠ 2: <strong id="rd-aP">0°</strong></div>
-                                        <div class="sub-item">MÔ TƠ 3: <strong id="rd-aK">0°</strong></div>
+                                        <div class="sub-item">VAN 1: <strong id="rd-aN">0°</strong></div>
+                                        <div class="sub-item">VAN 2: <strong id="rd-aP">0°</strong></div>
+                                        <div class="sub-item">VAN 3: <strong id="rd-aK">0°</strong></div>
                                     </div>
                                 </div>
-                                <div class="rd-param-sub" style="border-left: 2px dashed #cbd5e1; padding-left: 15px;">
-                                    <span class="sub-lbl">📊 LƯU LƯỢNG TỔNG (L/h)</span>
+                                <div class="rd-param-sub" style="border-left: 2px solid #e2e8f0; padding-left: 15px;">
+                                    <span class="sub-lbl">📊 TỔNG LƯU LƯỢNG NƯỚC TƯỚI (Lít/giờ)</span>
                                     <div class="sub-row">
-                                        <div class="sub-item">CẢM BIẾN THỰC TẾ: <strong id="rd-fMain" style="color:#0ea5e9; font-size:18px;">0</strong></div>
+                                        <div class="sub-item">CẢM BIẾN CHÍNH: <strong id="rd-fMain" style="color:#0ea5e9; font-size:18px;">0</strong></div>
                                     </div>
                                 </div>
                             </div>
@@ -615,37 +615,105 @@
             </div>
 
             <div class="settings-layout">
-                <!-- THÊM CHẾ ĐỘ TƯỚI & THỜI GIAN -->
-                <div class="iot-card">
-                    <div class="iot-card-title">🕹️ Cài Đặt Hệ Thống Tưới</div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 20px;">
-                        <div style="flex: 1; min-width: 200px;">
-                            <label style="font-weight: 600; font-size: 14px; margin-bottom: 8px; display: block;">Chế độ tưới</label>
-                            <div class="rd-radio-list" style="background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                                <label><input type="radio" name="rd-mode" value="manual"> Tưới thủ công</label>
-                                <label><input type="radio" name="rd-mode" value="auto" checked> Tưới tự động</label>
-                                <label><input type="radio" name="rd-mode" value="timer"> Hẹn giờ</label>
-                            </div>
-                        </div>
-                        <div style="flex: 1; min-width: 200px;">
-                            <label style="font-weight: 600; font-size: 14px; margin-bottom: 8px; display: block;">Thời gian tưới</label>
-                            <div style="background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                                <div style="font-size: 11px; font-weight: 800; margin-bottom: 8px; color: #1e3a8a;">THỜI GIAN TƯỚI (PHÚT)</div>
-                                <div class="rd-inp-grp" style="display: flex; gap: 5px;">
-                                    <button class="rd-btn-sm" onclick="adjTimer(-1)" style="padding: 5px 10px; border: 1px solid #cbd5e1; background: white; border-radius: 4px; cursor: pointer; font-weight: bold;">-</button>
-                                    <input type="number" id="rd-inp-time" value="30" style="width: 60px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: bold;">
-                                    <button class="rd-btn-sm" onclick="adjTimer(1)" style="padding: 5px 10px; border: 1px solid #cbd5e1; background: white; border-radius: 4px; cursor: pointer; font-weight: bold;">+</button>
-                                    <button class="rd-btn-save" onclick="saveTimer()" style="margin-left: 10px; background: #3b82f6; color: white; border: none; padding: 5px 15px; border-radius: 4px; font-weight: 600; cursor: pointer;">LƯU</button>
+                <div class="iot-card" style="padding: 0; overflow: hidden;">
+                    <!-- TAB NAVIGATION -->
+                    <div class="ctrl-tabs" style="display: flex; background: #f1f5f9; border-bottom: 1px solid #e2e8f0;">
+                        <button class="ctrl-tab active" id="cTab-manual" onclick="switchCtrlTab('manual')" style="flex: 1; padding: 15px; border: none; background: white; font-weight: 700; color: #3b82f6; border-bottom: 3px solid #3b82f6; cursor: pointer; transition: 0.2s;">🔧 THỦ CÔNG</button>
+                        <button class="ctrl-tab" id="cTab-auto" onclick="switchCtrlTab('auto')" style="flex: 1; padding: 15px; border: none; background: transparent; font-weight: 600; color: #64748b; border-bottom: 3px solid transparent; cursor: pointer; transition: 0.2s;">🤖 TỰ ĐỘNG</button>
+                        <button class="ctrl-tab" id="cTab-timer" onclick="switchCtrlTab('timer')" style="flex: 1; padding: 15px; border: none; background: transparent; font-weight: 600; color: #64748b; border-bottom: 3px solid transparent; cursor: pointer; transition: 0.2s;">⏳ HẸN GIỜ</button>
+                    </div>
+
+                    <div style="padding: 20px;">
+                        
+                        <!-- =====================================
+                             TAB 1: THỦ CÔNG (TEST THIẾT BỊ)
+                             ===================================== -->
+                        <div id="ctrl-manual" class="ctrl-panel">
+                            <div class="smp-title">🔧 Bảng Điều Khiển Bằng Tay</div>
+                            <div class="smp-sub" style="margin-bottom: 20px;">Dùng để kiểm tra, xúc rửa hoặc mồi nước riêng lẻ từng thiết bị. <b>Hệ thống sẽ không đếm thể tích.</b></div>
+                            <!-- BƠM VÀ VAN CHÍNH -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                                <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <strong style="color: #1e3a8a; display: block; margin-bottom: 5px;">🌊 BƠM NƯỚC</strong>
+                                        <span style="font-size: 13px; color: #64748b;">Đẩy nước ra hệ thống tưới</span>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="test-pump" onchange="testDevice('pump', this.checked)">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <strong style="color: #1e3a8a; display: block; margin-bottom: 5px;">🚰 VAN ĐIỆN CHÍNH</strong>
+                                        <span style="font-size: 13px; color: #64748b;">Đóng mở đường ống chính</span>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="test-main-valve" onchange="testDevice('main_valve', this.checked)">
+                                        <span class="toggle-slider"></span>
+                                    </label>
                                 </div>
                             </div>
+
+                            <!-- CÁC ĐỘNG CƠ BƯỚC HÚT PHÂN -->
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px;">
+                                <!-- ĐỘNG CƠ 1 -->
+                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px;">
+                                    <div style="margin-bottom: 15px;">
+                                        <strong class="n-val" style="font-size: 16px;">🌿 BỒN 1 (Động Cơ Bước)</strong>
+                                    </div>
+                                    <div style="font-size: 12px; color: #64748b; margin-bottom: 5px;">Kiểm tra quay Driver TB6600:</div>
+                                    <div style="display: flex; gap: 5px;">
+                                        <input type="number" id="test-steps-N" value="500" class="field" style="padding: 5px; height: 32px; font-size: 13px;" placeholder="Số bước">
+                                        <button class="btn btn-sm" onclick="testStepper('N')" style="height: 32px; padding: 0 10px;">Chạy</button>
+                                    </div>
+                                    <div style="margin-top: 10px; font-size: 13px;">
+                                        Lưu lượng qua nhánh: <strong id="test-flow-N">0.00</strong> L/ph
+                                    </div>
+                                </div>
+
+                                <!-- ĐỘNG CƠ 2 -->
+                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px;">
+                                    <div style="margin-bottom: 15px;">
+                                        <strong class="p-val" style="font-size: 16px;">🌾 BỒN 2 (Động Cơ Bước)</strong>
+                                    </div>
+                                    <div style="font-size: 12px; color: #64748b; margin-bottom: 5px;">Kiểm tra quay Driver TB6600:</div>
+                                    <div style="display: flex; gap: 5px;">
+                                        <input type="number" id="test-steps-P" value="500" class="field" style="padding: 5px; height: 32px; font-size: 13px;" placeholder="Số bước">
+                                        <button class="btn btn-sm" onclick="testStepper('P')" style="height: 32px; padding: 0 10px;">Chạy</button>
+                                    </div>
+                                    <div style="margin-top: 10px; font-size: 13px;">
+                                        Lưu lượng qua nhánh: <strong id="test-flow-P">0.00</strong> L/ph
+                                    </div>
+                                </div>
+
+                                <!-- ĐỘNG CƠ 3 -->
+                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px;">
+                                    <div style="margin-bottom: 15px;">
+                                        <strong class="k-val" style="font-size: 16px;">🍂 BỒN 3 (Động Cơ Bước)</strong>
+                                    </div>
+                                    <div style="font-size: 12px; color: #64748b; margin-bottom: 5px;">Kiểm tra quay Driver TB6600:</div>
+                                    <div style="display: flex; gap: 5px;">
+                                        <input type="number" id="test-steps-K" value="500" class="field" style="padding: 5px; height: 32px; font-size: 13px;" placeholder="Số bước">
+                                        <button class="btn btn-sm" onclick="testStepper('K')" style="height: 32px; padding: 0 10px;">Chạy</button>
+                                    </div>
+                                    <div style="margin-top: 10px; font-size: 13px;">
+                                        Lưu lượng qua nhánh: <strong id="test-flow-K">0.00</strong> L/ph
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button id="btnStopManual" class="btn btn-stop" onclick="stopMixing()" style="width: 100%;">
+                                <span>■</span> DỪNG TẤT CẢ
+                            </button>
                         </div>
-                    </div>
-                </div>
 
-                <div class="iot-card">
-                    <div class="iot-card-title">🧪 Chế Độ Pha Trộn</div>
-
-                    <!-- Simple Mode Toggle -->
+                        <!-- =====================================
+                             TAB 2: TỰ ĐỘNG (PHA TRỘN)
+                             ===================================== -->
+                        <div id="ctrl-auto" class="ctrl-panel hidden">
+                            <!-- Bắt đầu phần pha trộn cũ -->
+                            <!-- Simple Mode Toggle -->
                     <div class="simple-mode-bar">
                         <div>
                             <div class="sml-label">🟢 Chế độ đơn giản</div>
@@ -805,17 +873,101 @@
                         </div>
 
                         <!-- Action Buttons -->
-                        <div class="action-row" style="margin-top:24px">
-                            <button id="btnStart" class="btn btn-start" onclick="startMixing()">
+                        <div class="action-row" style="margin-top:24px; display: flex; gap: 10px;">
+                            <button id="btnStart" class="btn btn-start" onclick="startMixing()" style="flex: 2; height: 50px; font-size: 16px;">
                                 <span>▶</span> BẮT ĐẦU PHA TRỘN
                             </button>
-                            <button id="btnStop" class="btn btn-stop" onclick="stopMixing()" disabled>
+                            <button id="btnStop" class="btn btn-stop" onclick="stopMixing()" disabled style="flex: 1; height: 50px;">
                                 <span>■</span> DỪNG KHẨN CẤP
                             </button>
-                            <button id="btnHome" class="btn btn-home" onclick="sendHome()">
+                            <button id="btnHome" class="btn btn-home" onclick="sendHome()" style="flex: 1; height: 50px;">
                                 <span>⌂</span> VỀ GỐC
                             </button>
                         </div>
+                    </div> <!-- End advancedModePanel -->
+                </div> <!-- End ctrl-auto -->
+                <!-- Kết thúc phần pha trộn cũ -->
+                
+                        <!-- =====================================
+                             TAB 3: HẸN GIỜ (LẬP LỊCH)
+                             ===================================== -->
+                        <div id="ctrl-timer" class="ctrl-panel hidden">
+                            <div class="smp-title">⏳ Lịch Trình Hẹn Giờ Tưới</div>
+                            <div class="smp-sub" style="margin-bottom: 20px;">Lên lịch pha trộn và tưới hoàn toàn tự động.</div>
+
+                            <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 20px;">
+                                <!-- Cài đặt Thời gian tưới chung -->
+                                <div style="flex: 1; min-width: 250px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px;">
+                                    <label style="font-weight: 700; font-size: 14px; margin-bottom: 8px; display: block; color: #1e3a8a;">⏱ THỜI GIAN TƯỚI (PHÚT)</label>
+                                    <div class="smp-sub">Thời gian bơm chính đẩy nước ra vườn (bao gồm cả hút phân và rửa ống). Phải lớn hơn thời gian hút phân.</div>
+                                    <div class="rd-inp-grp" style="display: flex; gap: 5px; margin-top: 10px;">
+                                        <button class="rd-btn-sm" onclick="adjTimer(-1)" style="padding: 8px 12px; border: 1px solid #cbd5e1; background: white; border-radius: 4px; cursor: pointer; font-weight: bold;">-</button>
+                                        <input type="number" id="rd-inp-time" value="30" style="width: 80px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: bold; font-size: 16px;">
+                                        <button class="rd-btn-sm" onclick="adjTimer(1)" style="padding: 8px 12px; border: 1px solid #cbd5e1; background: white; border-radius: 4px; cursor: pointer; font-weight: bold;">+</button>
+                                        <button class="rd-btn-save" onclick="saveTimer()" style="margin-left: 10px; background: #3b82f6; color: white; border: none; padding: 8px 20px; border-radius: 4px; font-weight: 600; cursor: pointer;">LƯU T.GIAN</button>
+                                    </div>
+                                </div>
+
+                                <!-- Chọn loại Lịch -->
+                                <div style="flex: 1; min-width: 250px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px;">
+                                    <label style="font-weight: 700; font-size: 14px; margin-bottom: 12px; display: block; color: #1e3a8a;">📅 KIỂU LỊCH HẸN</label>
+                                    <div class="mode-tabs" style="margin-bottom: 15px; grid-template-columns: 1fr 1fr;">
+                                        <button class="mode-tab active" id="timerTab-one" onclick="switchTimerMode('one')">Tưới 1 lần</button>
+                                        <button class="mode-tab" id="timerTab-cyc" onclick="switchTimerMode('cyc')">Theo chu kì</button>
+                                    </div>
+                                    
+                                    <!-- One-time picker -->
+                                    <div id="timerMode-one">
+                                        <label style="font-size: 12px; color: #64748b; margin-bottom: 5px; display:block;">Chọn ngày giờ chạy:</label>
+                                        <input type="datetime-local" id="timer-datetime" class="field" style="width: 100%;">
+                                    </div>
+
+                                    <!-- Cyclic picker -->
+                                    <div id="timerMode-cyc" class="hidden">
+                                        <label style="font-size: 12px; color: #64748b; margin-bottom: 5px; display:block;">Giờ bắt đầu hàng ngày:</label>
+                                        <input type="time" id="timer-time" class="field" style="width: 100%; margin-bottom: 10px;">
+                                        
+                                        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                                            <div style="flex: 1;">
+                                                <label style="font-size: 12px; color: #64748b; margin-bottom: 5px; display:block;">Số lần tưới/ngày:</label>
+                                                <input type="number" id="timer-count" class="field" value="1" min="1" max="10" style="width: 100%; padding: 8px;">
+                                            </div>
+                                            <div style="flex: 1;">
+                                                <label style="font-size: 12px; color: #64748b; margin-bottom: 5px; display:block;">Cách nhau (Giờ):</label>
+                                                <input type="number" id="timer-interval" class="field" value="2" min="1" max="24" style="width: 100%; padding: 8px;">
+                                            </div>
+                                        </div>
+
+                                        <label style="font-size: 12px; color: #64748b; margin-bottom: 5px; display:block;">Lặp lại vào các ngày:</label>
+                                        <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+                                            <label class="day-chk"><input type="checkbox" value="1"> T2</label>
+                                            <label class="day-chk"><input type="checkbox" value="2"> T3</label>
+                                            <label class="day-chk"><input type="checkbox" value="3"> T4</label>
+                                            <label class="day-chk"><input type="checkbox" value="4"> T5</label>
+                                            <label class="day-chk"><input type="checkbox" value="5"> T6</label>
+                                            <label class="day-chk"><input type="checkbox" value="6"> T7</label>
+                                            <label class="day-chk"><input type="checkbox" value="0"> CN</label>
+                                        </div>
+                                        <style>
+                                            .day-chk { font-size: 12px; display: flex; align-items: center; gap: 3px; background: white; border: 1px solid #cbd5e1; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+                                            .day-chk input { cursor: pointer; }
+                                        </style>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Save Schedule Button -->
+                            <button class="btn btn-start" onclick="addSchedule()" style="width: 100%; margin-bottom: 20px;">
+                                <span>➕</span> THÊM LỊCH HẸN
+                            </button>
+
+                            <!-- Danh sách lịch hẹn -->
+                            <div class="iot-card-title">Danh sách Lịch đang chờ</div>
+                            <div id="scheduleList" style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+                                <div style="text-align: center; color: #94a3b8; padding: 20px; font-style: italic;">Chưa có lịch hẹn nào.</div>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             </div>
