@@ -5,7 +5,8 @@
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
-    "dev": "nodemon server/server.js"
+    "dev": "nodemon server/server.js",
+    "check-railway": "node server/check_railway.js"
   },
   "engines": {
     "node": ">=18.0.0"

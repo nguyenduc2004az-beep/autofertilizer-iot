@@ -129,6 +129,27 @@ async function initDB() {
             )
         `);
 
+        // Tự động kiểm tra và thêm cột nếu bảng đã tồn tại từ trước (bản cũ)
+        try {
+            const [columns] = await pool.query('SHOW COLUMNS FROM lich_hen');
+            const colNames = columns.map(c => c.Field.toLowerCase());
+            
+            if (!colNames.includes('n_ml')) {
+                await pool.query('ALTER TABLE lich_hen ADD COLUMN n_ml INT DEFAULT 0');
+                console.log('[DB] Đã bổ sung cột n_ml vào bảng lich_hen');
+            }
+            if (!colNames.includes('p_ml')) {
+                await pool.query('ALTER TABLE lich_hen ADD COLUMN p_ml INT DEFAULT 0');
+                console.log('[DB] Đã bổ sung cột p_ml vào bảng lich_hen');
+            }
+            if (!colNames.includes('k_ml')) {
+                await pool.query('ALTER TABLE lich_hen ADD COLUMN k_ml INT DEFAULT 0');
+                console.log('[DB] Đã bổ sung cột k_ml vào bảng lich_hen');
+            }
+        } catch (alterErr) {
+            console.error('[DB] Lỗi kiểm tra/bổ sung cột cho bảng lich_hen:', alterErr.message);
+        }
+
         // 6. Tự động đồng bộ dữ liệu mẫu và dữ liệu từ db.json vào MySQL
         const fs = require('fs');
         const dbJsonPath = path.join(__dirname, 'db.json');
@@ -836,18 +857,48 @@ io.on('connection', (socket) => {
 cron.schedule('* * * * *', async () => {
     if (!pool) return;
     try {
-        const now = new Date();
-        const currentDay = now.getDay(); // 0: CN, 1: T2...
-        const currentHour = now.getHours();
-        const currentMinute = now.getMinutes();
+        // Lấy thời gian hiện tại theo múi giờ Việt Nam (Asia/Ho_Chi_Minh) để tránh lệch múi giờ trên Railway (UTC)
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Asia/Ho_Chi_Minh',
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: 'numeric',
+            second: 'numeric',
+            hour12: false
+        });
+        
+        const parts = formatter.formatToParts(new Date());
+        const partValues = {};
+        for (const part of parts) {
+            partValues[part.type] = part.value;
+        }
+        
+        const vnYear = parseInt(partValues.year, 10);
+        const vnMonth = parseInt(partValues.month, 10) - 1; // 0-indexed
+        const vnDay = parseInt(partValues.day, 10);
+        const vnHour = parseInt(partValues.hour, 10);
+        const vnMinute = parseInt(partValues.minute, 10);
+        
+        const vnDate = new Date(vnYear, vnMonth, vnDay, vnHour, vnMinute, 0);
+        
+        const currentDay = vnDate.getDay(); // 0: CN, 1: T2...
+        const currentHour = vnHour;
+        const currentMinute = vnMinute;
 
         const [rows] = await pool.query("SELECT * FROM lich_hen WHERE trang_thai = 'active'");
+        
+        if (rows.length > 0) {
+            console.log(`[CRON] Đang quét ${rows.length} lịch hẹn hoạt động lúc ${String(vnHour).padStart(2, '0')}:${String(vnMinute).padStart(2, '0')} (Múi giờ Việt Nam, Thứ ${currentDay === 0 ? 'CN' : currentDay + 1})`);
+        }
+
         for (const s of rows) {
             let shouldRun = false;
             if (s.kieu_lich === 'one') {
                 if (s.thoi_gian_bat_dau) {
                     const dt = new Date(s.thoi_gian_bat_dau);
-                    if (dt.getFullYear() === now.getFullYear() && dt.getMonth() === now.getMonth() && dt.getDate() === now.getDate() && dt.getHours() === currentHour && dt.getMinutes() === currentMinute) {
+                    if (dt.getFullYear() === vnYear && dt.getMonth() === vnMonth && dt.getDate() === vnDay && dt.getHours() === currentHour && dt.getMinutes() === currentMinute) {
                         shouldRun = true;
                         await pool.query("DELETE FROM lich_hen WHERE ma_lich_hen = ?", [s.ma_lich_hen]);
                     }
