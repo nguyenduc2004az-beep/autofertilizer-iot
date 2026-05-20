@@ -129,18 +129,87 @@ async function initDB() {
             )
         `);
 
-        // 6. Thêm dữ liệu mẫu nếu bảng cong_thuc trống
-        const [rows] = await pool.query('SELECT COUNT(*) as count FROM cong_thuc');
-        if (rows[0].count === 0) {
-            const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-            await pool.query(`
-                INSERT INTO cong_thuc (ma_cong_thuc, ten_cong_thuc, the_tich_bon1_ml, the_tich_bon2_ml, the_tich_bon3_ml, mo_ta, ngay_tao)
-                VALUES 
-                ('1', 'Cân bằng B1-B2-B3', 2000, 2000, 2000, 'Công thức cân bằng', ?),
-                ('2', 'Bón gốc (Bồn 1 nhiều)', 3000, 1500, 1500, 'Tăng sinh trưởng', ?),
-                ('3', 'Ra hoa (Bồn 2-3 cao)', 1000, 2500, 2500, 'Kích thích ra hoa', ?)
-            `, [now, now, now]);
-            console.log('[DB] Đã tạo các công thức mẫu ban đầu.');
+        // 6. Tự động đồng bộ dữ liệu mẫu và dữ liệu từ db.json vào MySQL
+        const fs = require('fs');
+        const dbJsonPath = path.join(__dirname, 'db.json');
+        let localData = { recipes: [], sessions: [] };
+
+        if (fs.existsSync(dbJsonPath)) {
+            try {
+                localData = JSON.parse(fs.readFileSync(dbJsonPath, 'utf8'));
+                console.log(`[DB] Đã tìm thấy tệp db.json với ${localData.recipes?.length || 0} công thức và ${localData.sessions?.length || 0} phiên lịch sử.`);
+            } catch (err) {
+                console.error('[DB] Lỗi đọc tệp db.json:', err.message);
+            }
+        }
+
+        const toMysqlDatetime = (str) => {
+            try {
+                if (!str) return new Date().toISOString().slice(0, 19).replace('T', ' ');
+                const d = new Date(str);
+                if (isNaN(d.getTime())) return new Date().toISOString().slice(0, 19).replace('T', ' ');
+                return d.toISOString().slice(0, 19).replace('T', ' ');
+            } catch (e) {
+                return new Date().toISOString().slice(0, 19).replace('T', ' ');
+            }
+        };
+
+        // --- Đồng bộ công thức (recipes) ---
+        if (localData.recipes && localData.recipes.length > 0) {
+            for (const r of localData.recipes) {
+                try {
+                    const [existing] = await pool.query('SELECT ma_cong_thuc FROM cong_thuc WHERE ma_cong_thuc = ?', [r.id]);
+                    if (existing.length === 0) {
+                        const rCreated = toMysqlDatetime(r.created_at);
+                        await pool.query(`
+                            INSERT INTO cong_thuc (ma_cong_thuc, ten_cong_thuc, the_tich_bon1_ml, the_tich_bon2_ml, the_tich_bon3_ml, mo_ta, ngay_tao)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        `, [r.id, r.name, r.N_ml || 0, r.P_ml || 0, r.K_ml || 0, r.description || '', rCreated]);
+                        console.log(`[DB-SYNC] Đã đồng bộ công thức: "${r.name}"`);
+                    }
+                } catch (e) {
+                    console.error(`[DB-SYNC] Lỗi đồng bộ công thức ${r.name}:`, e.message);
+                }
+            }
+        } else {
+            // Fallback nếu không có db.json hoặc trống
+            const [rows] = await pool.query('SELECT COUNT(*) as count FROM cong_thuc');
+            if (rows[0].count === 0) {
+                const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+                await pool.query(`
+                    INSERT INTO cong_thuc (ma_cong_thuc, ten_cong_thuc, the_tich_bon1_ml, the_tich_bon2_ml, the_tich_bon3_ml, mo_ta, ngay_tao)
+                    VALUES 
+                    ('1', 'Cân bằng B1-B2-B3', 2000, 2000, 2000, 'Công thức cân bằng', ?),
+                    ('2', 'Bón gốc (Bồn 1 nhiều)', 3000, 1500, 1500, 'Tăng sinh trưởng', ?),
+                    ('3', 'Ra hoa (Bồn 2-3 cao)', 1000, 2500, 2500, 'Kích thích ra hoa', ?)
+                `, [now, now, now]);
+                console.log('[DB] Đã tạo các công thức mặc định ban đầu.');
+            }
+        }
+
+        // --- Đồng bộ lịch sử trộn (sessions) ---
+        if (localData.sessions && localData.sessions.length > 0) {
+            for (const s of localData.sessions) {
+                try {
+                    const [existing] = await pool.query('SELECT ma_lich_su FROM lich_su_tron WHERE ma_lich_su = ?', [s.id]);
+                    if (existing.length === 0) {
+                        const sTime = toMysqlDatetime(s.timestamp);
+                        await pool.query(`
+                            INSERT INTO lich_su_tron 
+                            (ma_lich_su, thoi_gian_tron, ten_cong_thuc_da_dung, che_do_tron, ti_le_bon1, ti_le_bon2, ti_le_bon3, thuc_te_bon1_ml, thuc_te_bon2_ml, thuc_te_bon3_ml, tong_the_tich_ml, thoi_gian_chay_s, trang_thai, wifi_rssi)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        `, [
+                            s.id, sTime, s.recipe_name || 'Không tên', s.mode || 'sequential',
+                            s.ratio_n || 0, s.ratio_p || 0, s.ratio_k || 0,
+                            s.N_ml || 0, s.P_ml || 0, s.K_ml || 0, s.total_ml || 0,
+                            s.duration_s || 0, s.status || 'completed', s.wifi_rssi || 0
+                        ]);
+                        console.log(`[DB-SYNC] Đã đồng bộ lịch sử: "${s.recipe_name}" (${sTime})`);
+                    }
+                } catch (e) {
+                    console.error(`[DB-SYNC] Lỗi đồng bộ lịch sử ${s.recipe_name}:`, e.message);
+                }
+            }
         }
 
         console.log('[DB] ✓ Đã kết nối MySQL và khởi tạo cấu trúc (Tiếng Việt).');
