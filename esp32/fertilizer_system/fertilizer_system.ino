@@ -359,17 +359,22 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         snapPulseN = snapPulseP = snapPulseK = 0;
 
         systemRunning = true;
-        runStartTime = millis();
         zeroFlowDuration = 0;
         systemError = "";
 
         // Bật Bơm và Van chính để nước chảy qua hệ thống phối trộn
         if (targetN > 0 || targetP > 0 || targetK > 0) {
-            digitalWrite(PUMP_PIN, HIGH);
+            Serial.println("[>] Đang kích hoạt mở Van chính (chờ 5 giây để van mở hoàn toàn)...");
             digitalWrite(VALVE_PIN, HIGH);
-            Serial.println("[>] Đã bật Bơm và Van chính cho chu trình tuần tự.");
-            delay(1000); // Đợi 1 giây cho dòng khởi động của Bơm/Van ổn định để tránh sụt áp động cơ bước
+            delay(5000); // Đợi 5 giây cho van điện từ mở hoàn toàn
+            
+            Serial.println("[>] Đang khởi động Bơm chính...");
+            digitalWrite(PUMP_PIN, HIGH);
+            delay(1000); // Đợi 1 giây cho dòng khởi động của Bơm ổn định để tránh sụt áp động cơ bước
         }
+
+        // Cập nhật runStartTime sau khi bơm đã thực sự hoạt động
+        runStartTime = millis();
 
         // Bắt đầu pha đầu tiên có target > 0
         if (targetN > 0) {
@@ -430,18 +435,22 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         simMode = true;
         systemRunning = true;
         currentPhase  = 100;  // 100 = chế độ đồng thời
-        lastControlTime = millis();
-        runStartTime = millis();
         zeroFlowDuration = 0;
         systemError = "";
         
         // Bật Bơm và Van chính để nước chảy qua hệ thống phối trộn đồng thời
         if (targetN > 0 || targetP > 0 || targetK > 0) {
-            digitalWrite(PUMP_PIN, HIGH);
+            Serial.println("[SIM] Đang kích hoạt mở Van chính (chờ 5 giây để van mở hoàn toàn)...");
             digitalWrite(VALVE_PIN, HIGH);
-            Serial.println("[SIM] Đã bật Bơm và Van chính cho chu trình đồng thời.");
+            delay(5000); // Đợi 5 giây cho van điện từ mở hoàn toàn
+            
+            Serial.println("[SIM] Đang khởi động Bơm chính...");
+            digitalWrite(PUMP_PIN, HIGH);
             delay(1000); // Đợi 1 giây cho dòng khởi động ổn định trước khi bắt đầu vòng điều khiển hồi tiếp
         }
+        
+        lastControlTime = millis();
+        runStartTime = millis();
         
         Serial.println("[SIM] Tất cả van đã mở - vòng điều khiển bắt đầu!");
     }
