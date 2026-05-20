@@ -584,36 +584,7 @@ void mqttReconnect() {
         digitalWrite(STATUS_LED, LOW);
     }
 }
-// TÍNH LƯU LƯỢNG (L/phút)
-void calculateFlowRates() {
-    unsigned long now = millis();
-    float dt_s = (now - lastFlowCalc) / 1000.0f;
-    if (dt_s < 0.01f) return;
-// Lấy snapshot xung, tắt interrupt tạm thời
-    noInterrupts();
-    uint32_t pN = pulseN;
-    uint32_t pP = pulseP;
-    uint32_t pK = pulseK;
-    uint32_t pMain = pulseMain;
-    interrupts();
 
-    uint32_t dN = pN - snapPulseN;
-    uint32_t dP = pP - snapPulseP;
-    uint32_t dK = pK - snapPulseK;
-    uint32_t dMain = pMain - snapPulseMain;
-
-    snapPulseN = pN;
-    snapPulseP = pP;
-    snapPulseK = pK;
-    snapPulseMain = pMain;
- // YF-S401: Q(L/min) = F(Hz) / 98  →  Q = (xung/dt_s) / 98
-    flowLpmN = (dN / dt_s) / 98.0f;
-    flowLpmP = (dP / dt_s) / 98.0f;
-    flowLpmK = (dK / dt_s) / 98.0f;
-    flowLpmMain = (dMain / dt_s) / 98.0f;
-
-    lastFlowCalc = now;
-}
 // XỬ LÝ LOGIC BƠM (gọi liên tục trong loop)
 void processDispensing() {
     if (!systemRunning) return;
