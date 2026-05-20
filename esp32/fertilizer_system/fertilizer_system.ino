@@ -303,6 +303,8 @@ void controlSimultaneous() {
         currentPhase  = 4;
         systemRunning = false;
         simMode       = false;
+        digitalWrite(PUMP_PIN, LOW);
+        digitalWrite(VALVE_PIN, LOW);
         Serial.println("[SIM✓✓] Hoàn thành toàn bộ - chế độ đồng thời!");
     }
 }
@@ -348,6 +350,13 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         snapPulseN = snapPulseP = snapPulseK = 0;
 
         systemRunning = true;
+
+        // Bật Bơm và Van chính để nước chảy qua hệ thống phối trộn
+        if (targetN > 0 || targetP > 0 || targetK > 0) {
+            digitalWrite(PUMP_PIN, HIGH);
+            digitalWrite(VALVE_PIN, HIGH);
+            Serial.println("[>] Đã bật Bơm và Van chính cho chu trình tuần tự.");
+        }
 
         // Bắt đầu pha đầu tiên có target > 0
         if (targetN > 0) {
@@ -409,6 +418,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         systemRunning = true;
         currentPhase  = 100;  // 100 = chế độ đồng thời
         lastControlTime = millis();
+        
+        // Bật Bơm và Van chính để nước chảy qua hệ thống phối trộn đồng thời
+        if (targetN > 0 || targetP > 0 || targetK > 0) {
+            digitalWrite(PUMP_PIN, HIGH);
+            digitalWrite(VALVE_PIN, HIGH);
+            Serial.println("[SIM] Đã bật Bơm và Van chính cho chu trình đồng thời.");
+        }
+        
         Serial.println("[SIM] Tất cả van đã mở - vòng điều khiển bắt đầu!");
     }
 
@@ -538,6 +555,8 @@ void processDispensing() {
                 } else {
                     currentPhase = 4;
                     systemRunning = false;
+                    digitalWrite(PUMP_PIN, LOW);
+                    digitalWrite(VALVE_PIN, LOW);
                     Serial.println("[✓✓] Hoàn thành toàn bộ quá trình pha trộn!");
                 }
             }
@@ -555,6 +574,8 @@ void processDispensing() {
                 } else {
                     currentPhase = 4;
                     systemRunning = false;
+                    digitalWrite(PUMP_PIN, LOW);
+                    digitalWrite(VALVE_PIN, LOW);
                     Serial.println("[✓✓] Hoàn thành toàn bộ quá trình pha trộn!");
                 }
             }
@@ -565,6 +586,8 @@ void processDispensing() {
                 closeValve(3);
                 currentPhase  = 4;
                 systemRunning = false;
+                digitalWrite(PUMP_PIN, LOW);
+                digitalWrite(VALVE_PIN, LOW);
                 Serial.printf("[✓] Pha K hoàn thành → đã bơm %.1f mL (mục tiêu: %.1f mL)\n",
                               volK, targetK);
                 Serial.println("[✓✓] Hoàn thành toàn bộ quá trình pha trộn!");
