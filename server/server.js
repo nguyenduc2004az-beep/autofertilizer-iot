@@ -116,7 +116,9 @@ async function initDB() {
                 ma_lich_hen VARCHAR(255) PRIMARY KEY,
                 mo_ta VARCHAR(255),
                 kieu_lich VARCHAR(50),
-                cong_thuc_id VARCHAR(255),
+                n_ml INT DEFAULT 0,
+                p_ml INT DEFAULT 0,
+                k_ml INT DEFAULT 0,
                 thoi_gian_bat_dau DATETIME NULL,
                 gio_bat_dau TIME NULL,
                 so_lan_ngay INT DEFAULT 1,
@@ -157,6 +159,60 @@ let deviceOnline       = false;
 let lastDeviceStatus   = null;
 let currentSession     = null;
 let deviceTimeoutTimer = null;
+let waterTimerTimeout  = null;
+
+// ================================================================
+// EDGE-AI CALIBRATION (Trí tuệ nhân tạo biên)
+// ================================================================
+let aiCalibration = {
+    N: 1.0,
+    P: 1.0,
+    K: 1.0,
+    last_updated: null,
+    history_samples: 0
+};
+
+async function updateCalibrationFactors() {
+    if (!pool) return;
+    try {
+        // Lấy 10 phiên hoàn thành gần nhất
+        const query = `
+            SELECT ti_le_bon1 as target_n, ti_le_bon2 as target_p, ti_le_bon3 as target_k, 
+                   thuc_te_bon1_ml as actual_n, thuc_te_bon2_ml as actual_p, thuc_te_bon3_ml as actual_k
+            FROM lich_su_tron 
+            WHERE trang_thai = 'completed' AND tong_the_tich_ml > 0
+            ORDER BY thoi_gian_tron DESC 
+            LIMIT 10
+        `;
+        const [rows] = await pool.query(query);
+        if (rows.length === 0) return;
+
+        let fn_sum = 0, cn = 0;
+        let fp_sum = 0, cp = 0;
+        let fk_sum = 0, ck = 0;
+
+        rows.forEach(r => {
+            // Chỉ tính nếu mục tiêu > 50ml để tránh nhiễu
+            if (r.target_n > 50 && r.actual_n > 0) { fn_sum += (r.target_n / r.actual_n); cn++; }
+            if (r.target_p > 50 && r.actual_p > 0) { fp_sum += (r.target_p / r.actual_p); cp++; }
+            if (r.target_k > 50 && r.actual_k > 0) { fk_sum += (r.target_k / r.actual_k); ck++; }
+        });
+
+        const clamp = (val) => Math.max(0.5, Math.min(2.0, val));
+
+        if (cn > 0) aiCalibration.N = clamp(fn_sum / cn);
+        if (cp > 0) aiCalibration.P = clamp(fp_sum / cp);
+        if (ck > 0) aiCalibration.K = clamp(fk_sum / ck);
+        
+        aiCalibration.history_samples = Math.max(cn, cp, ck);
+        aiCalibration.last_updated = new Date().toISOString();
+        
+        console.log(`[EDGE-AI] Đã cập nhật hệ số bù trừ dựa trên ${aiCalibration.history_samples} phiên: N=${aiCalibration.N.toFixed(3)}, P=${aiCalibration.P.toFixed(3)}, K=${aiCalibration.K.toFixed(3)}`);
+        io.emit('ai_calibration_updated', aiCalibration);
+    } catch (err) {
+        console.error('[EDGE-AI] Lỗi tính toán:', err.message);
+    }
+}
 
 // ================================================================
 // KHỞI TẠO EXPRESS + SOCKET.IO
@@ -230,9 +286,9 @@ mqttClient.on('message', async (topic, message) => {
             timestamp:   timestamp,
             recipe_name: sess.recipe_name,
             mode:        sess.mode || 'sequential',
-            ratio_n:     sess.ratio?.N || 0,
-            ratio_p:     sess.ratio?.P || 0,
-            ratio_k:     sess.ratio?.K || 0,
+            ratio_n:     sess.calc?.N?.target_ml || sess.N_ml || sess.ratio?.N || 0,
+            ratio_p:     sess.calc?.P?.target_ml || sess.P_ml || sess.ratio?.P || 0,
+            ratio_k:     sess.calc?.K?.target_ml || sess.K_ml || sess.ratio?.K || 0,
             N_ml:        Math.round(data.valves?.N?.volume_ml || 0),
             P_ml:        Math.round(data.valves?.P?.volume_ml || 0),
             K_ml:        Math.round(data.valves?.K?.volume_ml || 0),
@@ -265,6 +321,9 @@ mqttClient.on('message', async (topic, message) => {
         io.emit('session_completed', record);
         io.emit('history_updated');
         currentSession = null;
+        
+        // Cập nhật lại hệ số AI sau khi phiên kết thúc
+        setTimeout(updateCalibrationFactors, 1000);
     }
 });
 
@@ -319,9 +378,9 @@ app.post('/api/start', (req, res) => {
         mqttCmd = {
             cmd: 'start_sim',
             recipe: {
-                N: { target_ml: cN.target_ml, target_lpm: cN.target_lpm, init_open: toInitOpen(cN.target_lpm) },
-                P: { target_ml: cP.target_ml, target_lpm: cP.target_lpm, init_open: toInitOpen(cP.target_lpm) },
-                K: { target_ml: cK.target_ml, target_lpm: cK.target_lpm, init_open: toInitOpen(cK.target_lpm) }
+                N: { target_ml: Math.round(cN.target_ml * aiCalibration.N), target_lpm: cN.target_lpm, init_open: toInitOpen(cN.target_lpm) },
+                P: { target_ml: Math.round(cP.target_ml * aiCalibration.P), target_lpm: cP.target_lpm, init_open: toInitOpen(cP.target_lpm) },
+                K: { target_ml: Math.round(cK.target_ml * aiCalibration.K), target_lpm: cK.target_lpm, init_open: toInitOpen(cK.target_lpm) }
             }
         };
 
@@ -340,15 +399,75 @@ app.post('/api/start', (req, res) => {
         const pMl = parseFloat(body.P_ml) || 0;
         const kMl = parseFloat(body.K_ml) || 0;
 
-        if (nMl <= 0 && pMl <= 0 && kMl <= 0)
-            return res.status(400).json({ error: 'Cần nhập ít nhất 1 lượng phân > 0' });
+        if (nMl <= 0 && pMl <= 0 && kMl <= 0) {
+            if (body.recipe_name && body.recipe_name.startsWith('Chỉ tưới nước')) {
+                const duration_sec = (parseFloat(body.duration_min) || 1) * 60;
+                
+                sessionInfo = {
+                    recipe_name: body.recipe_name,
+                    mode: 'sequential',
+                    start_time: Date.now(),
+                    N_ml: 0, P_ml: 0, K_ml: 0,
+                    duration_sec
+                };
+
+                mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 1 }), { qos: 1 });
+                mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 1 }), { qos: 1 });
+
+                currentSession = sessionInfo;
+                console.log(`[START] ${sessionInfo.recipe_name} - Thời gian: ${duration_sec} giây`);
+                io.emit('session_started', sessionInfo);
+
+                if (waterTimerTimeout) {
+                    clearTimeout(waterTimerTimeout);
+                }
+
+                waterTimerTimeout = setTimeout(async () => {
+                    mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 0 }), { qos: 1 });
+                    mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 0 }), { qos: 1 });
+                    
+                    const record = {
+                        id: Date.now(),
+                        timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                        recipe_name: sessionInfo.recipe_name,
+                        mode: sessionInfo.mode,
+                        N_ml: 0, P_ml: 0, K_ml: 0, total_ml: 0,
+                        duration_s: duration_sec,
+                        status: 'completed',
+                        wifi_rssi: lastDeviceStatus?.wifi_rssi || 0
+                    };
+                    
+                    try {
+                        if (pool) {
+                            const query = `
+                                INSERT INTO lich_su_tron 
+                                (ma_lich_su, thoi_gian_tron, ten_cong_thuc_da_dung, che_do_tron, ti_le_bon1, ti_le_bon2, ti_le_bon3, thuc_te_bon1_ml, thuc_te_bon2_ml, thuc_te_bon3_ml, tong_the_tich_ml, thoi_gian_chay_s, trang_thai, wifi_rssi)
+                                VALUES (?, ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, ?, 'completed', ?)
+                            `;
+                            await pool.query(query, [record.id, record.timestamp, record.recipe_name, record.mode, record.duration_s, record.wifi_rssi]);
+                        }
+                    } catch (e) {
+                        console.error('[DB] Lỗi lưu session châm nước kết thúc:', e.message);
+                    }
+                    
+                    io.emit('session_completed', record);
+                    io.emit('history_updated');
+                    currentSession = null;
+                    waterTimerTimeout = null;
+                }, duration_sec * 1000);
+
+                return res.json({ success: true, session: sessionInfo, command: { cmd: 'manual_timer', duration_sec } });
+            } else {
+                return res.status(400).json({ error: 'Cần nhập ít nhất 1 lượng phân > 0' });
+            }
+        }
 
         mqttCmd = {
             cmd: 'start_seq',
             recipe: {
-                N: { target_ml: nMl, speed_percent: parseInt(body.N_speed) || 60 },
-                P: { target_ml: pMl, speed_percent: parseInt(body.P_speed) || 60 },
-                K: { target_ml: kMl, speed_percent: parseInt(body.K_speed) || 60 }
+                N: { target_ml: Math.round(nMl * aiCalibration.N), speed_percent: parseInt(body.N_speed) || 60 },
+                P: { target_ml: Math.round(pMl * aiCalibration.P), speed_percent: parseInt(body.P_speed) || 60 },
+                K: { target_ml: Math.round(kMl * aiCalibration.K), speed_percent: parseInt(body.K_speed) || 60 }
             }
         };
 
@@ -372,6 +491,13 @@ app.post('/api/start', (req, res) => {
 app.post('/api/stop', async (req, res) => {
     mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'stop' }), { qos: 1 }, async (err) => {
         if (err) return res.status(500).json({ error: err.message });
+
+        if (waterTimerTimeout) {
+            clearTimeout(waterTimerTimeout);
+            waterTimerTimeout = null;
+            mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 0 }), { qos: 1 });
+            mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 0 }), { qos: 1 });
+        }
 
         if (currentSession) {
             const sess = currentSession;
@@ -424,6 +550,10 @@ app.post('/api/stop', async (req, res) => {
 app.post('/api/home', (req, res) => {
     mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'home' }), { qos: 1 });
     res.json({ success: true });
+});
+
+app.get('/api/ai-calibration', (req, res) => {
+    res.json(aiCalibration);
 });
 
 app.post('/api/manual', (req, res) => {
@@ -557,11 +687,11 @@ app.post('/api/schedules', async (req, res) => {
         const data = req.body;
         const id = Date.now().toString();
         const query = `
-            INSERT INTO lich_hen (ma_lich_hen, mo_ta, kieu_lich, cong_thuc_id, thoi_gian_bat_dau, gio_bat_dau, so_lan_ngay, cach_nhau_gio, ngay_lap, thoi_gian_tuoi_phut, trang_thai)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+            INSERT INTO lich_hen (ma_lich_hen, mo_ta, kieu_lich, n_ml, p_ml, k_ml, thoi_gian_bat_dau, gio_bat_dau, so_lan_ngay, cach_nhau_gio, ngay_lap, thoi_gian_tuoi_phut, trang_thai)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
         `;
         const values = [
-            id, data.mo_ta, data.kieu_lich, data.cong_thuc_id,
+            id, data.mo_ta, data.kieu_lich, data.n_ml || 0, data.p_ml || 0, data.k_ml || 0,
             data.thoi_gian_bat_dau || null, data.gio_bat_dau || null,
             data.so_lan_ngay || 1, data.cach_nhau_gio || 2,
             data.ngay_lap || null, data.thoi_gian_tuoi_phut || 30
@@ -679,29 +809,23 @@ cron.schedule('* * * * *', async () => {
                 let mqttCmd = {};
                 let sessionInfo = {};
                 
-                if (s.cong_thuc_id && s.cong_thuc_id !== 'water_only') {
-                    const [recipes] = await pool.query("SELECT * FROM cong_thuc WHERE ma_cong_thuc = ?", [s.cong_thuc_id]);
-                    if (recipes.length > 0) {
-                        const r = recipes[0];
-                        mqttCmd = {
-                            cmd: 'start_seq',
-                            recipe: {
-                                N: { target_ml: r.the_tich_bon1_ml || 0, speed_percent: 60 },
-                                P: { target_ml: r.the_tich_bon2_ml || 0, speed_percent: 60 },
-                                K: { target_ml: r.the_tich_bon3_ml || 0, speed_percent: 60 }
-                            }
-                        };
-                        sessionInfo = {
-                            recipe_name: `${r.ten_cong_thuc} (Hẹn giờ)`,
-                            mode: 'sequential',
-                            start_time: Date.now(),
-                            N_ml: r.the_tich_bon1_ml || 0, P_ml: r.the_tich_bon2_ml || 0, K_ml: r.the_tich_bon3_ml || 0,
-                            duration_sec: s.thoi_gian_tuoi_phut * 60
-                        };
-                    }
-                }
-                
-                if (!sessionInfo.recipe_name) {
+                if ((s.n_ml > 0) || (s.p_ml > 0) || (s.k_ml > 0)) {
+                    mqttCmd = {
+                        cmd: 'start_seq',
+                        recipe: {
+                            N: { target_ml: s.n_ml || 0, speed_percent: 60 },
+                            P: { target_ml: s.p_ml || 0, speed_percent: 60 },
+                            K: { target_ml: s.k_ml || 0, speed_percent: 60 }
+                        }
+                    };
+                    sessionInfo = {
+                        recipe_name: `Hẹn giờ (${s.n_ml}-${s.p_ml}-${s.k_ml} mL)`,
+                        mode: 'sequential',
+                        start_time: Date.now(),
+                        N_ml: s.n_ml || 0, P_ml: s.p_ml || 0, K_ml: s.k_ml || 0,
+                        duration_sec: s.thoi_gian_tuoi_phut * 60
+                    };
+                } else {
                     mqttCmd = {
                         cmd: 'start_seq',
                         recipe: {
@@ -784,6 +908,9 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`║   MQTT Topics: ${TOPIC_PREFIX}/cmd, ${TOPIC_PREFIX}/status`.padEnd(59) + '║');
     console.log(`║   DB: MySQL (csdl_phoi_tron_phan)`.padEnd(59) + '║');
     console.log('╚══════════════════════════════════════════════════════════╝\n');
+    
+    // Khởi tạo AI Calibration khi server chạy
+    setTimeout(updateCalibrationFactors, 2000);
 });
 
 // Graceful shutdown

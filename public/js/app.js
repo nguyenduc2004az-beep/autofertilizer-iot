@@ -13,6 +13,8 @@ let sysThresholds = {
     timeout: 30
 };
 let alertLog = [];
+let chart;
+let chartTimeOrigin = Date.now();
 
 // ==========================================
 // 1. LOGIN & ROUTING SYSTEM (SPA)
@@ -29,8 +31,10 @@ function doLogin(e) {
         initChart();
         loadHistory();
         loadRecipes();
+        loadRecipes();
         initWatering();
-    loadSchedules();
+        loadSchedules();
+        fetchAiCalibration();
         showToast('Đăng nhập thành công!', 'success');
         updateClock();
         setInterval(updateClock, 1000);
@@ -57,6 +61,7 @@ if(sessionStorage.getItem('isLogged') === '1') {
     loadRecipes();
     initWatering();
     loadSchedules();
+    fetchAiCalibration();
     setInterval(updateClock, 1000);
 }
 
@@ -120,28 +125,40 @@ function showToast(msg, type='info') {
 // 2. SOCKET.IO & REAL-TIME LOGIC
 // ==========================================
 socket.on('connect', () => {
+    console.log('Connected to Server');
     isOnline = true;
-    const srvTxt = document.getElementById('ov-server-txt');
-    const srvDot = document.getElementById('ov-dot-server');
-    if(srvTxt) srvTxt.textContent = 'TRỰC TUYẾN';
-    if(srvDot) srvDot.className = 'ov-chip-dot green';
-
-    document.querySelectorAll('.conn-item')[0].classList.add('online');
+    document.getElementById('sysSocket').textContent = 'Đã kết nối';
+    document.getElementById('monServer').classList.add('online');
     document.getElementById('monMQTT').classList.add('online');
     document.getElementById('sysConnMQTT').textContent = 'Đã kết nối';
-    document.getElementById('sysSocket').textContent = 'ID: ' + socket.id;
+    
+    // Dashboard new elements
+    const mqttDash = document.getElementById('sysConnMQTT_dash');
+    const mqttDot = document.getElementById('mqtt-dot');
+    if(mqttDash) mqttDash.textContent = 'Đã kết nối Broker';
+    if(mqttDot) mqttDot.style.background = 'var(--success)';
+    
+    syncStatus();
 });
 
 socket.on('disconnect', () => {
+    console.log('Disconnected from Server');
     isOnline = false;
-    const srvTxt = document.getElementById('ov-server-txt');
-    const srvDot = document.getElementById('ov-dot-server');
-    if(srvTxt) srvTxt.textContent = 'NGOẠI TUYẾN';
-    if(srvDot) srvDot.className = 'ov-chip-dot';
-    
-    document.querySelectorAll('.conn-item')[0].classList.remove('online');
+    document.getElementById('sysSocket').textContent = 'Mất kết nối';
+    document.getElementById('monServer').classList.remove('online');
     document.getElementById('monMQTT').classList.remove('online');
     document.getElementById('sysConnMQTT').textContent = 'Mất kết nối';
+    
+    // Dashboard new elements
+    const mqttDash = document.getElementById('sysConnMQTT_dash');
+    const mqttDot = document.getElementById('mqtt-dot');
+    if(mqttDash) mqttDash.textContent = 'Mất kết nối Broker';
+    if(mqttDot) mqttDot.style.background = 'var(--danger)';
+    
+    const srvTxt = document.getElementById('ov-server-txt');
+    const srvDot = document.getElementById('ov-dot-server');
+    if(srvTxt) srvTxt.textContent = 'MẤT KẾT NỐI';
+    if(srvDot) srvDot.className = 'ov-chip-dot';
     setESPStatus(false);
 });
 
@@ -173,6 +190,25 @@ socket.on('device_status', (data) => {
     if (!espOnline) setESPStatus(true);
     updateUI(data);
 });
+
+socket.on('ai_calibration_updated', (data) => {
+    updateAiCalibrationUI(data);
+});
+
+function updateAiCalibrationUI(data) {
+    const aiN = document.getElementById('aiFactorN');
+    const aiP = document.getElementById('aiFactorP');
+    const aiK = document.getElementById('aiFactorK');
+    const aiSamples = document.getElementById('aiSamples');
+    if (aiN) aiN.textContent = data.N.toFixed(2);
+    if (aiP) aiP.textContent = data.P.toFixed(2);
+    if (aiK) aiK.textContent = data.K.toFixed(2);
+    if (aiSamples) aiSamples.textContent = data.history_samples;
+}
+
+function fetchAiCalibration() {
+    fetch('/api/ai-calibration').then(r => r.json()).then(updateAiCalibrationUI).catch(e => console.warn('AI fetch error:', e));
+}
 
 socket.on('session_started', (sess) => {
     showToast(`Bắt đầu trộn: ${sess.recipe_name}`, 'success');
@@ -207,8 +243,10 @@ function setESPStatus(status) {
     // Dashboard status update
     const espTxt = document.getElementById('ov-esp-txt');
     const espDot = document.getElementById('ov-dot-esp');
+    const espDashDot = document.getElementById('esp-dot');
     if(espTxt) espTxt.textContent = status ? 'TRỰC TUYẾN' : 'NGOẠI TUYẾN';
     if(espDot) espDot.className = 'ov-chip-dot ' + (status ? 'green' : '');
+    if(espDashDot) espDashDot.style.background = status ? 'var(--success)' : 'var(--danger)';
 
     const items = document.querySelectorAll('.conn-item');
     if(items[1]) {
@@ -336,7 +374,9 @@ function updateUI(data) {
 
     // System Info
     const sysRSSI = document.getElementById('sysRSSI');
+    const sysRSSIDash = document.getElementById('sysRSSI_dash');
     if(sysRSSI) sysRSSI.textContent = data.wifi_rssi ? data.wifi_rssi + ' DBM' : '--';
+    if(sysRSSIDash) sysRSSIDash.textContent = data.wifi_rssi ? data.wifi_rssi + ' dBm' : '--';
     
     if(data.wifi_rssi && data.wifi_rssi < sysThresholds.minRSSI) {
         addAlert(`Tín hiệu WiFi yếu: ${data.wifi_rssi}dBm`, 'warning');
@@ -344,6 +384,17 @@ function updateUI(data) {
 
     const V = data.valves;
     if(!V) return;
+
+    // Update Water Tank (Bồn 4) in sheet
+    const stWater = document.getElementById('stateWater');
+    if(stWater) {
+        stWater.innerHTML = `<span class="state-dot ${data.running?'open-dot':'closed-dot'}"></span> <span>${data.running?'Đang mở':'Đã đóng'}</span>`;
+    }
+    const flWater = document.getElementById('flowWater');
+    if(flWater) {
+        const waterFlowLpm = Math.max(0, mainFlowLpm - ((V.N.flow_lpm||0) + (V.P.flow_lpm||0) + (V.K.flow_lpm||0)));
+        flWater.textContent = waterFlowLpm.toFixed(2) + ' LÍT/PHÚT';
+    }
 
     // Dashboard Stats Update
     if(document.getElementById('dsh-volN')) {
@@ -463,13 +514,13 @@ function updateUI(data) {
 
 function updateValve(ch, d) {
     if(!d) return;
-    document.getElementById(`flow${ch}`).textContent = parseFloat(d.flow_lpm||0).toFixed(2) + ' LÍT/PHÚT';
-    document.getElementById(`vol${ch}`).textContent = Math.round(d.volume_ml||0) + ' MILILÍT';
-    document.getElementById(`tgt${ch}`).textContent = Math.round(d.target_ml||0) + ' MILILÍT';
-    document.getElementById(`steps${ch}`).textContent = d.steps + ' BƯỚC';
+    document.getElementById(`flow${ch}`).textContent = parseFloat(d.flow_lpm||0).toFixed(2);
+    document.getElementById(`vol${ch}`).textContent = Math.round(d.volume_ml||0);
+    document.getElementById(`tgt${ch}`).textContent = Math.round(d.target_ml||0);
+    document.getElementById(`steps${ch}`).textContent = d.steps;
 
     const p = d.target_ml > 0 ? Math.min(100, (d.volume_ml / d.target_ml) * 100) : 0;
-    document.getElementById(`pct${ch}`).textContent = Math.round(p) + '%';
+    document.getElementById(`pct${ch}`).textContent = Math.round(p);
 
     const ring = document.getElementById(`ring${ch}`);
     if(ring) {
@@ -503,8 +554,6 @@ function formatTime(s) {
 // ==========================================
 // 4. CHART.JS
 // ==========================================
-let chart;
-let chartTimeOrigin = Date.now();
 
 function initChart() {
     const ctx = document.getElementById('flowChart').getContext('2d');
@@ -513,20 +562,20 @@ function initChart() {
         data: {
             labels: [],
             datasets: [
-                { label: 'Đạm (L/ph)', borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.1)', data: [], tension: 0.4, fill: true },
-                { label: 'Lân (L/ph)', borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', data: [], tension: 0.4, fill: true },
-                { label: 'Kali (L/ph)', borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', data: [], tension: 0.4, fill: true },
-                { label: 'TỔNG (L/ph)', borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.1)', data: [], tension: 0.4, fill: false, borderDash: [5, 5] }
+                { label: 'Đạm (L/ph)', borderColor: '#28a745', backgroundColor: 'rgba(40,167,69,0.1)', data: [], tension: 0.4, fill: true },
+                { label: 'Lân (L/ph)', borderColor: '#007bff', backgroundColor: 'rgba(0,123,255,0.1)', data: [], tension: 0.4, fill: true },
+                { label: 'Kali (L/ph)', borderColor: '#fd7e14', backgroundColor: 'rgba(253,126,20,0.1)', data: [], tension: 0.4, fill: true },
+                { label: 'TỔNG (L/ph)', borderColor: '#17a2b8', backgroundColor: 'rgba(23,162,184,0.1)', data: [], tension: 0.4, fill: false, borderDash: [5, 5] }
             ]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             animation: false,
             scales: {
-                y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
-                x: { grid: { color: 'rgba(255,255,255,0.05)' } }
+                y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#64748b' } },
+                x: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#64748b' } }
             },
-            plugins: { legend: { labels: { color: '#94a3b8' } } }
+            plugins: { legend: { labels: { color: '#1e293b', font: { weight: 'bold' } } } }
         }
     });
 }
@@ -542,82 +591,255 @@ function clearChart() {
 // ==========================================
 // 5. SETTINGS FORM LOGIC
 // ==========================================
-function switchMode(m) {
-    if(m === 'seq') {
-        simMode = false;
-        document.getElementById('tabSeq').classList.add('active');
-        document.getElementById('tabSim').classList.remove('active');
-        document.getElementById('panelSeq').classList.remove('hidden');
-        document.getElementById('panelSim').classList.add('hidden');
-    } else {
-        simMode = true;
-        document.getElementById('tabSim').classList.add('active');
-        document.getElementById('tabSeq').classList.remove('active');
-        document.getElementById('panelSim').classList.remove('hidden');
-        document.getElementById('panelSeq').classList.add('hidden');
-        calcRatio();
-    }
-}
-
-function onInputChange() {
-    const n = parseFloat(document.getElementById('inputN').value) || 0;
-    const p = parseFloat(document.getElementById('inputP').value) || 0;
-    const k = parseFloat(document.getElementById('inputK').value) || 0;
-    document.getElementById('totalVol').textContent = Math.round(n+p+k) + ' mL';
-}
-
-function calcRatio() {
-    const tl = parseFloat(document.getElementById('simTotalVol').value)||0;
-    const tlpm = parseFloat(document.getElementById('simTotalLpm').value)||0;
-    const n = parseFloat(document.getElementById('ratioN').value)||0;
-    const p = parseFloat(document.getElementById('ratioP').value)||0;
-    const k = parseFloat(document.getElementById('ratioK').value)||0;
-
-    const tot = n + p + k;
-    if(tot === 0) return;
-
-    const setRatio = (ch, val) => {
-        const pct = (val/tot)*100;
-        document.getElementById(`simPct${ch}`).textContent = Math.round(pct) + '%';
-        document.getElementById(`simVol${ch}`).textContent = ((val/tot)*tl).toFixed(2) + ' L';
-        document.getElementById(`simLpm${ch}`).textContent = ((val/tot)*tlpm).toFixed(2);
-    };
-    setRatio('N', n); setRatio('P', p); setRatio('K', k);
+function toggleAutoMode(checked) {
+    simMode = checked; // checked == true means Đồng thời
+    document.getElementById('autoModeText').textContent = checked ? 'ĐỒNG THỜI' : 'TUẦN TỰ';
+    document.getElementById('modeDescText').textContent = checked ? 'Mở cùng lúc 3 van. Phù hợp lượng phân lớn.' : 'Bơm lần lượt từng bồn (Độ chính xác cao).';
 }
 
 function startMixing() {
-    let payload;
-    if(!simMode) {
-        payload = {
-            mode: 'seq',
-            recipe_name: document.getElementById('recipeName').value || 'Không tên',
-            N_ml: document.getElementById('inputN').value || 0,
-            P_ml: document.getElementById('inputP').value || 0,
-            K_ml: document.getElementById('inputK').value || 0,
-            N_speed: document.getElementById('speedN').value,
-            P_speed: document.getElementById('speedP').value,
-            K_speed: document.getElementById('speedK').value
-        };
-    } else {
-        payload = {
-            mode: 'sim',
-            recipe_name: document.getElementById('simRecipeName').value || 'Tỉ lệ ' + document.getElementById('ratioN').value + ':' + document.getElementById('ratioP').value + ':' + document.getElementById('ratioK').value,
-            ratio_N: document.getElementById('ratioN').value || 0,
-            ratio_P: document.getElementById('ratioP').value || 0,
-            ratio_K: document.getElementById('ratioK').value || 0,
-            total_vol_l: document.getElementById('simTotalVol').value || 0,
-            total_lpm: document.getElementById('simTotalLpm').value || 0
-        };
-    }
+    let payload = {
+        mode: simMode ? 'sim' : 'seq',
+        recipe_name: document.getElementById('recipeName').value || 'Không tên',
+        N_ml: document.getElementById('inputN').value || 0,
+        P_ml: document.getElementById('inputP').value || 0,
+        K_ml: document.getElementById('inputK').value || 0,
+        N_speed: 60,
+        P_speed: 60,
+        K_speed: 60,
+        ratio_N: document.getElementById('inputN').value || 0,
+        ratio_P: document.getElementById('inputP').value || 0,
+        ratio_K: document.getElementById('inputK').value || 0,
+        total_vol_l: ((parseFloat(document.getElementById('inputN').value||0) + parseFloat(document.getElementById('inputP').value||0) + parseFloat(document.getElementById('inputK').value||0)) / 1000).toFixed(2),
+        total_lpm: 3.0
+    };
 
     fetch('/api/start', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify(payload)
     }).then(res => res.json()).then(data => {
-        if(data.error) showToast(data.error, 'error');
-        else showPage('monitor');
+        if(data.error) {
+            showToast(data.error, 'error');
+        } else {
+            showToast('Hệ thống đang tính toán & áp dụng tỷ lệ bù trừ AI...', 'info');
+            showPage('monitor');
+        }
     }).catch(err => showToast('Lỗi gửi lệnh', 'error'));
+}
+
+// CẤU HÌNH CÂY TRỒNG VÀ PHỐI TRỘN DINH DƯỠNG ĐỘNG
+const DEFAULT_CROPS = {
+    'tomato': {
+        name: '🍅 Cà chua (Chuẩn)',
+        rates: {
+            'seedling':  { n: 200, p: 80, k: 80 },
+            'vegetative':{ n: 400, p: 150, k: 200 },
+            'flowering': { n: 250, p: 500, k: 250 },
+            'fruiting':  { n: 300, p: 200, k: 600 }
+        }
+    },
+    'melon': {
+        name: '🍈 Dưa lưới',
+        rates: {
+            'seedling':  { n: 180, p: 70, k: 90 },
+            'vegetative':{ n: 350, p: 120, k: 180 },
+            'flowering': { n: 220, p: 450, k: 280 },
+            'fruiting':  { n: 280, p: 180, k: 580 }
+        }
+    },
+    'strawberry': {
+        name: '🍓 Dâu tây',
+        rates: {
+            'seedling':  { n: 150, p: 60, k: 70 },
+            'vegetative':{ n: 300, p: 100, k: 150 },
+            'flowering': { n: 180, p: 350, k: 220 },
+            'fruiting':  { n: 220, p: 150, k: 450 }
+        }
+    }
+};
+
+function getCropsList() {
+    let list = {...DEFAULT_CROPS};
+    try {
+        const stored = localStorage.getItem('custom_crops');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            Object.assign(list, parsed);
+        }
+    } catch(e) {
+        console.error('Error loading custom crops:', e);
+    }
+    return list;
+}
+
+function loadCropsDropdown(selectedKey = null) {
+    const select = document.getElementById('calc-crop');
+    if (!select) return;
+    const crops = getCropsList();
+    select.innerHTML = Object.entries(crops).map(([key, crop]) => `
+        <option value="${key}">${crop.name}</option>
+    `).join('');
+    if (selectedKey && crops[selectedKey]) {
+        select.value = selectedKey;
+    } else {
+        select.value = 'tomato';
+    }
+    onCropOrStageChange();
+}
+
+function showAddCropModal() {
+    const modal = document.getElementById('addCropModal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function hideAddCropModal() {
+    const modal = document.getElementById('addCropModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function saveNewCrop() {
+    const nameInput = document.getElementById('new-crop-name');
+    const name = nameInput ? nameInput.value.trim() : '';
+    if (!name) {
+        showToast('Vui lòng nhập tên cây trồng!', 'error');
+        return;
+    }
+
+    // NPK rates for 4 stages
+    const seedling_n = parseInt(document.getElementById('nc-seedling-n').value) || 0;
+    const seedling_p = parseInt(document.getElementById('nc-seedling-p').value) || 0;
+    const seedling_k = parseInt(document.getElementById('nc-seedling-k').value) || 0;
+
+    const vegetative_n = parseInt(document.getElementById('nc-vegetative-n').value) || 0;
+    const vegetative_p = parseInt(document.getElementById('nc-vegetative-p').value) || 0;
+    const vegetative_k = parseInt(document.getElementById('nc-vegetative-k').value) || 0;
+
+    const flowering_n = parseInt(document.getElementById('nc-flowering-n').value) || 0;
+    const flowering_p = parseInt(document.getElementById('nc-flowering-p').value) || 0;
+    const flowering_k = parseInt(document.getElementById('nc-flowering-k').value) || 0;
+
+    const fruiting_n = parseInt(document.getElementById('nc-fruiting-n').value) || 0;
+    const fruiting_p = parseInt(document.getElementById('nc-fruiting-p').value) || 0;
+    const fruiting_k = parseInt(document.getElementById('nc-fruiting-k').value) || 0;
+
+    const key = 'custom_' + Date.now();
+    
+    let customCrops = {};
+    try {
+        const stored = localStorage.getItem('custom_crops');
+        if (stored) customCrops = JSON.parse(stored);
+    } catch(e) {}
+
+    customCrops[key] = {
+        name: '🌱 ' + name,
+        rates: {
+            'seedling':   { n: seedling_n, p: seedling_p, k: seedling_k },
+            'vegetative': { n: vegetative_n, p: vegetative_p, k: vegetative_k },
+            'flowering':  { n: flowering_n, p: flowering_p, k: flowering_k },
+            'fruiting':   { n: fruiting_n, p: fruiting_p, k: fruiting_k }
+        }
+    };
+
+    localStorage.setItem('custom_crops', JSON.stringify(customCrops));
+    showToast(`Đã thêm cây trồng: ${name}`, 'success');
+    
+    if (nameInput) nameInput.value = '';
+    
+    hideAddCropModal();
+    loadCropsDropdown(key);
+}
+
+function onCropOrStageChange() {
+    const selectCrop = document.getElementById('calc-crop');
+    if (!selectCrop) return;
+    const cropKey = selectCrop.value;
+    const stage  = document.getElementById('calc-stage').value;
+    const plants = parseInt(document.getElementById('calc-plants').value) || 100;
+    const durationMin = parseFloat(document.getElementById('calc-duration').value) || 1;
+
+    const crops = getCropsList();
+    const crop = crops[cropKey];
+    if (!crop) return;
+
+    const rates = crop.rates[stage] || { n: 0, p: 0, k: 0 };
+    const multiplier = plants / 100;
+
+    const volN = Math.round(rates.n * multiplier);
+    const volP = Math.round(rates.p * multiplier);
+    const volK = Math.round(rates.k * multiplier);
+
+    // Apply values automatically to the locked (readonly) inputs
+    const inpN = document.getElementById('inputN');
+    const inpP = document.getElementById('inputP');
+    const inpK = document.getElementById('inputK');
+    if (inpN) inpN.value = volN;
+    if (inpP) inpP.value = volP;
+    if (inpK) inpK.value = volK;
+
+    const stageNames = {
+        'seedling':  'Cây con',
+        'vegetative':'Sinh trưởng',
+        'flowering': 'Ra hoa',
+        'fruiting':  'Nuôi quả'
+    };
+    
+    const cropNameClean = crop.name.replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, '').trim();
+    const rName = document.getElementById('recipeName');
+    if (rName) rName.value = `${cropNameClean} - ${stageNames[stage] || stage} (${plants} gốc, ${durationMin} phút)`;
+
+    // Hydraulic calculations report
+    const Q_MAIN_LPM   = 120;   // L/min main pipe flow
+    const Q_PUMP_MLPM  = 4000;  // mL/min main dosing pumps flow (Venturi max rate)
+    const durationSec  = durationMin * 60;
+    const totalWaterL  = Q_MAIN_LPM * durationMin;
+    const waterPerPlant = totalWaterL / plants;
+
+    const Q_PUMP_MLPS = Q_PUMP_MLPM / 60;  // mL/second
+    const timeN = (volN / Q_PUMP_MLPS).toFixed(1);
+    const timeP = (volP / Q_PUMP_MLPS).toFixed(1);
+    const timeK = (volK / Q_PUMP_MLPS).toFixed(1);
+    const totalPumpSec = parseFloat(timeN) + parseFloat(timeP) + parseFloat(timeK);
+
+    const totalWaterML = totalWaterL * 1000;
+    const concN = ((volN / (totalWaterML + volN)) * 100).toFixed(2);
+    const concP = ((volP / (totalWaterML + volP)) * 100).toFixed(2);
+    const concK = ((volK / (totalWaterML + volK)) * 100).toFixed(2);
+
+    const summaryEl = document.getElementById('calc-summary');
+    if (summaryEl) {
+        summaryEl.innerHTML =
+            `<b>${plants} cây</b> × ${waterPerPlant.toFixed(2)} L/cây = <b>${totalWaterL.toFixed(0)} L nước</b> &nbsp;|&nbsp; ` +
+            `Giai đoạn: <b>${stageNames[stage] || stage}</b> &nbsp;|&nbsp; ` +
+            `Tổng t.gian hút: <b>${totalPumpSec.toFixed(1)}s</b> / ${durationSec}s tưới`;
+    }
+
+    const tableBodyEl = document.getElementById('calc-table-body');
+    if (tableBodyEl) {
+        const colors = { N: '#16a34a', P: '#2563eb', K: '#d97706' };
+        const labels = { N: '🌿 Bồn 1 (Đạm - N)', P: '🌾 Bồn 2 (Lân - P)', K: '🍂 Bồn 3 (Kali - K)' };
+        tableBodyEl.innerHTML = [
+            { ch: 'N', vol: volN, t: timeN, c: concN },
+            { ch: 'P', vol: volP, t: timeP, c: concP },
+            { ch: 'K', vol: volK, t: timeK, c: concK }
+        ].map(row => `
+            <tr>
+                <td style="padding:8px 10px; border:1px solid var(--border); font-weight:700; font-size:14px; color:${colors[row.ch]}">${labels[row.ch]}</td>
+                <td style="padding:8px 10px; border:1px solid var(--border); text-align:center; font-weight:900; font-size:17px; color:var(--txt-dark)">${row.vol}</td>
+                <td style="padding:8px 10px; border:1px solid var(--border); text-align:center; font-weight:800; font-size:14px; color:var(--txt-dark)">${row.t}s</td>
+                <td style="padding:8px 10px; border:1px solid var(--border); text-align:center; font-weight:800; font-size:14px; color:var(--txt-dark)">${row.c}%</td>
+            </tr>
+        `).join('');
+    }
+
+    const warn = document.getElementById('calc-warning');
+    const totalTimeTxt = document.getElementById('calc-total-pump-time');
+    if (totalTimeTxt) totalTimeTxt.textContent = totalPumpSec.toFixed(1);
+    if (warn) {
+        warn.style.display = totalPumpSec > durationSec ? 'block' : 'none';
+    }
+
+    updateDashboardSettingsDisplay();
 }
 
 function stopMixing() {
@@ -639,38 +861,41 @@ function loadRecipes() {
         const rc = document.getElementById('recipeCards');
         const rdd = document.getElementById('recipeListInline');
         if(!data.length) {
-            rc.innerHTML = '<div class="recipe-empty">Chưa có công thức nào.</div>';
-            rdd.innerHTML = '<p class="empty-hint">Trống</p>';
+            if(rc) rc.innerHTML = '<div class="recipe-empty">Chưa có công thức nào.</div>';
+            if(rdd) rdd.innerHTML = '<p class="empty-hint">Trống</p>';
             return;
         }
-        rc.innerHTML = data.map(r => `
-            <div class="rc-card">
-                <div class="rc-header">
-                    <div class="rc-title">${r.name}</div>
-                    <div class="rc-date">${new Date(r.created_at).toLocaleDateString()}</div>
+        if(rc) {
+            rc.innerHTML = data.map(r => `
+                <div class="rc-card">
+                    <div class="rc-header">
+                        <div class="rc-title">${r.name}</div>
+                        <div class="rc-date">${new Date(r.created_at).toLocaleDateString()}</div>
+                    </div>
+                    <div class="rc-desc">${r.description||'Không có mô tả'}</div>
+                    <div class="rc-stats">
+                        <span class="n-val">N: ${r.N_ml}</span>
+                        <span class="p-val">P: ${r.P_ml}</span>
+                        <span class="k-val">K: ${r.K_ml}</span>
+                    </div>
+                    <div class="rc-actions">
+                        <button class="btn-sm n-btn" onclick="applyRecipe(${r.N_ml},${r.P_ml},${r.K_ml},'${r.name}')">Dùng</button>
+                        <button class="btn-sm" onclick="delRecipe('${r.id}')">Xóa</button>
+                    </div>
                 </div>
-                <div class="rc-desc">${r.description||'Không có mô tả'}</div>
-                <div class="rc-stats">
-                    <span class="n-val">N: ${r.N_ml}</span>
-                    <span class="p-val">P: ${r.P_ml}</span>
-                    <span class="k-val">K: ${r.K_ml}</span>
+            `).join('');
+        }
+        if(rdd) {
+            rdd.innerHTML = data.map(r => `
+                <div class="recipe-item">
+                    <div onclick="applyRecipe(${r.N_ml},${r.P_ml},${r.K_ml},'${r.name}'); toggleRecipeList(true)" style="flex:1">
+                        <div class="recipe-item-name">${r.name}</div>
+                        <div class="recipe-item-desc">N:${r.N_ml} | P:${r.P_ml} | K:${r.K_ml}</div>
+                    </div>
+                    <div class="recipe-del-btn" onclick="event.stopPropagation(); delRecipe('${r.id}')">XÓA</div>
                 </div>
-                <div class="rc-actions">
-                    <button class="btn-sm n-btn" onclick="applyRecipe(${r.N_ml},${r.P_ml},${r.K_ml},'${r.name}')">Dùng</button>
-                    <button class="btn-sm" onclick="delRecipe('${r.id}')">Xóa</button>
-                </div>
-            </div>
-        `).join('');
-
-        rdd.innerHTML = data.map(r => `
-            <div class="recipe-item">
-                <div onclick="applyRecipe(${r.N_ml},${r.P_ml},${r.K_ml},'${r.name}'); toggleRecipeList(true)" style="flex:1">
-                    <div class="recipe-item-name">${r.name}</div>
-                    <div class="recipe-item-desc">N:${r.N_ml} | P:${r.P_ml} | K:${r.K_ml}</div>
-                </div>
-                <div class="recipe-del-btn" onclick="event.stopPropagation(); delRecipe('${r.id}')">XÓA</div>
-            </div>
-        `).join('');
+            `).join('');
+        }
     });
 }
 
@@ -800,45 +1025,49 @@ function loadHistory() {
         const tb = document.getElementById('historyBody');
         const rl = document.getElementById('recentList');
         if(!data.length) {
-            tb.innerHTML = '<tr><td colspan="9" class="empty-row">Chưa có lịch sử</td></tr>';
-            rl.innerHTML = '<div class="recent-empty">Chưa có dữ liệu</div>';
+            if(tb) tb.innerHTML = '<tr><td colspan="9" class="empty-row">Chưa có lịch sử</td></tr>';
+            if(rl) rl.innerHTML = '<div class="recent-empty">Chưa có dữ liệu</div>';
             return;
         }
 
         // Table
-        tb.innerHTML = data.map(h => {
-             const dt = new Date(h.timestamp);
-             const pt = (s) => (s==='completed'?'pill-completed':(s==='cancelled'?'pill-cancelled':'pill-running'));
-             return `
-             <tr>
-                 <td>${dt.toLocaleDateString()} ${dt.toLocaleTimeString()}</td>
-                 <td><strong>${h.recipe_name}</strong> <span style="font-size:10px;color:grey">(${h.mode==='sequential'?'SEQ':'SIM'})</span></td>
-                 <td class="n-col">${h.N_ml||0}</td>
-                 <td class="p-col">${h.P_ml||0}</td>
-                 <td class="k-col">${h.K_ml||0}</td>
-                 <td><strong>${h.total_ml||0}</strong></td>
-                 <td>${h.duration_s}s</td>
-                 <td>${h.wifi_rssi} dBm</td>
-                 <td><span class="status-pill ${pt(h.status)}">${h.status}</span></td>
-             </tr>
-             `;
-        }).join('');
+        if (tb) {
+            tb.innerHTML = data.map(h => {
+                 const dt = new Date(h.timestamp);
+                 const pt = (s) => (s==='completed'?'pill-completed':(s==='cancelled'?'pill-cancelled':'pill-running'));
+                 return `
+                 <tr>
+                     <td>${dt.toLocaleDateString()} ${dt.toLocaleTimeString()}</td>
+                     <td><strong>${h.recipe_name}</strong> <span style="font-size:10px;color:grey">(${h.mode==='sequential'?'SEQ':'SIM'})</span></td>
+                     <td class="n-col">${h.N_ml||0}</td>
+                     <td class="p-col">${h.P_ml||0}</td>
+                     <td class="k-col">${h.K_ml||0}</td>
+                     <td><strong>${h.total_ml||0}</strong></td>
+                     <td>${h.duration_s}s</td>
+                     <td>${h.wifi_rssi} dBm</td>
+                     <td><span class="status-pill ${pt(h.status)}">${h.status}</span></td>
+                 </tr>
+                 `;
+            }).join('');
+        }
 
         // Recent limit 5
-        rl.innerHTML = data.slice(0,5).map(h => {
-            const dt = new Date(h.timestamp);
-            return `
-            <div class="recent-item ${h.status==='completed'?'completed':'cancelled'}">
-                <div class="recent-item-header">
-                    <span class="recent-item-name">${h.recipe_name}</span>
-                    <span class="recent-item-time">${dt.toLocaleTimeString()}</span>
+        if (rl) {
+            rl.innerHTML = data.slice(0,5).map(h => {
+                const dt = new Date(h.timestamp);
+                return `
+                <div class="recent-item ${h.status==='completed'?'completed':'cancelled'}">
+                    <div class="recent-item-header">
+                        <span class="recent-item-name">${h.recipe_name}</span>
+                        <span class="recent-item-time">${dt.toLocaleTimeString()}</span>
+                    </div>
+                    <div class="recent-item-details">
+                        Tổng: ${h.total_ml} mL | Thời gian: ${h.duration_s}s
+                    </div>
                 </div>
-                <div class="recent-item-details">
-                    Tổng: ${h.total_ml} mL | Thời gian: ${h.duration_s}s
-                </div>
-            </div>
-            `;
-        }).join('');
+                `;
+            }).join('');
+        }
 
         window.cachedTotalMl = data.reduce((s,i) => s+(i.total_ml||0), 0);
         window.cachedTotalSess = data.length;
@@ -906,13 +1135,19 @@ function switchCtrlTab(tabId) {
 }
 
 function switchTimerMode(mode) {
-    document.getElementById('timerMode-one').classList.add('hidden');
-    document.getElementById('timerMode-cyc').classList.add('hidden');
-    document.getElementById('timerTab-one').classList.remove('active');
-    document.getElementById('timerTab-cyc').classList.remove('active');
-
-    document.getElementById('timerMode-' + mode).classList.remove('hidden');
-    document.getElementById('timerTab-' + mode).classList.add('active');
+    // Legacy timer mode UI elements - guarded for backward compat
+    const modeOne = document.getElementById('timerMode-one');
+    const modeCyc = document.getElementById('timerMode-cyc');
+    const tabOne  = document.getElementById('timerTab-one');
+    const tabCyc  = document.getElementById('timerTab-cyc');
+    if (modeOne) modeOne.classList.add('hidden');
+    if (modeCyc) modeCyc.classList.add('hidden');
+    if (tabOne)  tabOne.classList.remove('active');
+    if (tabCyc)  tabCyc.classList.remove('active');
+    const modeEl = document.getElementById('timerMode-' + mode);
+    const tabEl  = document.getElementById('timerTab-' + mode);
+    if (modeEl) modeEl.classList.remove('hidden');
+    if (tabEl)  tabEl.classList.add('active');
 }
 
 // Gửi lệnh điều khiển thủ công (Manual)
@@ -931,7 +1166,7 @@ function testDevice(device, state) {
 }
 
 function testStepper(type) {
-    const steps = parseInt(document.getElementById('test-steps-' + type).value) || 0;
+    const steps = 500; // Hardcoded cho đơn giản
     fetch('/api/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -939,7 +1174,7 @@ function testStepper(type) {
     })
     .then(r => r.json())
     .then(data => {
-        if(data.success) showToast(`Test Stepper ${type}: ${steps} bước`, 'info');
+        if(data.success) showToast(`Đang chạy xúc rửa Bồn ${type} (500 bước)`, 'info');
         else showToast('Lỗi gửi lệnh', 'error');
     })
     .catch(e => showToast('Chưa kết nối Server', 'error'));
@@ -947,7 +1182,7 @@ function testStepper(type) {
 
 function adjTimer(delta) {
     const el = document.getElementById('rd-inp-time');
-    if(!el) return;
+    if (!el) return; // Legacy element - no longer in DOM
     let val = parseInt(el.value) || 0;
     val = Math.max(1, val + delta);
     el.value = val;
@@ -955,15 +1190,15 @@ function adjTimer(delta) {
 
 function saveTimer() {
     const el = document.getElementById('rd-inp-time');
-    if(!el) return;
-    const val = parseInt(el.value) || 30;
+    const val = el ? (parseInt(el.value) || 30) : 30;
     localStorage.setItem('wateringTime', val);
     
-    // Update display in Overview
+    // Update display in Overview (legacy element - guarded)
     const txt = document.getElementById('ov-timer-val');
-    if(txt) txt.textContent = val + ':00';
+    if (txt) txt.textContent = val + ':00';
     
     showToast(`Đã lưu thời gian tưới: ${val} phút`, 'success');
+    updateDashboardSettingsDisplay();
 }
 
 // Logic lập lịch hẹn (Giao diện tạm)
@@ -973,6 +1208,7 @@ function loadSchedules() {
         const list = document.getElementById('scheduleList');
         if(data.length === 0) {
             list.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 20px; font-style: italic;">Chưa có lịch hẹn nào.</div>';
+            updateDashboardSettingsDisplay();
             return;
         }
         
@@ -985,17 +1221,10 @@ function loadSchedules() {
                 <button onclick="delSchedule('${s.ma_lich_hen}')" style="background: #ef4444; color: white; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer;">Xóa</button>
             </div>
         `).join('');
+        updateDashboardSettingsDisplay();
     });
     
-    // Also load recipes into timer dropdown
-    fetch('/api/recipes').then(r=>r.json()).then(recipes => {
-        const sel = document.getElementById('timer-recipe');
-        if(!sel) return;
-        const oldVal = sel.value;
-        sel.innerHTML = '<option value="water_only">💧 Chỉ tưới nước (Không pha phân)</option>' + 
-            recipes.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
-        if(recipes.some(r=>r.id===oldVal)) sel.value = oldVal;
-    });
+    // We no longer load recipes into timer dropdown since we use direct NPK inputs
 }
 
 function delSchedule(id) {
@@ -1005,51 +1234,54 @@ function delSchedule(id) {
 }
 
 function addSchedule() {
-    const isOne = document.getElementById('timerTab-one').classList.contains('active');
-    const duration = document.getElementById('rd-inp-time').value;
-    const recipeId = document.getElementById('timer-recipe') ? document.getElementById('timer-recipe').value : 'water_only';
+    const time = document.getElementById('timer-time').value;
+    if(!time) { showToast('Vui lòng chọn giờ bắt đầu', 'warning'); return; }
     
-    let schedStr = '';
-    let payload = {
-        kieu_lich: isOne ? 'one' : 'cyc',
-        cong_thuc_id: recipeId,
-        thoi_gian_tuoi_phut: parseInt(duration) || 30
+    const duration = parseFloat(document.getElementById('calc-duration').value) || 1;
+    const n_ml = parseFloat(document.getElementById('inputN').value) || 0;
+    const p_ml = parseFloat(document.getElementById('inputP').value) || 0;
+    const k_ml = parseFloat(document.getElementById('inputK').value) || 0;
+    
+    const checks = document.querySelectorAll('.day-chk input:checked');
+    if(checks.length === 0) { showToast('Vui lòng chọn ít nhất một ngày tưới!', 'warning'); return; }
+    let daysText = Array.from(checks).map(c => c.parentElement.textContent.trim()).join(', ');
+    let daysVal = Array.from(checks).map(c => c.value).join(',');
+    
+    const selectCrop = document.getElementById('calc-crop');
+    const cropKey = selectCrop ? selectCrop.value : 'tomato';
+    const stage = document.getElementById('calc-stage').value;
+    const crops = getCropsList();
+    const cropName = crops[cropKey] ? crops[cropKey].name : 'Cây trồng';
+    const cropNameClean = cropName.replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, '').trim();
+
+    const stageNames = {
+        'seedling':  'Cây con',
+        'vegetative':'Sinh trưởng',
+        'flowering': 'Ra hoa',
+        'fruiting':  'Nuôi quả'
     };
 
-    if (isOne) {
-        const dt = document.getElementById('timer-datetime').value;
-        if(!dt) { showToast('Vui lòng chọn ngày giờ', 'warning'); return; }
-        schedStr = `Tưới 1 lần lúc: ${dt.replace('T', ' ')}`;
-        payload.thoi_gian_bat_dau = dt;
-    } else {
-        const time = document.getElementById('timer-time').value;
-        if(!time) { showToast('Vui lòng chọn giờ bắt đầu', 'warning'); return; }
-        
-        const count = parseInt(document.getElementById('timer-count').value) || 1;
-        const interval = parseInt(document.getElementById('timer-interval').value) || 2;
-        
-        const checks = document.querySelectorAll('.day-chk input:checked');
-        if(checks.length === 0) { showToast('Vui lòng chọn ngày lặp lại', 'warning'); return; }
-        let daysText = Array.from(checks).map(c => c.parentElement.textContent.trim()).join(', ');
-        let daysVal = Array.from(checks).map(c => c.value).join(',');
-        
-        let freqStr = count > 1 ? ` (${count} lần/ngày, cách nhau ${interval}h)` : ` (1 lần/ngày)`;
-        schedStr = `Lặp lại từ ${time} vào (${daysText})${freqStr}`;
-        
-        payload.gio_bat_dau = time;
-        payload.so_lan_ngay = count;
-        payload.cach_nhau_gio = interval;
-        payload.ngay_lap = daysVal;
-    }
+    let schedStr = `Tưới ${cropNameClean} (${stageNames[stage] || stage}) lúc ${time} vào (${daysText})`;
     
-    payload.mo_ta = schedStr;
+    let payload = {
+        kieu_lich: 'cyc',
+        n_ml: n_ml,
+        p_ml: p_ml,
+        k_ml: k_ml,
+        thoi_gian_tuoi_phut: duration,
+        gio_bat_dau: time,
+        so_lan_ngay: 1, // locked to 1
+        cach_nhau_gio: 24,
+        ngay_lap: daysVal,
+        mo_ta: schedStr
+    };
     
     fetch('/api/schedules', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(payload)
     }).then(r=>r.json()).then(data=>{
         if(data.success) {
-            showToast('Đã thêm lịch hẹn', 'success');
+            showToast('Đã thêm lịch hẹn tưới tự động', 'success');
             loadSchedules();
         } else {
             showToast('Lỗi lưu lịch hẹn', 'error');
@@ -1061,14 +1293,96 @@ function addSchedule() {
 function initWatering() {
     const saved = localStorage.getItem('wateringTime');
     const val = saved ? parseInt(saved) : 30;
-    const el = document.getElementById('rd-inp-time');
-    if(el) el.value = val;
-    
+    // Legacy elements (rd-inp-time, ov-timer-txt) no longer in DOM - guarded
+    const el  = document.getElementById('rd-inp-time');
     const txt = document.getElementById('ov-timer-txt');
-    if(txt) txt.textContent = val + ':00';
+    if (el)  el.value = val;
+    if (txt) txt.textContent = val + ':00';
+
+    // Update settings display initially
+    setTimeout(updateDashboardSettingsDisplay, 500);
+}
+
+// ==========================================
+// 10. QUICK ACTION & SETTINGS DISPLAY
+// ==========================================
+function updateDashboardSettingsDisplay() {
+    // 1. Auto mode settings
+    const recName = document.getElementById('recipeName') ? document.getElementById('recipeName').value : '';
+    const activeRec = document.getElementById('dsh-active-recipe');
+    if (activeRec) activeRec.textContent = recName || 'Chưa chọn';
+
+    const setN = document.getElementById('dsh-set-N');
+    const setP = document.getElementById('dsh-set-P');
+    const setK = document.getElementById('dsh-set-K');
+    if (setN) setN.textContent = document.getElementById('inputN') ? (document.getElementById('inputN').value || '0') : '0';
+    if (setP) setP.textContent = document.getElementById('inputP') ? (document.getElementById('inputP').value || '0') : '0';
+    if (setK) setK.textContent = document.getElementById('inputK') ? (document.getElementById('inputK').value || '0') : '0';
+
+    const activeMode = document.getElementById('dsh-active-mode');
+    if (activeMode) {
+        activeMode.textContent = simMode ? 'ĐỒNG THỜI' : 'TUẦN TỰ';
+        activeMode.style.backgroundColor = simMode ? '#0ea5e9' : '#22c55e';
+    }
+
+    // 2. Timer settings
+    const calcDurationEl = document.getElementById('calc-duration');
+    const durationMin = calcDurationEl ? parseFloat(calcDurationEl.value) : 1;
+    const setDuration = document.getElementById('dsh-set-duration');
+    if (setDuration) setDuration.textContent = durationMin + ' phút';
+
+    // 3. Schedule count
+    fetch('/api/schedules').then(r=>r.json()).then(data => {
+        const schedCount = document.getElementById('dsh-schedule-count');
+        if (schedCount) schedCount.textContent = data.length + ' lịch đang hoạt động';
+    }).catch(e => {});
+}
+
+function quickStartAuto() {
+    const n = parseInt(document.getElementById('inputN').value) || 0;
+    const p = parseInt(document.getElementById('inputP').value) || 0;
+    const k = parseInt(document.getElementById('inputK').value) || 0;
+    if (n === 0 && p === 0 && k === 0) {
+        showToast('Vui lòng cài đặt công thức trước ở mục Điều Khiển!', 'warning');
+        showPage('settings');
+        return;
+    }
+    startMixing();
+}
+
+function quickStartTimer() {
+    const calcDurationEl = document.getElementById('calc-duration');
+    const durationMin = calcDurationEl ? parseFloat(calcDurationEl.value) : 1;
+    
+    let payload = {
+        mode: 'seq',
+        recipe_name: 'Chỉ tưới nước (Hẹn giờ)',
+        N_ml: 0, P_ml: 0, K_ml: 0,
+        N_speed: 60, P_speed: 60, K_speed: 60,
+        duration_min: durationMin
+    };
+    
+    fetch('/api/start', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+    }).then(res => res.json()).then(data => {
+        if(data.error) showToast(data.error, 'error');
+        else {
+            showPage('monitor');
+            showToast(`Đã bắt đầu chu kì tưới hẹn giờ (${durationMin} phút)!`, 'success');
+        }
+    }).catch(err => showToast('Lỗi gửi lệnh', 'error'));
+}
+
+function quickStopAll() {
+    stopMixing();
 }
 
 // Khởi tạo khi tải trang
 initWatering();
+loadCropsDropdown();
 syncStatus();
 setInterval(syncStatus, 10000); // Đồng bộ lại mỗi 10 giây cho chắc chắn
+setInterval(updateDashboardSettingsDisplay, 5000); // Đồng bộ các thông số cài đặt lên Dashboard mỗi 5 giây
+
