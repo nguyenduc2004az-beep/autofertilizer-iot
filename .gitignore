@@ -2,6 +2,7 @@
 node_modules/
 npm-debug.log*
 yarn-error.log
+package-lock.json
 
 # Database (local only - Railway dung ephemeral storage)
 server/db.json
