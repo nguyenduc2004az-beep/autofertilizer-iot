@@ -49,7 +49,7 @@ const char* MQTT_PASS     = "";
 #define MAX_OPEN_STEPS  (STEPS_PER_REV * MICROSTEP / 4)   // = 400 bước = 90°
 
 // Độ trễ giữa các micro-bước (µs) - giảm để nhanh hơn, tăng để an toàn hơn
-#define STEP_DELAY_US   300   // 300us per micro-step edge (đã giảm từ 1000 để chạy nhanh và mượt hơn)
+#define STEP_DELAY_US   500   // 500us per micro-step edge (tăng từ 300 lên 500 để tăng lực kéo mô-men xoắn khi chịu tải)
 
 // YF-S401 Flow Sensor:
 //   Đặc tính: F(Hz) = 98 × Q(L/min)
@@ -123,6 +123,13 @@ int  currentPhase  = 0;
 unsigned long lastPublish    = 0;
 unsigned long lastFlowCalc   = 0;
 unsigned long lastReconnectTry = 0;
+
+// Biến bảo vệ chạy khô (Flow Timeout Protection)
+unsigned long runStartTime = 0;             // Thời điểm bắt đầu chạy chu trình (ms)
+unsigned long zeroFlowDuration = 0;         // Thời gian liên tục không có lưu lượng (ms)
+String systemError = "";                    // Mã lỗi hệ thống hiện tại
+#define FLOW_TIMEOUT_MS  30000              // 30 giây không có lưu lượng sẽ ngắt
+#define FLOW_GRACE_PERIOD_MS 10000          // 10 giây đầu cho phép lưu lượng = 0 để mồi nước/phân
 
 // MQTT Topics (Đã đổi để tránh bị trùng với người khác trên public broker)
 const char* TOPIC_CMD    = "autofert_khoaluan2026/cmd";
@@ -217,6 +224,8 @@ void emergencyStop() {
     closeValve(1);
     closeValve(2);
     closeValve(3);
+    digitalWrite(PUMP_PIN, LOW);
+    digitalWrite(VALVE_PIN, LOW);
 }
 // MQTT CALLBACK - Nhận lệnh từ server
 // ĐIỀU KHIỂN TỈ LỆ - CHẠY ĐỒNG THỜI (P-Controller)
@@ -350,12 +359,16 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         snapPulseN = snapPulseP = snapPulseK = 0;
 
         systemRunning = true;
+        runStartTime = millis();
+        zeroFlowDuration = 0;
+        systemError = "";
 
         // Bật Bơm và Van chính để nước chảy qua hệ thống phối trộn
         if (targetN > 0 || targetP > 0 || targetK > 0) {
             digitalWrite(PUMP_PIN, HIGH);
             digitalWrite(VALVE_PIN, HIGH);
             Serial.println("[>] Đã bật Bơm và Van chính cho chu trình tuần tự.");
+            delay(1000); // Đợi 1 giây cho dòng khởi động của Bơm/Van ổn định để tránh sụt áp động cơ bước
         }
 
         // Bắt đầu pha đầu tiên có target > 0
@@ -418,12 +431,16 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         systemRunning = true;
         currentPhase  = 100;  // 100 = chế độ đồng thời
         lastControlTime = millis();
+        runStartTime = millis();
+        zeroFlowDuration = 0;
+        systemError = "";
         
         // Bật Bơm và Van chính để nước chảy qua hệ thống phối trộn đồng thời
         if (targetN > 0 || targetP > 0 || targetK > 0) {
             digitalWrite(PUMP_PIN, HIGH);
             digitalWrite(VALVE_PIN, HIGH);
             Serial.println("[SIM] Đã bật Bơm và Van chính cho chu trình đồng thời.");
+            delay(1000); // Đợi 1 giây cho dòng khởi động ổn định trước khi bắt đầu vòng điều khiển hồi tiếp
         }
         
         Serial.println("[SIM] Tất cả van đã mở - vòng điều khiển bắt đầu!");
@@ -471,6 +488,76 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         }
     }
 }
+// KIỂM TRA XEM KÊNH ĐANG HOẠT ĐỘNG CÓ BỊ KHÔNG CÓ LƯU LƯỢNG (CHẠY KHÔ) KHÔNG
+bool isZeroFlowActive() {
+    if (!systemRunning) return false;
+    
+    if (simMode) {
+        // Trong chế độ đồng thời, kiểm tra xem các kênh chưa hoàn thành có bị tắc lưu lượng (lưu lượng < 0.02 LPM) không
+        bool anyActiveAndZero = false;
+        if (targetN > 0 && !doneN && flowLpmN < 0.02f) anyActiveAndZero = true;
+        if (targetP > 0 && !doneP && flowLpmP < 0.02f) anyActiveAndZero = true;
+        if (targetK > 0 && !doneK && flowLpmK < 0.02f) anyActiveAndZero = true;
+        return anyActiveAndZero;
+    } else {
+        // Trong chế độ tuần tự, kiểm tra kênh hiện tại đang chạy có bị tắc lưu lượng không
+        if (currentPhase == 1 && targetN > 0 && flowLpmN < 0.02f) return true;
+        if (currentPhase == 2 && targetP > 0 && flowLpmP < 0.02f) return true;
+        if (currentPhase == 3 && targetK > 0 && flowLpmK < 0.02f) return true;
+    }
+    return false;
+}
+
+// TÍNH LƯU LƯỢNG (L/phút)
+void calculateFlowRates() {
+    unsigned long now = millis();
+    float dt_s = (now - lastFlowCalc) / 1000.0f;
+    if (dt_s < 0.01f) return;
+// Lấy snapshot xung, tắt interrupt tạm thời
+    noInterrupts();
+    uint32_t pN = pulseN;
+    uint32_t pP = pulseP;
+    uint32_t pK = pulseK;
+    uint32_t pMain = pulseMain;
+    interrupts();
+
+    uint32_t dN = pN - snapPulseN;
+    uint32_t dP = pP - snapPulseP;
+    uint32_t dK = pK - snapPulseK;
+    uint32_t dMain = pMain - snapPulseMain;
+
+    snapPulseN = pN;
+    snapPulseP = pP;
+    snapPulseK = pK;
+    snapPulseMain = pMain;
+ // YF-S401: Q(L/min) = F(Hz) / 98  →  Q = (xung/dt_s) / 98
+    flowLpmN = (dN / dt_s) / 98.0f;
+    flowLpmP = (dP / dt_s) / 98.0f;
+    flowLpmK = (dK / dt_s) / 98.0f;
+    flowLpmMain = (dMain / dt_s) / 98.0f;
+
+    // Kiểm tra bảo vệ chống chạy khô (Flow Timeout)
+    if (systemRunning) {
+        if (now - runStartTime > FLOW_GRACE_PERIOD_MS) {
+            if (isZeroFlowActive()) {
+                zeroFlowDuration += (unsigned long)(dt_s * 1000.0f); // Cộng dồn thời gian thực tế trôi qua (ms)
+                if (zeroFlowDuration >= FLOW_TIMEOUT_MS) {
+                    Serial.printf("\n[CẢNH BÁO] !!! PHÁT HIỆN HỆ THỐNG CHẠY KHÔ (KHÔNG CÓ LƯU LƯỢNG PHÂN QUÁ %d GIÂY) !!!\n", FLOW_TIMEOUT_MS / 1000);
+                    systemError = "FLOW_TIMEOUT";
+                    emergencyStop();
+                    publishStatus(); // Publish cập nhật trạng thái lỗi ngay lập tức
+                }
+            } else {
+                zeroFlowDuration = 0; // Reset nếu có lưu lượng bình thường
+            }
+        }
+    } else {
+        zeroFlowDuration = 0;
+    }
+ 
+    lastFlowCalc = now;
+}
+
 // KẾT NỐI MQTT
 void mqttReconnect() {
     if (millis() - lastReconnectTry < 5000) return;
@@ -609,6 +696,7 @@ void publishStatus() {
     doc["running"]   = systemRunning;
     doc["phase"]     = currentPhase;
     doc["wifi_rssi"] = WiFi.RSSI();
+    doc["error"]     = systemError;
 
     auto mkValve = [&](const char* key, float vol, float target,
                        float flow, int32_t steps, bool isOpen) {

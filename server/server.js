@@ -366,15 +366,29 @@ mqttClient.on('message', async (topic, message) => {
 
     io.emit('device_status', { ...data, online: true });
 
-    // Kiểm tra nếu phiên vừa hoàn thành (phase=4, running=false)
-    if (currentSession && !data.running && data.phase === 4) {
+    // Kiểm tra nếu phiên dừng hoặc hoàn thành (running=false)
+    if (currentSession && !data.running) {
         const sess = currentSession;
         const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const isCompleted = (data.phase === 4);
+        const isFlowTimeout = (data.error === 'FLOW_TIMEOUT');
         
+        let status = 'completed';
+        let suffix = '';
+        if (!isCompleted) {
+            if (isFlowTimeout) {
+                status = 'failed';
+                suffix = ' [LỖI LƯU LƯỢNG]';
+            } else {
+                status = 'stopped';
+                suffix = ' [DỪNG]';
+            }
+        }
+
         const record = {
             id:          Date.now(),
             timestamp:   timestamp,
-            recipe_name: sess.recipe_name,
+            recipe_name: sess.recipe_name + suffix,
             mode:        sess.mode || 'sequential',
             ratio_n:     sess.calc?.N?.target_ml || sess.N_ml || sess.ratio?.N || 0,
             ratio_p:     sess.calc?.P?.target_ml || sess.P_ml || sess.ratio?.P || 0,
@@ -384,7 +398,7 @@ mqttClient.on('message', async (topic, message) => {
             K_ml:        Math.round(data.valves?.K?.volume_ml || 0),
             total_ml:    Math.round(data.total_volume_ml || 0),
             duration_s:  Math.round((Date.now() - sess.start_time) / 1000),
-            status:      'completed',
+            status:      status,
             wifi_rssi:   data.wifi_rssi || 0
         };
 
@@ -402,18 +416,24 @@ mqttClient.on('message', async (topic, message) => {
                     record.duration_s, record.status, record.wifi_rssi
                 ];
                 await pool.query(query, values);
-                console.log(`[DB] Đã lưu phiên: "${record.recipe_name}" | ${record.total_ml} mL | ${record.duration_s}s`);
+                console.log(`[DB] Đã lưu phiên (${status}): "${record.recipe_name}" | ${record.total_ml} mL | ${record.duration_s}s`);
             }
         } catch (err) {
             console.error('[DB] Lỗi lưu session:', err.message);
         }
 
-        io.emit('session_completed', record);
+        if (status === 'completed') {
+            io.emit('session_completed', record);
+        } else {
+            io.emit('session_stopped', record);
+        }
         io.emit('history_updated');
         currentSession = null;
         
-        // Cập nhật lại hệ số AI sau khi phiên kết thúc
-        setTimeout(updateCalibrationFactors, 1000);
+        // Cập nhật lại hệ số AI sau khi phiên kết thúc thành công
+        if (status === 'completed') {
+            setTimeout(updateCalibrationFactors, 1000);
+        }
     }
 });
 

@@ -457,11 +457,22 @@ function updateUI(data) {
     if(data.running) {
         ['N', 'P', 'K'].forEach(ch => {
             const v = V[ch];
-            if(v.target_ml > 0 && v.steps > 1000) {
+            if(v.target_ml > 0 && v.steps > 5) {
                 if(v.flow_lpm < sysThresholds.minFlow) addAlert(`LƯU LƯỢNG ${ch} RẤT THẤP: ${v.flow_lpm} LÍT/PHÚT`, 'error');
                 if(v.flow_lpm > sysThresholds.maxFlow) addAlert(`LƯU LƯỢNG ${ch} QUÁ CAO: ${v.flow_lpm} LÍT/PHÚT`, 'error');
             }
         });
+    }
+
+    // Check Flow Timeout System Error
+    if (data.error === "FLOW_TIMEOUT") {
+        if (!window.flowTimeoutAlertActive) {
+            window.flowTimeoutAlertActive = true;
+            addAlert("LỖI HỆ THỐNG: KHÔNG CÓ LƯU LƯỢNG PHÂN (CHẠY KHÔ!)", "error");
+            showToast("CẢNH BÁO: ĐÃ TỰ ĐỘNG NGẮT BƠM DO KHÔNG CÓ LƯU LƯỢNG!", "error");
+        }
+    } else {
+        window.flowTimeoutAlertActive = false;
     }
 
     const sysPhase = document.getElementById('sysPhase');
