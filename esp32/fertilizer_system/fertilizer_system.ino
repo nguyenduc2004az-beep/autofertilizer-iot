@@ -43,10 +43,10 @@ const char* MQTT_PASS     = "";
 // THÔNG SỐ PHẦN CỨNG
 // NEMA 17: 200 bước/vòng (1.8°/bước)
 // A4988: chế độ vi bước 1/8 → 1600 micro-bước/vòng
-// MAX_OPEN_STEPS: 1/4 vòng = mở hoàn toàn van kim
+// MAX_OPEN_STEPS: Đóng hoàn toàn đến mở hoàn toàn van kim = 8500 bước (~5.3 vòng)
 #define STEPS_PER_REV   200
 #define MICROSTEP       8
-#define MAX_OPEN_STEPS  (STEPS_PER_REV * MICROSTEP / 4)   // = 400 bước = 90°
+#define MAX_OPEN_STEPS  8500   // Khoảng 8500 bước vi bước 1/8 từ đóng hoàn toàn (min) đến mở hoàn toàn (max)
 
 // Độ trễ giữa các micro-bước (µs) - giảm để nhanh hơn, tăng để an toàn hơn
 #define STEP_DELAY_US   500   // 500us per micro-step edge (tăng từ 300 lên 500 để tăng lực kéo mô-men xoắn khi chịu tải)
@@ -567,6 +567,81 @@ void calculateFlowRates() {
     lastFlowCalc = now;
 }
 
+// ĐÓNG CHẶT VAN HỒI TIẾP (CLOSED-LOOP CLOSED VALVE FEEDBACK CORRECTION)
+// Di chuyển động cơ bước thêm cho đến khi cảm biến lưu lượng thực sự báo 0 L/phút
+void forceCloseValve(int valve) {
+    Serial.printf("[FORCE CLOSE] Bat dau dong chat van %d su dung phan hoi cam bien...\n", valve);
+    
+    // 1. Di chuyển về vị trí 0 (đóng theo ly thuyet so buoc tinh toan)
+    openValve(valve, 0); 
+    
+    // Giu driver ENABLE (LOW) de co mo-men xoan trong qua trinh siet chat van
+    uint8_t stepPin, dirPin, enPin;
+    float currentFlow = 0.0f;
+    
+    switch (valve) {
+        case 1: stepPin = STEP_N; dirPin = DIR_N; enPin = EN_N; break;
+        case 2: stepPin = STEP_P; dirPin = DIR_P; enPin = EN_P; break;
+        case 3: stepPin = STEP_K; dirPin = DIR_K; enPin = EN_K; break;
+        default: return;
+    }
+    
+    // Đảm bảo driver vẫn kích hoạt (ENABLE = LOW)
+    digitalWrite(enPin, LOW);
+    
+    // 2. Cho 800ms de dong chay on dinh va tinh luu luong ban dau sau khi dong ly thuyet
+    delay(800);
+    calculateFlowRates();
+    
+    switch (valve) {
+        case 1: currentFlow = flowLpmN; break;
+        case 2: currentFlow = flowLpmP; break;
+        case 3: currentFlow = flowLpmK; break;
+    }
+    
+    Serial.printf("[FORCE CLOSE] Luu luong ban dau sau khi dong ly thuyet: %.3f L/phut\n", currentFlow);
+    
+    int extraStepsApplied = 0;
+    const int MAX_EXTRA_STEPS = 500; // Gioi han an toan toi da 500 buoc siet co (tranh hong ren van)
+    const int STEP_INCREMENT = 50;  // Moi lan siet them 50 buoc de nhanh chong dat muc tieu 0 L/phut
+    const int CHECK_DELAY_MS = 600; // Thoi gian cho dong chay cap nhat sau moi lan siet
+    
+    // 3. Vong hoi tiep siet chat: Siet them tung chut mot neu van phat hien dong chay
+    while (currentFlow > 0.01f && extraStepsApplied < MAX_EXTRA_STEPS) {
+        Serial.printf("[FORCE CLOSE] Phat hien ro ri (%.3f L/m) -> Siet chat them %d buoc...\n", currentFlow, STEP_INCREMENT);
+        
+        // Di chuyen them theo huong dong (DIR = LOW, tuc la moveStepper truyen steps am)
+        moveStepper(stepPin, dirPin, enPin, -STEP_INCREMENT);
+        extraStepsApplied += STEP_INCREMENT;
+        
+        // Cap nhat lai vi tri luu tru thuc te trong ram (vi pos giam di khi siet them)
+        switch (valve) {
+            case 1: posN -= STEP_INCREMENT; break;
+            case 2: posP -= STEP_INCREMENT; break;
+            case 3: posK -= STEP_INCREMENT; break;
+        }
+        
+        // Cho va tinh lai luu luong
+        delay(CHECK_DELAY_MS);
+        calculateFlowRates();
+        
+        switch (valve) {
+            case 1: currentFlow = flowLpmN; break;
+            case 2: currentFlow = flowLpmP; break;
+            case 3: currentFlow = flowLpmK; break;
+        }
+    }
+    
+    if (currentFlow <= 0.01f) {
+        Serial.printf("[FORCE CLOSE] -> Da dung hoan toan dong chay bon %d! (Siet them: %d buoc)\n", valve, extraStepsApplied);
+    } else {
+        Serial.printf("[FORCE CLOSE] [!] Canh bao: Da dat gioi han siet toi da (%d buoc) nhung dong chay van con %.3f L/m!\n", MAX_EXTRA_STEPS, currentFlow);
+    }
+    
+    // 4. Hoan thanh: Tat driver (ENABLE = HIGH) de bao ve dong co, giam nhiet do
+    digitalWrite(enPin, HIGH);
+}
+
 // KẾT NỐI MQTT
 void mqttReconnect() {
     if (millis() - lastReconnectTry < 5000) return;
@@ -608,7 +683,7 @@ void processDispensing() {
     switch (currentPhase) {
         case 1:  // Đang bơm N
             if (volN >= targetN) {
-                closeValve(1);
+                forceCloseValve(1); // Thay thế closeValve(1) để siết chặt van dựa trên cảm biến phản hồi
                 Serial.printf("[✓] Pha N hoàn thành → đã bơm %.1f mL (mục tiêu: %.1f mL)\n",
                               volN, targetN);
                 if (targetP > 0) {
@@ -631,7 +706,7 @@ void processDispensing() {
 
         case 2:  // Đang bơm P
             if (volP >= targetP) {
-                closeValve(2);
+                forceCloseValve(2); // Thay thế closeValve(2) để siết chặt van dựa trên cảm biến phản hồi
                 Serial.printf("[✓] Pha P hoàn thành → đã bơm %.1f mL (mục tiêu: %.1f mL)\n",
                               volP, targetP);
                 if (targetK > 0) {
@@ -650,7 +725,7 @@ void processDispensing() {
 
         case 3:  // Đang bơm K
             if (volK >= targetK) {
-                closeValve(3);
+                forceCloseValve(3); // Thay thế closeValve(3) để siết chặt van dựa trên cảm biến phản hồi
                 currentPhase  = 4;
                 systemRunning = false;
                 digitalWrite(PUMP_PIN, LOW);

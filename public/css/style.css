@@ -531,12 +531,16 @@ input, textarea, .topbar-clock, .stat-card-val, .flow-number, .ring-pct, .stat-v
 
 .vc-stats { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; }
 .stat-item { text-align: center; }
-/* Force UPPERCASE for everything except inputs and data values */
-body, body *, button, input::placeholder, textarea::placeholder { 
-    text-transform: uppercase; 
+/* Force UPPERCASE only for headings/tiêu đề */
+h1, h2, h3, h4, h5, h6,
+.page-header h2, .ov-system-title h1, .login-brand h1, .iot-card-title, .quick-guide-title { 
+    text-transform: uppercase !important; 
+    font-weight: bold !important;
 }
-input, textarea, .topbar-clock, .stat-card-val, .flow-number, .ring-pct, .stat-val, .n-val, .p-val, .k-val, .stat-card-val-multi span { 
-    text-transform: none !important; 
+
+/* Ensure the rest is mixed case (chữ hoa thường) and not forced uppercase */
+body, button, input, textarea, select, span, p, div, td, th, strong, label, b, i, li, a {
+    text-transform: none; 
 }
 
 /* Icon control - allowing FontAwesome icons */
@@ -2203,64 +2207,111 @@ button, .btn, .topbar, .topbar-nav, .tn-item, .nav-btn, .status-chip, .valve-sta
     width: 100% !important;
 }
 
-/* Tăng kích thước chữ toàn cục và các thẻ văn bản */
+/* ================================================================
+   TYPOGRAPHY REQUIREMENTS FOR GRADUATION THESIS DEMO
+   - Font: Times New Roman
+   - Base Font Size: 13px
+   - Casing: Mixed case (chữ hoa thường) for standard text, 
+             uppercase and bold ONLY for headings
+   ================================================================ */
+* {
+    font-family: 'Times New Roman', Times, serif !important;
+}
+
+/* Restore font-family for FontAwesome icons to prevent them from being broken by * override */
+i, .fas, .far, .fab, .fa, [class^="fa-"], [class*=" fa-"] {
+    font-family: 'Font Awesome 6 Free', 'Font Awesome 6 Brands', 'Font Awesome 5 Free', 'Font Awesome 5 Brands', 'FontAwesome', sans-serif !important;
+}
+
 body {
-    font-size: 20px !important;
-}
-
-.page-header h2 {
-    font-size: 42px !important;
-}
-
-.page-header p {
-    font-size: 21px !important;
-}
-
-.iot-card-title {
-    font-size: 20px !important;
-}
-
-.field {
-    font-size: 16px !important;
-    height: 52px !important;
-}
-
-.btn {
-    font-size: 17px !important;
-    min-height: 52px !important;
-}
-
-.btn-sm {
-    font-size: 15px !important;
-    min-height: 44px !important;
-}
-
-.sys-lbl {
-    font-size: 18px !important;
-}
-
-.sys-val {
-    font-size: 18px !important;
-}
-
-.npk-label {
-    font-size: 16px !important;
-}
-
-.history-table th {
-    font-size: 15px !important;
-}
-
-.history-table td {
-    font-size: 16px !important;
-}
-
-.smp-title {
-    font-size: 16px !important;
-}
-
-.smp-sub {
     font-size: 13px !important;
+}
+
+/* Base style for regular elements to ensure they are 13px, non-bold (chữ thường), and mixed case */
+body, button, input, textarea, select, span, p, div, td, th, strong, label, b, i:not(.fa):not(.fas):not(.far):not(.fab), li, a {
+    font-size: 13px !important;
+    font-weight: normal !important;
+    text-transform: none !important;
+}
+
+/* Keep numerical data values bold and readable in Times New Roman */
+.stat-card-val { font-size: 28px !important; font-weight: bold !important; }
+.flow-number { font-size: 26px !important; font-weight: bold !important; }
+.ring-pct { font-size: 28px !important; font-weight: bold !important; }
+.topbar-clock { font-size: 14px !important; font-weight: bold !important; }
+.sys-val, .n-val, .p-val, .k-val, .stat-val, .rd-sensor-val { font-weight: bold !important; }
+
+/* Headings (Tiêu đề): Uppercase, Bold, Font Size 13px */
+h1, h2, h3, h4, h5, h6,
+.page-header h2, .ov-system-title h1, .login-brand h1, .iot-card-title, .quick-guide-title {
+    font-weight: bold !important;
+    text-transform: uppercase !important;
+    font-size: 13px !important;
+}
+
+/* ================================================================
+   RESTORE ORIGINAL SCHEMATIC DIAGRAM SIZES TO PREVENT OVERLAPPING
+   ================================================================ */
+.rd-diag, .rd-diag *, .rd-diagram-area, .rd-diagram-area * {
+    font-size: inherit !important;
+    font-weight: inherit !important;
+}
+
+.rd-sensor-box {
+    width: 75px !important;
+    height: 46px !important;
+}
+.rd-sensor-val {
+    font-size: 14px !important;
+    font-weight: 900 !important;
+}
+.rd-sensor-val small {
+    font-size: 8px !important;
+}
+.rd-sensor-lbl {
+    font-size: 8px !important;
+    font-weight: 800 !important;
+}
+.rd-big-tank-txt {
+    font-size: 13px !important;
+    font-weight: 800 !important;
+}
+.rd-barrel-txt {
+    font-size: 10px !important;
+    font-weight: 800 !important;
+}
+.rd-pump-stand::after {
+    font-size: 11px !important;
+    font-weight: 800 !important;
+}
+.rd-float-lbl {
+    font-size: 10px !important;
+    font-weight: 800 !important;
+}
+.flow-arr {
+    font-size: 12px !important;
+    font-weight: bold !important;
+}
+.fs-lbl {
+    font-size: 10px !important;
+    font-weight: 700 !important;
+}
+.v-lbl {
+    font-size: 10px !important;
+    font-weight: 700 !important;
+}
+.rd-legend {
+    font-size: 11px !important;
+}
+.rd-legend-title {
+    font-size: 10px !important;
+}
+
+/* ================================================================
+   TOOLBAR / NAVIGATION ICONS RESIZING
+   ================================================================ */
+.tn-item i, .topbar-nav i, .bn-item i, .bottom-nav i, .topbar-right i, .top-circle-btn i, .logout-btn i {
+    font-size: 18px !important;
 }
 
 
