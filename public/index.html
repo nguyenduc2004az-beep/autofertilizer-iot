@@ -1056,9 +1056,9 @@
 ════════════════════════════════════════ -->
 <div id="confirmOverlay" class="confirm-overlay hidden" onclick="closeConfirmOnBg(event)">
     <div class="confirm-box">
-        <div class="confirm-icon">🧪</div>
-        <div class="confirm-title">Xác nhận bắt đầu pha trộn?</div>
-        <div class="confirm-desc">Vui lòng kiểm tra lại thông số phân bón trước khi khởi động hệ thống.</div>
+        <div class="confirm-icon" id="confirmIcon">🧪</div>
+        <div class="confirm-title" id="confirmTitle">Xác nhận bắt đầu pha trộn?</div>
+        <div class="confirm-desc" id="confirmDesc">Vui lòng kiểm tra lại thông số phân bón trước khi khởi động hệ thống.</div>
         <div class="confirm-summary" id="confirmSummary">
             <!-- Được điền bằng JS -->
         </div>
@@ -1169,7 +1169,7 @@ window.toggleSimpleMode = function() {};
 window.startMixingSimple = function() {};
 
 /* --- Confirm Dialog --- */
-let _pendingStartFn = null;
+window._pendingStartFn = null;
 
 window.startMixing = function() {
     const n = parseFloat(document.getElementById('inputN').value) || 0;
@@ -1187,17 +1187,30 @@ window.startMixing = function() {
 };
 
 function showConfirmDialog(n, p, k, modeLabel) {
+    const iconEl = document.getElementById('confirmIcon');
+    const titleEl = document.getElementById('confirmTitle');
+    const descEl = document.getElementById('confirmDesc');
+    if (iconEl) iconEl.textContent = '🧪';
+    if (titleEl) titleEl.textContent = 'Xác nhận bắt đầu pha trộn?';
+    if (descEl) descEl.textContent = 'Vui lòng kiểm tra lại thông số phân bón trước khi khởi động hệ thống.';
+
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const currentTime = `${hh}:${mm}`;
+
     const summary = document.getElementById('confirmSummary');
     if(summary) {
         summary.innerHTML = `
             <div class="confirm-summary-row"><span class="cs-label">Chế độ</span><span class="cs-val">${modeLabel}</span></div>
+            <div class="confirm-summary-row"><span class="cs-label">🕒 Bắt đầu lúc</span><span class="cs-val"><input type="time" id="confirmStartTime" class="confirm-input-time" style="font-weight: 700; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 15px; outline: none; background: #fff;" value="${currentTime}"></span></div>
             <div class="confirm-summary-row"><span class="cs-label">🌿 Bồn 1</span><span class="cs-val n-val">${n.toFixed(0)} mL</span></div>
             <div class="confirm-summary-row"><span class="cs-label">🌾 Bồn 2</span><span class="cs-val p-val">${p.toFixed(0)} mL</span></div>
             <div class="confirm-summary-row"><span class="cs-label">🍂 Bồn 3</span><span class="cs-val k-val">${k.toFixed(0)} mL</span></div>
             <div class="confirm-summary-row"><span class="cs-label">📊 Tổng cộng</span><span class="cs-val">${(n+p+k).toFixed(0)} mL</span></div>
         `;
     }
-    _pendingStartFn = _doActualStart;
+    window._pendingStartFn = _doActualStart;
     const overlay = document.getElementById('confirmOverlay');
     if(overlay) overlay.classList.remove('hidden');
 }
@@ -1205,13 +1218,43 @@ function showConfirmDialog(n, p, k, modeLabel) {
 window.confirmStartMixing = function() {
     const overlay = document.getElementById('confirmOverlay');
     if(overlay) overlay.classList.add('hidden');
-    if (_pendingStartFn) { _pendingStartFn(); _pendingStartFn = null; }
+    
+    if (window._pendingStartFn) {
+        const startTimeVal = document.getElementById('confirmStartTime') ? document.getElementById('confirmStartTime').value : '';
+        if (startTimeVal) {
+            const parts = startTimeVal.split(':');
+            const targetH = parseInt(parts[0]);
+            const targetM = parseInt(parts[1]);
+            
+            const now = new Date();
+            const targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), targetH, targetM, 0);
+            let delayMs = targetDate.getTime() - now.getTime();
+            
+            // Nếu trễ hơn 5 giây, thực hiện hẹn giờ khởi động client-side
+            if (delayMs > 5000) {
+                if (delayMs > 24 * 60 * 60 * 1000) {
+                    delayMs = delayMs % (24 * 60 * 60 * 1000);
+                }
+                
+                if (typeof window.startDelayedExecution === 'function') {
+                    window.startDelayedExecution(delayMs, startTimeVal, window._pendingStartFn);
+                } else {
+                    showToast('Lỗi hẹn giờ thiết bị!', 'error');
+                }
+                window._pendingStartFn = null;
+                return;
+            }
+        }
+        
+        window._pendingStartFn();
+        window._pendingStartFn = null;
+    }
 };
 
 window.closeConfirm = function() {
     const overlay = document.getElementById('confirmOverlay');
     if(overlay) overlay.classList.add('hidden');
-    _pendingStartFn = null;
+    window._pendingStartFn = null;
 };
 
 window.closeConfirmOnBg = function(e) {

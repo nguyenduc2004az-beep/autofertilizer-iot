@@ -701,12 +701,12 @@ function loadCropsDropdown(selectedKey = null) {
 
 function showAddCropModal() {
     const modal = document.getElementById('addCropModal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) modal.classList.remove('hidden');
 }
 
 function hideAddCropModal() {
     const modal = document.getElementById('addCropModal');
-    if (modal) modal.style.display = 'none';
+    if (modal) modal.classList.add('hidden');
 }
 
 function saveNewCrop() {
@@ -1365,26 +1365,169 @@ function quickStartTimer() {
     const calcDurationEl = document.getElementById('calc-duration');
     const durationMin = calcDurationEl ? parseFloat(calcDurationEl.value) : 1;
     
-    let payload = {
-        mode: 'seq',
-        recipe_name: 'Chỉ tưới nước (Hẹn giờ)',
-        N_ml: 0, P_ml: 0, K_ml: 0,
-        N_speed: 60, P_speed: 60, K_speed: 60,
-        duration_min: durationMin
+    // Thay đổi tiêu đề, mô tả và nội dung của hộp thoại xác nhận (confirmOverlay)
+    const iconEl = document.getElementById('confirmIcon');
+    const titleEl = document.getElementById('confirmTitle');
+    const descEl = document.getElementById('confirmDesc');
+    
+    if (iconEl) iconEl.textContent = '⏱️';
+    if (titleEl) titleEl.textContent = 'Xác nhận bắt đầu hẹn giờ tưới?';
+    if (descEl) descEl.textContent = 'Hệ thống sẽ chạy ở chế độ chỉ tưới nước sạch (không châm phân) theo thời gian hẹn giờ.';
+    
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const currentTime = `${hh}:${mm}`;
+
+    const summary = document.getElementById('confirmSummary');
+    if (summary) {
+        summary.innerHTML = `
+            <div class="confirm-summary-row"><span class="cs-label">Chế độ</span><span class="cs-val" style="font-weight: 700; color: #3b82f6;">Chỉ tưới nước sạch (Hẹn giờ)</span></div>
+            <div class="confirm-summary-row"><span class="cs-label">🕒 Bắt đầu lúc</span><span class="cs-val"><input type="time" id="confirmStartTime" class="confirm-input-time" style="font-weight: 700; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 15px; outline: none; background: #fff;" value="${currentTime}"></span></div>
+            <div class="confirm-summary-row"><span class="cs-label">⏱️ Thời gian tưới</span><span class="cs-val text-primary" style="font-weight: 800; color: #2563eb;">${durationMin} phút</span></div>
+            <div class="confirm-summary-row"><span class="cs-label">🌿 Bồn N (Đạm)</span><span class="cs-val" style="color: #64748b; font-style: italic;">0 mL (Tắt)</span></div>
+            <div class="confirm-summary-row"><span class="cs-label">🌾 Bồn P (Lân)</span><span class="cs-val" style="color: #64748b; font-style: italic;">0 mL (Tắt)</span></div>
+            <div class="confirm-summary-row"><span class="cs-label">🍂 Bồn K (Kali)</span><span class="cs-val" style="color: #64748b; font-style: italic;">0 mL (Tắt)</span></div>
+        `;
+    }
+    
+    // Thiết lập hàm thực thi khi nhấn "Bắt đầu ngay" trong confirmOverlay
+    window._pendingStartFn = function() {
+        let payload = {
+            mode: 'seq',
+            recipe_name: 'Chỉ tưới nước (Hẹn giờ)',
+            N_ml: 0, P_ml: 0, K_ml: 0,
+            N_speed: 60, P_speed: 60, K_speed: 60,
+            duration_min: durationMin
+        };
+        
+        fetch('/api/start', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(payload)
+        }).then(res => res.json()).then(data => {
+            if(data.error) showToast(data.error, 'error');
+            else {
+                showPage('monitor');
+                showToast(`Đã bắt đầu chu kì tưới hẹn giờ (${durationMin} phút)!`, 'success');
+            }
+        }).catch(err => showToast('Lỗi gửi lệnh', 'error'));
     };
     
-    fetch('/api/start', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(payload)
-    }).then(res => res.json()).then(data => {
-        if(data.error) showToast(data.error, 'error');
-        else {
-            showPage('monitor');
-            showToast(`Đã bắt đầu chu kì tưới hẹn giờ (${durationMin} phút)!`, 'success');
-        }
-    }).catch(err => showToast('Lỗi gửi lệnh', 'error'));
+    const overlay = document.getElementById('confirmOverlay');
+    if (overlay) overlay.classList.remove('hidden');
 }
+
+// HÀM TOÀN CỤC ĐIỀU KHIỂN HẸN GIỜ TRỄ (CLIENT-SIDE DELAY START COUNTDOWN WIDGET)
+window.startDelayedExecution = function(delayMs, targetTimeStr, startFn) {
+    if (window.delayedStartTimer) clearTimeout(window.delayedStartTimer);
+    if (window.delayedStartInterval) clearInterval(window.delayedStartInterval);
+    
+    // Thêm các style keyframe cho animation động nếu chưa có
+    if (!document.getElementById('delayedStartStyles')) {
+        const style = document.createElement('style');
+        style.id = 'delayedStartStyles';
+        style.innerHTML = `
+            @keyframes slideInUp {
+                from { transform: translateY(100%) scale(0.9); opacity: 0; }
+                to { transform: translateY(0) scale(1); opacity: 1; }
+            }
+            @keyframes pulseScale {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.15); }
+                100% { transform: scale(1); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    let widget = document.getElementById('delayedStartWidget');
+    if (!widget) {
+        widget = document.createElement('div');
+        widget.id = 'delayedStartWidget';
+        widget.style.cssText = `
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            border: 1.5px solid #3b82f6;
+            box-shadow: 0 12px 28px -5px rgba(59, 130, 246, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+            padding: 16px 20px;
+            border-radius: 12px;
+            z-index: 9999;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            font-family: 'Inter', sans-serif;
+            width: 250px;
+            box-sizing: border-box;
+            animation: slideInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        `;
+        document.body.appendChild(widget);
+    }
+    
+    let remainingMs = delayMs;
+    
+    const updateWidget = () => {
+        const totalSec = Math.ceil(remainingMs / 1000);
+        const m = Math.floor(totalSec / 60);
+        const s = totalSec % 60;
+        
+        widget.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 22px; display: inline-block; animation: pulseScale 1.5s infinite;">⏱️</span>
+                <div>
+                    <div style="font-weight: 800; font-size: 13px; letter-spacing: 0.5px; color: #f8fafc; text-transform: uppercase;">Đã lên lịch tưới</div>
+                    <div style="font-size: 11px; color: #94a3b8; margin-top: 1px;">Sẽ chạy lúc: <strong style="color: #60a5fa; font-size: 12px;">${targetTimeStr}</strong></div>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; padding-top: 6px; border-top: 1px solid #334155;">
+                <div style="font-size: 24px; font-weight: 900; font-family: monospace; color: #3b82f6; letter-spacing: 1px;">
+                    ${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}
+                </div>
+                <button onclick="cancelDelayedStart()" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #ef4444; font-weight: 700; font-size: 11px; padding: 6px 12px; border-radius: 6px; cursor: pointer; transition: all 0.2s; outline: none;">
+                    ✕ HỦY LỊCH
+                </button>
+            </div>
+        `;
+    };
+    
+    updateWidget();
+    
+    window.cancelDelayedStart = () => {
+        clearTimeout(window.delayedStartTimer);
+        clearInterval(window.delayedStartInterval);
+        window.delayedStartTimer = null;
+        window.delayedStartInterval = null;
+        const w = document.getElementById('delayedStartWidget');
+        if (w) w.remove();
+        showToast('Đã hủy lịch hẹn giờ thành công!', 'warning');
+    };
+    
+    window.delayedStartInterval = setInterval(() => {
+        remainingMs -= 1000;
+        if (remainingMs <= 0) {
+            clearInterval(window.delayedStartInterval);
+            window.delayedStartInterval = null;
+            const w = document.getElementById('delayedStartWidget');
+            if (w) w.remove();
+        } else {
+            updateWidget();
+        }
+    }, 1000);
+    
+    window.delayedStartTimer = setTimeout(() => {
+        window.delayedStartTimer = null;
+        if (window.delayedStartInterval) clearInterval(window.delayedStartInterval);
+        const w = document.getElementById('delayedStartWidget');
+        if (w) w.remove();
+        showToast('Khởi động thiết bị theo hẹn giờ...', 'success');
+        startFn();
+    }, delayMs);
+    
+    showToast(`Đã lên lịch châm nước hẹn giờ tưới vào lúc ${targetTimeStr}!`, 'info');
+};
 
 function quickStopAll() {
     stopMixing();
