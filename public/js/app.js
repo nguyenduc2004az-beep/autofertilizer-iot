@@ -609,20 +609,27 @@ function toggleAutoMode(checked) {
 }
 
 function startMixing() {
+    const n = parseFloat(document.getElementById('inputN').value) || 0;
+    const p = parseFloat(document.getElementById('inputP').value) || 0;
+    const k = parseFloat(document.getElementById('inputK').value) || 0;
+    const calcDurationEl = document.getElementById('calc-duration');
+    const durationMin = calcDurationEl ? parseFloat(calcDurationEl.value) : 1.0;
+    const totalDosingFlowLpm = parseFloat(((n + p + k) / (durationMin * 1000)).toFixed(3));
+
     let payload = {
         mode: simMode ? 'sim' : 'seq',
         recipe_name: document.getElementById('recipeName').value || 'Không tên',
-        N_ml: document.getElementById('inputN').value || 0,
-        P_ml: document.getElementById('inputP').value || 0,
-        K_ml: document.getElementById('inputK').value || 0,
+        N_ml: n,
+        P_ml: p,
+        K_ml: k,
         N_speed: 60,
         P_speed: 60,
         K_speed: 60,
-        ratio_N: document.getElementById('inputN').value || 0,
-        ratio_P: document.getElementById('inputP').value || 0,
-        ratio_K: document.getElementById('inputK').value || 0,
-        total_vol_l: ((parseFloat(document.getElementById('inputN').value||0) + parseFloat(document.getElementById('inputP').value||0) + parseFloat(document.getElementById('inputK').value||0)) / 1000).toFixed(2),
-        total_lpm: 3.0
+        ratio_N: n,
+        ratio_P: p,
+        ratio_K: k,
+        total_vol_l: ((n + p + k) / 1000).toFixed(2),
+        total_lpm: totalDosingFlowLpm > 0.05 ? totalDosingFlowLpm : 3.0
     };
 
     fetch('/api/start', {
@@ -767,7 +774,35 @@ function onCropOrStageChange() {
     const cropKey = selectCrop.value;
     const stage  = document.getElementById('calc-stage').value;
     const plants = parseInt(document.getElementById('calc-plants').value) || 100;
-    const durationMin = parseFloat(document.getElementById('calc-duration').value) || 1;
+
+    // Thời gian tưới 1 chu kỳ luôn mặc định là 1.0 phút và được khóa lại (readonly)
+    const calcDurationInput = document.getElementById('calc-duration');
+    if (calcDurationInput) {
+        calcDurationInput.value = 1;
+    }
+    const durationMin_cycle = 1.0; 
+
+    // Số chu kỳ tưới tự động được khóa lại và gán theo giai đoạn sinh trưởng để dễ nhìn
+    const cyclesMap = {
+        'seedling': 2,
+        'vegetative': 3,
+        'flowering': 4,
+        'fruiting': 5
+    };
+    const cycles = cyclesMap[stage] || 2;
+    const calcCyclesInput = document.getElementById('calc-cycles');
+    if (calcCyclesInput) {
+        calcCyclesInput.value = cycles;
+    }
+
+    // Thời gian nghỉ chống sốc phân kéo dài
+    const restTimes = {
+        'seedling': 120,    // 2 giờ
+        'vegetative': 90,   // 1.5 giờ
+        'flowering': 60,    // 1 giờ
+        'fruiting': 45      // 45 phút
+    };
+    const restTime = restTimes[stage] || 60;
 
     const crops = getCropsList();
     const crop = crops[cropKey];
@@ -780,13 +815,18 @@ function onCropOrStageChange() {
     const volP = Math.round(rates.p * multiplier);
     const volK = Math.round(rates.k * multiplier);
 
-    // Apply values automatically to the locked (readonly) inputs
+    // Tính toán liều lượng cho 1 chu kỳ nhỏ
+    const volN_cycle = Math.round(volN / cycles);
+    const volP_cycle = Math.round(volP / cycles);
+    const volK_cycle = Math.round(volK / cycles);
+
+    // Áp dụng định lượng của 1 chu kỳ châm phân lên các trường dữ liệu thực tế
     const inpN = document.getElementById('inputN');
     const inpP = document.getElementById('inputP');
     const inpK = document.getElementById('inputK');
-    if (inpN) inpN.value = volN;
-    if (inpP) inpP.value = volP;
-    if (inpK) inpK.value = volK;
+    if (inpN) inpN.value = volN_cycle;
+    if (inpP) inpP.value = volP_cycle;
+    if (inpK) inpK.value = volK_cycle;
 
     const stageNames = {
         'seedling':  'Cây con',
@@ -797,32 +837,29 @@ function onCropOrStageChange() {
     
     const cropNameClean = crop.name.replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, '').trim();
     const rName = document.getElementById('recipeName');
-    if (rName) rName.value = `${cropNameClean} - ${stageNames[stage] || stage} (${plants} gốc, ${durationMin} phút)`;
+    if (rName) rName.value = `${cropNameClean} - ${stageNames[stage] || stage} (${plants} gốc, ${cycles} chu kỳ × ${durationMin_cycle}m, nghỉ ${restTime}m)`;
 
-    // Hydraulic calculations report
+    // Báo cáo thủy lực
     const Q_MAIN_LPM   = 120;   // L/min main pipe flow
-    const Q_PUMP_MLPM  = 4000;  // mL/min main dosing pumps flow (Venturi max rate)
-    const durationSec  = durationMin * 60;
-    const totalWaterL  = Q_MAIN_LPM * durationMin;
+    const totalWaterL  = Q_MAIN_LPM * durationMin_cycle; // Lượng nước của 1 chu kỳ (1 phút)
     const waterPerPlant = totalWaterL / plants;
 
-    const Q_PUMP_MLPS = Q_PUMP_MLPM / 60;  // mL/second
-    const timeN = (volN / Q_PUMP_MLPS).toFixed(1);
-    const timeP = (volP / Q_PUMP_MLPS).toFixed(1);
-    const timeK = (volK / Q_PUMP_MLPS).toFixed(1);
-    const totalPumpSec = parseFloat(timeN) + parseFloat(timeP) + parseFloat(timeK);
+    // Lưu lượng setpoint yêu cầu (L/phút) cho 1 chu kỳ
+    const setpointN = parseFloat((volN_cycle / (durationMin_cycle * 1000)).toFixed(3));
+    const setpointP = parseFloat((volP_cycle / (durationMin_cycle * 1000)).toFixed(3));
+    const setpointK = parseFloat((volK_cycle / (durationMin_cycle * 1000)).toFixed(3));
 
     const totalWaterML = totalWaterL * 1000;
-    const concN = ((volN / (totalWaterML + volN)) * 100).toFixed(2);
-    const concP = ((volP / (totalWaterML + volP)) * 100).toFixed(2);
-    const concK = ((volK / (totalWaterML + volK)) * 100).toFixed(2);
+    const concN = ((volN_cycle / (totalWaterML + volN_cycle)) * 100).toFixed(2);
+    const concP = ((volP_cycle / (totalWaterML + volP_cycle)) * 100).toFixed(2);
+    const concK = ((volK_cycle / (totalWaterML + volK_cycle)) * 100).toFixed(2);
 
     const summaryEl = document.getElementById('calc-summary');
     if (summaryEl) {
         summaryEl.innerHTML =
-            `<b>${plants} cây</b> × ${waterPerPlant.toFixed(2)} L/cây = <b>${totalWaterL.toFixed(0)} L nước</b> &nbsp;|&nbsp; ` +
+            `<b>${plants} cây</b> × ${waterPerPlant.toFixed(2)} L/cây = <b>${totalWaterL.toFixed(0)} L nước/chu kỳ</b> &nbsp;|&nbsp; ` +
             `Giai đoạn: <b>${stageNames[stage] || stage}</b> &nbsp;|&nbsp; ` +
-            `Tổng t.gian hút: <b>${totalPumpSec.toFixed(1)}s</b> / ${durationSec}s tưới`;
+            `Chu kỳ: <b>${cycles} chu kỳ × ${durationMin_cycle} phút (Nghỉ ${restTime} phút)</b>`;
     }
 
     const tableBodyEl = document.getElementById('calc-table-body');
@@ -830,24 +867,18 @@ function onCropOrStageChange() {
         const colors = { N: '#16a34a', P: '#2563eb', K: '#d97706' };
         const labels = { N: '🌿 Bồn 1 (Đạm - N)', P: '🌾 Bồn 2 (Lân - P)', K: '🍂 Bồn 3 (Kali - K)' };
         tableBodyEl.innerHTML = [
-            { ch: 'N', vol: volN, t: timeN, c: concN },
-            { ch: 'P', vol: volP, t: timeP, c: concP },
-            { ch: 'K', vol: volK, t: timeK, c: concK }
+            { ch: 'N', volTotal: volN, volCycle: volN_cycle, sp: setpointN, c: concN },
+            { ch: 'P', volTotal: volP, volCycle: volP_cycle, sp: setpointP, c: concP },
+            { ch: 'K', volTotal: volK, volCycle: volK_cycle, sp: setpointK, c: concK }
         ].map(row => `
             <tr>
                 <td style="padding:8px 10px; border:1px solid var(--border); font-weight:700; font-size:14px; color:${colors[row.ch]}">${labels[row.ch]}</td>
-                <td style="padding:8px 10px; border:1px solid var(--border); text-align:center; font-weight:900; font-size:17px; color:var(--txt-dark)">${row.vol}</td>
-                <td style="padding:8px 10px; border:1px solid var(--border); text-align:center; font-weight:800; font-size:14px; color:var(--txt-dark)">${row.t}s</td>
+                <td style="padding:8px 10px; border:1px solid var(--border); text-align:center; font-weight:800; font-size:15px; color:#64748b">${row.volTotal}</td>
+                <td style="padding:8px 10px; border:1px solid var(--border); text-align:center; font-weight:900; font-size:16px; color:var(--txt-dark)">${row.volCycle}</td>
+                <td style="padding:8px 10px; border:1px solid var(--border); text-align:center; font-weight:900; font-size:16px; color:#ef4444">${row.sp}</td>
                 <td style="padding:8px 10px; border:1px solid var(--border); text-align:center; font-weight:800; font-size:14px; color:var(--txt-dark)">${row.c}%</td>
             </tr>
         `).join('');
-    }
-
-    const warn = document.getElementById('calc-warning');
-    const totalTimeTxt = document.getElementById('calc-total-pump-time');
-    if (totalTimeTxt) totalTimeTxt.textContent = totalPumpSec.toFixed(1);
-    if (warn) {
-        warn.style.display = totalPumpSec > durationSec ? 'block' : 'none';
     }
 
     updateDashboardSettingsDisplay();
