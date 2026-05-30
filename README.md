@@ -44,25 +44,23 @@ du_an_web/
 ```
 ESP32 GPIO → Driver A4988
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-Van N (Đạm):
-  GPIO 13 → STEP
-  GPIO 14 → DIR
-  GPIO 15 → ENABLE (active LOW)
+Van N (Đạm) - Bồn A:
+  GPIO 13 → DIR
+  GPIO 14 → STEP
 
-Van P (Lân):
-  GPIO 16 → STEP
-  GPIO 17 → DIR
-  GPIO 18 → ENABLE
+Van P (Lân) - Bồn B:
+  GPIO 27 → DIR
+  GPIO 26 → STEP
 
-Van K (Kali):
-  GPIO 19 → STEP
-  GPIO 21 → DIR
-  GPIO 22 → ENABLE
+Van K (Kali) - Bồn C:
+  GPIO 25 → DIR
+  GPIO 33 → STEP
 
 Cảm biến lưu lượng YF-S401:
-  GPIO 25 → Signal (Van N)
-  GPIO 26 → Signal (Van P)
-  GPIO 27 → Signal (Van K)
+  GPIO 16 → Signal (Van N)
+  GPIO 17 → Signal (Van P)
+  GPIO 18 → Signal (Van K)
+  GPIO 19 → Signal (Cảm biến chính - FLOW_MAIN)
   GND     → GND
   5V      → VCC
 
@@ -275,8 +273,8 @@ Truy cập: **http://localhost:3000** (hoặc `http://<IP-laptop>:3000` từ thi
 | ESP32 không kết nối WiFi | Kiểm tra SSID/Password trong .ino |
 | MQTT indicator đỏ | Kiểm tra Mosquitto đang chạy: `sc query mosquitto` |
 | ESP32 indicator đỏ | - Kiểm tra IP MQTT_SERVER trong .ino<br>- ESP32 và laptop cùng mạng WiFi? |
-| Van không mở | Kiểm tra chân EN_N/P/K, nguồn 12V cho driver |
-| Flow sensor = 0 | Kiểm tra kết nối GPIO 25/26/27, nước có chảy? |
+| Van không mở | Kiểm tra nguồn 12V cho driver và động cơ bước |
+| Flow sensor = 0 | Kiểm tra kết nối GPIO 16/17/18, đảm bảo ngắt (interrupt) được gắn đúng chân |
 | Lượng bơm không chính xác | Hiệu chỉnh hằng số ML_PER_PULSE trong .ino |
 
 ### Hiệu chỉnh cảm biến YF-S401
@@ -303,4 +301,3 @@ Cập nhật giá trị `ML_PER_PULSE` trong file `.ino` và nạp lại.
 | GET | `/api/recipes` | Danh sách công thức |
 | POST | `/api/recipes` | Thêm công thức |
 | DELETE | `/api/recipes/:id` | Xóa công thức |
-  châ

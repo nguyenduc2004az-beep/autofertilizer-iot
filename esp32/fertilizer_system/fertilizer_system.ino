@@ -10,34 +10,24 @@ const int   MQTT_PORT     = 1883;
 const char* MQTT_USER     = "";    // Để trống nếu không dùng xác thực
 const char* MQTT_PASS     = "";
 
-// CHÂN GPIO - ĐỘNG CƠ BƯỚC
 
-//BỒN 1
-#define STEP_N     13
-#define DIR_N      14
-#define EN_N       15
+#define DIR_N      13
+#define STEP_N     14
 
-//BỒN 2
-#define STEP_P     16
-#define DIR_P      17
-#define EN_P       18
+#define DIR_P      27
+#define STEP_P     26
 
-//BỒN 3
-#define STEP_K     19
-#define DIR_K      21
-#define EN_K       22
+#define DIR_K      25
+#define STEP_K     33
 
-// CHÂN GPIO - CẢM BIẾN LƯU LƯỢNG 
-#define FLOW_N     25
-#define FLOW_P     26
-#define FLOW_K     27
-#define FLOW_MAIN  33
+#define FLOW_N     16
+#define FLOW_P     17
+#define FLOW_K     18
+#define FLOW_MAIN  19
 
-// CHÂN GPIO - BƠM VÀ VAN CHÍNH
 #define PUMP_PIN   4
 #define VALVE_PIN  5
 
-// LED trạng thái
 #define STATUS_LED  2
 
 // THÔNG SỐ PHẦN CỨNG
@@ -170,28 +160,25 @@ void IRAM_ATTR onFlowMain() { pulseMain++; }
 void moveStepper(int valve, int steps) {
     if (steps == 0) return;
 
-    uint8_t stepPin, dirPin, enPin;
+    uint8_t stepPin, dirPin;
     int32_t *posPtr = nullptr;
     int32_t learnedMin = 0, learnedMax = MAX_OPEN_STEPS;
 
     switch (valve) {
         case 1:
-            stepPin = STEP_N; dirPin = DIR_N; enPin = EN_N;
+            stepPin = STEP_N; dirPin = DIR_N;
             posPtr = &posN; learnedMin = learnedMinN; learnedMax = learnedMaxN;
             break;
         case 2:
-            stepPin = STEP_P; dirPin = DIR_P; enPin = EN_P;
+            stepPin = STEP_P; dirPin = DIR_P;
             posPtr = &posP; learnedMin = learnedMinP; learnedMax = learnedMaxP;
             break;
         case 3:
-            stepPin = STEP_K; dirPin = DIR_K; enPin = EN_K;
+            stepPin = STEP_K; dirPin = DIR_K;
             posPtr = &posK; learnedMin = learnedMinK; learnedMax = learnedMaxK;
             break;
         default: return;
     }
-
-    digitalWrite(enPin, LOW);   // Kích hoạt driver (ENABLE tích cực mức THẤP)
-    delayMicroseconds(2);       // Trễ setup
 
     bool opening = (steps > 0);
     if (opening) {
@@ -255,14 +242,9 @@ void openValve(int valve, int percent) {
                   (valve == 1 ? 'N' : (valve == 2 ? 'P' : 'K')), percent, delta, currentPos, targetSteps);
     moveStepper(valve, delta);
 }
-//Đóng hoàn toàn một van và tắt driver để tiết kiệm điện.
+//Đóng hoàn toàn một van.
 void closeValve(int valve) {
     openValve(valve, 0);
-    switch (valve) {
-        case 1: digitalWrite(EN_N, HIGH); break;
-        case 2: digitalWrite(EN_P, HIGH); break;
-        case 3: digitalWrite(EN_K, HIGH); break;
-    }
 }
 // Dừng khẩn cấp: Tắt toàn bộ thiết bị ngay lập tức (không xoay động cơ bước về 0).
 void emergencyStop() {
@@ -276,10 +258,7 @@ void emergencyStop() {
     digitalWrite(PUMP_PIN, LOW);
     digitalWrite(VALVE_PIN, LOW);
     
-    // Vô hiệu hóa và ngắt điện hoàn toàn driver 3 động cơ bước ngay lập tức (giữ nguyên vị trí)
-    digitalWrite(EN_N, HIGH);
-    digitalWrite(EN_P, HIGH);
-    digitalWrite(EN_K, HIGH);
+    // (Bỏ phần vô hiệu hóa driver vì không sử dụng chân EN)
 }
 // MQTT CALLBACK - Nhận lệnh từ server
 // ĐIỀU KHIỂN TỈ LỆ - CHẠY ĐỒNG THỜI (P-Controller)
@@ -625,23 +604,20 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     // ---- Lệnh VỀ HOME (đặt lại vị trí gốc) ----
     else if (strcmp(cmd, "home") == 0) {
         if (!systemRunning) {
-            auto smartHome = [](int valve, int32_t &pos, uint8_t enPin) {
+            auto smartHome = [](int valve, int32_t &pos) {
                 if (pos > 0) {
                     // Nếu van đã ghi nhận vị trí mở, đóng van chính xác về 0
                     closeValve(valve);
                 } else {
                     // Nếu van đang ở 0, siết nhẹ thêm 200 bước để đảm bảo khít hoàn toàn
-                    digitalWrite(enPin, LOW);
-                    delayMicroseconds(2);
                     moveStepper(valve, -200);
                     pos = 0;
-                    digitalWrite(enPin, HIGH); // Tắt driver
                 }
             };
 
-            smartHome(1, posN, EN_N);
-            smartHome(2, posP, EN_P);
-            smartHome(3, posK, EN_K);
+            smartHome(1, posN);
+            smartHome(2, posP);
+            smartHome(3, posK);
 
             Serial.println("[HOME] Đã reset động cơ về vị trí gốc an toàn.");
         }
@@ -755,30 +731,27 @@ void forceCloseValve(int valve) {
     // 1. Di chuyển về vị trí 0 (đóng theo ly thuyet so buoc tinh toan)
     openValve(valve, 0); 
     
-    // Giu driver ENABLE (LOW) de co mo-men xoan trong qua trinh siet chat van
-    uint8_t stepPin, dirPin, enPin;
+    // Giu driver hoat dong de co mo-men xoan trong qua trinh siet chat van
+    uint8_t stepPin, dirPin;
     float currentFlow = 0.0f;
     int32_t *posPtr = nullptr;
     int32_t *learnedMinPtr = nullptr;
     
     switch (valve) {
         case 1: 
-            stepPin = STEP_N; dirPin = DIR_N; enPin = EN_N; 
+            stepPin = STEP_N; dirPin = DIR_N; 
             posPtr = &posN; learnedMinPtr = &learnedMinN;
             break;
         case 2: 
-            stepPin = STEP_P; dirPin = DIR_P; enPin = EN_P; 
+            stepPin = STEP_P; dirPin = DIR_P; 
             posPtr = &posP; learnedMinPtr = &learnedMinP;
             break;
         case 3: 
-            stepPin = STEP_K; dirPin = DIR_K; enPin = EN_K; 
+            stepPin = STEP_K; dirPin = DIR_K; 
             posPtr = &posK; learnedMinPtr = &learnedMinK;
             break;
         default: return;
     }
-    
-    // Đảm bảo driver vẫn kích hoạt (ENABLE = LOW)
-    digitalWrite(enPin, LOW);
     
     // 2. Cho 800ms de dong chay on dinh va tinh luu luong ban dau sau khi dong ly thuyet
     delay(800);
@@ -853,8 +826,7 @@ void forceCloseValve(int valve) {
         Serial.printf("[FORCE CLOSE] [!] Canh bao: Da dat gioi han siet hoac kich diem (%d buoc) nhung dong chay van con %.3f L/m!\n", extraStepsApplied, currentFlow);
     }
     
-    // 4. Hoan thanh: Tat driver (ENABLE = HIGH) de bao ve dong co, giam nhiet do
-    digitalWrite(enPin, HIGH);
+    // 4. Hoan thanh
 }
 
 // KẾT NỐI MQTT
@@ -1005,15 +977,12 @@ void setup() {
     digitalWrite(STATUS_LED, LOW);
 
     // Khởi tạo chân stepper
-    int stepperPins[] = {STEP_N, DIR_N, EN_N, STEP_P, DIR_P, EN_P, STEP_K, DIR_K, EN_K};
+    int stepperPins[] = {STEP_N, DIR_N, STEP_P, DIR_P, STEP_K, DIR_K};
     for (int pin : stepperPins) pinMode(pin, OUTPUT);
 
     // Giả định van đã đóng sẵn từ trước để chống kẹt xung khi bật nguồn
     Serial.println(F("[INIT] Khởi tạo vị trí van kim về vị trí 0 (đã đóng)..."));
     posN = 0; posP = 0; posK = 0;
-    digitalWrite(EN_N, HIGH); // Tắt driver để tiết kiệm điện và giảm nóng động cơ
-    digitalWrite(EN_P, HIGH);
-    digitalWrite(EN_K, HIGH);
 
     // Khởi tạo chân bơm và van chính
     pinMode(PUMP_PIN, OUTPUT);

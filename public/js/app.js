@@ -649,30 +649,12 @@ function startMixing() {
 // CẤU HÌNH CÂY TRỒNG VÀ PHỐI TRỘN DINH DƯỠNG ĐỘNG
 const DEFAULT_CROPS = {
     'tomato': {
-        name: '🍅 Cà chua (Chuẩn)',
+        name: '🍅 Cà chua (Chuẩn Haifa)',
         rates: {
-            'seedling':  { n: 200, p: 80, k: 80 },
-            'vegetative':{ n: 400, p: 150, k: 200 },
-            'flowering': { n: 250, p: 500, k: 250 },
-            'fruiting':  { n: 300, p: 200, k: 600 }
-        }
-    },
-    'melon': {
-        name: '🍈 Dưa lưới',
-        rates: {
-            'seedling':  { n: 180, p: 70, k: 90 },
-            'vegetative':{ n: 350, p: 120, k: 180 },
-            'flowering': { n: 220, p: 450, k: 280 },
-            'fruiting':  { n: 280, p: 180, k: 580 }
-        }
-    },
-    'strawberry': {
-        name: '🍓 Dâu tây',
-        rates: {
-            'seedling':  { n: 150, p: 60, k: 70 },
-            'vegetative':{ n: 300, p: 100, k: 150 },
-            'flowering': { n: 180, p: 350, k: 220 },
-            'fruiting':  { n: 220, p: 150, k: 450 }
+            'seedling':  { n: 222, p: 222, k: 222 },
+            'vegetative':{ n: 267, p: 267, k: 267 },
+            'flowering': { n: 400, p: 200, k: 600 },
+            'fruiting':  { n: 426, p: 255, k: 850 }
         }
     }
 };
@@ -782,25 +764,25 @@ function onCropOrStageChange() {
     }
     const durationMin_cycle = 1.0; 
 
-    // Số chu kỳ tưới tự động được khóa lại và gán theo giai đoạn sinh trưởng để dễ nhìn
+    // Số chu kỳ tưới tự động được khóa lại và gán theo giai đoạn sinh trưởng thực tế theo Haifa
     const cyclesMap = {
-        'seedling': 2,
-        'vegetative': 3,
-        'flowering': 4,
-        'fruiting': 5
+        'seedling': 10,
+        'vegetative': 12,
+        'flowering': 18,
+        'fruiting': 23
     };
-    const cycles = cyclesMap[stage] || 2;
+    const cycles = cyclesMap[stage] || 10;
     const calcCyclesInput = document.getElementById('calc-cycles');
     if (calcCyclesInput) {
         calcCyclesInput.value = cycles;
     }
 
-    // Thời gian nghỉ chống sốc phân kéo dài
+    // Thời gian giãn cách nghỉ tưới (Thực tế theo biểu đồ 24h)
     const restTimes = {
-        'seedling': 120,    // 2 giờ
-        'vegetative': 90,   // 1.5 giờ
-        'flowering': 60,    // 1 giờ
-        'fruiting': 45      // 45 phút
+        'seedling': 70,    // 70 phút giãn cách
+        'vegetative': 57,   // 57 phút giãn cách
+        'flowering': 37,    // 37 phút giãn cách
+        'fruiting': 28      // 28 phút giãn cách
     };
     const restTime = restTimes[stage] || 60;
 
