@@ -33,7 +33,7 @@ du_an_web/
 |-----|-----------|----------|---------|
 | 1 | ESP32 DevKit V1 | 1 | Vi điều khiển chính |
 | 2 | Động cơ bước NEMA 17 | 3 | 200 step/rev, 1.8°/step |
-| 3 | Driver A4988 / DRV8825 | 3 | Điều khiển stepper |
+| 3 | Driver TB6600 | 3 | Điều khiển stepper |
 | 4 | Van kim (Needle Valve) | 3 | Van N, P, K |
 | 5 | Cảm biến lưu lượng YF-S401 | 3 | 1 cảm biến/van |
 | 6 | Nguồn 12V DC | 1 | Cấp cho stepper motor |
@@ -42,19 +42,22 @@ du_an_web/
 ### Sơ đồ kết nối ESP32
 
 ```
-ESP32 GPIO → Driver A4988
+ESP32 GPIO → Driver TB6600
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 Van N (Đạm) - Bồn A:
   GPIO 13 → DIR
   GPIO 14 → STEP
+  GPIO 15 → EN
 
 Van P (Lân) - Bồn B:
   GPIO 27 → DIR
   GPIO 26 → STEP
+  GPIO 32 → EN
 
 Van K (Kali) - Bồn C:
   GPIO 25 → DIR
   GPIO 33 → STEP
+  GPIO 22 → EN
 
 Cảm biến lưu lượng YF-S401:
   GPIO 16 → Signal (Van N)
@@ -64,22 +67,20 @@ Cảm biến lưu lượng YF-S401:
   GND     → GND
   5V      → VCC
 
-A4988 Driver:
-  VMOT (12V) ← Nguồn 12V
-  VDD  (5V)  ← 5V ESP32
-  GND        ← GND chung
-  MS1/MS2/MS3 ← Cài microstepping (xem bảng)
+TB6600 Driver Connection (Common Cathode / Cực âm chung):
+  PUL-, DIR-, EN- ← Nối gộp lại về GND của ESP32
+  PUL+            ← Nối tới chân STEP tương ứng của ESP32
+  DIR+            ← Nối tới chân DIR tương ứng của ESP32
+  EN+             ← Nối tới chân EN tương ứng của ESP32
+  VCC / V+ (12V)  ← Nguồn 12V DC ngoại
+  GND             ← Nguồn GND ngoại
+  A+, A-, B+, B-  ← 4 dây của động cơ bước NEMA 17
 ```
 
-### Cài đặt Microstepping A4988
+### Cài đặt Microstepping và Dòng điện TB6600
 
-| MS1 | MS2 | MS3 | Chế độ |
-|-----|-----|-----|--------|
-| L | L | L | Full step (200 step/rev) |
-| H | L | L | 1/2 step (400 step/rev) |
-| L | H | L | 1/4 step (800 step/rev) |
-| H | H | L | **1/8 step (1600 step/rev)** ← Mặc định trong code |
-| H | H | H | 1/16 step (3200 step/rev) |
+* **Vi bước (Microstepping):** Chọn **1/8 vi bước (1600 steps/rev)** để đồng bộ với phần mềm. Gạt công tắc bên hông (thường gạt S1=ON, S2=OFF, S3=OFF tùy từng vỏ hộp TB6600).
+* **Dòng điện (Current):** Cài đặt dải dòng **1.5A hoặc 1.7A** để kéo van tốt nhất mà không nóng động cơ. Gạt công tắc dòng tương ứng trên vỏ hộp TB6600.
 
 ---
 

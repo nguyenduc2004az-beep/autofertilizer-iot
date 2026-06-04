@@ -355,15 +355,7 @@
                     </div>
                 </div>
 
-                <div class="iot-card" style="margin-top: 15px;">
-                    <div class="iot-card-title" style="display:flex;justify-content:space-between;align-items:center">
-                        <span>📈 Lưu Lượng Thời Gian Thực</span>
-                        <button class="btn-sm" onclick="clearChart()">🗑 Xóa</button>
-                    </div>
-                    <div class="chart-wrap">
-                        <canvas id="flowChart"></canvas>
-                    </div>
-                </div>
+                <!-- Biểu đồ được di chuyển sang trang giám sát -->
             </div>
         </section>
 
@@ -392,79 +384,139 @@
                 </div>
             </div>
 
-            <!-- BẢNG GIÁM SÁT THỜI GIAN THỰC (TRANSPOSED SHEET TABLE) -->
-            <div class="iot-card" style="margin-bottom: 24px;">
-                <div class="iot-card-title">📊 BẢNG GIÁM SÁT THỜI GIAN THỰC (BỒN 1 - 2 - 3)</div>
-                <span id="flowMainLarge" style="display: none;"></span>
-                <div style="overflow-x: auto; margin-top: 15px;">
-                    <table class="history-table" style="width: 100%; border-collapse: collapse; text-align: center; font-size: 16px; border: 1px solid var(--border);">
-                        <thead>
-                            <tr style="background: var(--bg-hover);">
-                                <th style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark); text-align: left; width: 34%;">Thông số / Giá trị</th>
-                                <th style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark); width: 22%;">🌿 Bồn Số 1 (Đạm - N)</th>
-                                <th style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark); width: 22%;">🌾 Bồn Số 2 (Lân - P)</th>
-                                <th style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark); width: 22%;">🍂 Bồn Số 3 (Kali - K)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Trạng thái -->
-                            <tr>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark); text-align: left;">🔌 Trạng thái</td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px;">
-                                    <span id="stateN" class="sys-val" style="display: inline-flex; align-items: center; gap: 6px; justify-content: center;">
-                                        <span class="state-dot closed-dot"></span> <span>Đã đóng</span>
-                                    </span>
-                                </td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px;">
-                                    <span id="stateP" class="sys-val" style="display: inline-flex; align-items: center; gap: 6px; justify-content: center;">
-                                        <span class="state-dot closed-dot"></span> <span>Đã đóng</span>
-                                    </span>
-                                </td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px;">
-                                    <span id="stateK" class="sys-val" style="display: inline-flex; align-items: center; gap: 6px; justify-content: center;">
-                                        <span class="state-dot closed-dot"></span> <span>Đã đóng</span>
-                                    </span>
-                                </td>
-                            </tr>
-                            <!-- Lưu lượng hiện tại (lít/phút) -->
-                            <tr>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark); text-align: left;">💧 Lưu lượng hiện tại (lít/phút)</td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark);" id="flowN">0.00</td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark);" id="flowP">0.00</td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark);" id="flowK">0.00</td>
-                            </tr>
-                            <!-- Tiến độ (%) -->
-                            <tr>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark); text-align: left;">📈 Tiến độ (%)</td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark);" id="pctN">0</td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark);" id="pctP">0</td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark);" id="pctK">0</td>
-                            </tr>
-                            <!-- Thể tích thực tế (mL) -->
-                            <tr>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark); text-align: left;">🧪 Thể tích thực tế (mL)</td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark);" id="volN">0</td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark);" id="volP">0</td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark);" id="volK">0</td>
-                            </tr>
-                            <!-- Thể tích mục tiêu (mL) -->
-                            <tr>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark); text-align: left;">🎯 Thể tích mục tiêu (mL)</td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark);" id="tgtN">0</td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark);" id="tgtP">0</td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark);" id="tgtK">0</td>
-                            </tr>
-                            <!-- Vị trí van (bước) -->
-                            <tr>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark); text-align: left;">🔧 Vị trí van (bước)</td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark);" id="stepsN">0</td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark);" id="stepsP">0</td>
-                                <td style="border: 1px solid var(--border); padding: 12px 16px; font-weight: 800; color: var(--txt-dark);" id="stepsK">0</td>
-                            </tr>
-                        </tbody>
-                    </table>
+            <!-- BẢNG GIÁM SÁT THỜI GIAN THỰC (ĐÃ TÁCH THÀNH 4 KHỐI) -->
+            <div class="monitor-grid">
+                
+                <!-- Khối 1: Bồn Số 1 (Đạm - N) -->
+                <div class="monitor-card card-n">
+                    <div class="monitor-card-header">
+                        <span class="monitor-card-title n-text">🌿 Bồn Số 1 (N)</span>
+                        <span id="stateN" class="sys-val" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;">
+                            <span class="state-dot closed-dot"></span> <span>Đã đóng</span>
+                        </span>
+                    </div>
+                    <div class="monitor-card-body">
+                        <div class="monitor-card-row">
+                            <span class="label">💧 Lưu lượng:</span>
+                            <span class="value"><span id="flowN">0.00</span> L/phút</span>
+                        </div>
+                        <div class="monitor-card-row">
+                            <span class="label">📈 Tiến độ:</span>
+                            <span class="value"><span id="pctN">0</span>%</span>
+                        </div>
+                        <div class="monitor-card-row">
+                            <span class="label">🧪 Thực tế:</span>
+                            <span class="value"><span id="volN">0</span> mL</span>
+                        </div>
+                        <div class="monitor-card-row">
+                            <span class="label">🎯 Mục tiêu:</span>
+                            <span class="value"><span id="tgtN">0</span> mL</span>
+                        </div>
+                        <div class="monitor-card-row border-top">
+                            <span class="label">🔧 Vị trí van:</span>
+                            <span class="value"><span id="stepsN">0</span> bước</span>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Khối 2: Bồn Số 2 (Lân - P) -->
+                <div class="monitor-card card-p">
+                    <div class="monitor-card-header">
+                        <span class="monitor-card-title p-text">🌾 Bồn Số 2 (P)</span>
+                        <span id="stateP" class="sys-val" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;">
+                            <span class="state-dot closed-dot"></span> <span>Đã đóng</span>
+                        </span>
+                    </div>
+                    <div class="monitor-card-body">
+                        <div class="monitor-card-row">
+                            <span class="label">💧 Lưu lượng:</span>
+                            <span class="value"><span id="flowP">0.00</span> L/phút</span>
+                        </div>
+                        <div class="monitor-card-row">
+                            <span class="label">📈 Tiến độ:</span>
+                            <span class="value"><span id="pctP">0</span>%</span>
+                        </div>
+                        <div class="monitor-card-row">
+                            <span class="label">🧪 Thực tế:</span>
+                            <span class="value"><span id="volP">0</span> mL</span>
+                        </div>
+                        <div class="monitor-card-row">
+                            <span class="label">🎯 Mục tiêu:</span>
+                            <span class="value"><span id="tgtP">0</span> mL</span>
+                        </div>
+                        <div class="monitor-card-row border-top">
+                            <span class="label">🔧 Vị trí van:</span>
+                            <span class="value"><span id="stepsP">0</span> bước</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Khối 3: Bồn Số 3 (Kali - K) -->
+                <div class="monitor-card card-k">
+                    <div class="monitor-card-header">
+                        <span class="monitor-card-title k-text">🍂 Bồn Số 3 (K)</span>
+                        <span id="stateK" class="sys-val" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;">
+                            <span class="state-dot closed-dot"></span> <span>Đã đóng</span>
+                        </span>
+                    </div>
+                    <div class="monitor-card-body">
+                        <div class="monitor-card-row">
+                            <span class="label">💧 Lưu lượng:</span>
+                            <span class="value"><span id="flowK">0.00</span> L/phút</span>
+                        </div>
+                        <div class="monitor-card-row">
+                            <span class="label">📈 Tiến độ:</span>
+                            <span class="value"><span id="pctK">0</span>%</span>
+                        </div>
+                        <div class="monitor-card-row">
+                            <span class="label">🧪 Thực tế:</span>
+                            <span class="value"><span id="volK">0</span> mL</span>
+                        </div>
+                        <div class="monitor-card-row">
+                            <span class="label">🎯 Mục tiêu:</span>
+                            <span class="value"><span id="tgtK">0</span> mL</span>
+                        </div>
+                        <div class="monitor-card-row border-top">
+                            <span class="label">🔧 Vị trí van:</span>
+                            <span class="value"><span id="stepsK">0</span> bước</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Khối 4: Đường ống chính -->
+                <div class="monitor-card card-main">
+                    <div class="monitor-card-header">
+                        <span class="monitor-card-title main-text">🚰 Đường Ống Chính</span>
+                        <span id="stateMain" class="sys-val" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;">
+                            <span class="state-dot closed-dot"></span> <span>Đang dừng</span>
+                        </span>
+                    </div>
+                    <div class="monitor-card-body">
+                        <div class="monitor-card-row">
+                            <span class="label">📊 Lưu lượng:</span>
+                            <span class="value"><span id="flowMain">0.00</span> L/phút</span>
+                        </div>
+                        <div class="monitor-card-row">
+                            <span class="label">💧 Lưu lượng tổng:</span>
+                            <span class="value"><span id="flowMainLarge">0.0</span> L/phút</span>
+                        </div>
+                        <div class="monitor-card-row">
+                            <span class="label">🧪 Thể tích tổng:</span>
+                            <span class="value"><span id="volMain">0</span> mL</span>
+                        </div>
+                        <div class="monitor-card-row">
+                            <span class="label">&nbsp;</span>
+                            <span class="value">&nbsp;</span>
+                        </div>
+                        <div class="monitor-card-row border-top">
+                            <span class="label">&nbsp;</span>
+                            <span class="value">&nbsp;</span>
+                        </div>
+                    </div>
+                </div>
+
             </div>
+
 
             <!-- Overall Progress -->
             <div class="iot-card" id="sessionProgress" style="display:none">
@@ -478,48 +530,14 @@
                 </div>
             </div>
 
-            <!-- Thông số bơm & Lưu lượng thực tế (Tách 2 khối) -->
-            <div class="system-grid" style="margin-top: 20px;">
-                <!-- Khối 1: THÔNG SỐ ĐỘ MỞ VAN KIM -->
-                <div class="iot-card">
-                    <div class="iot-card-title">⚙️ THÔNG SỐ ĐỘ MỞ VAN KIM</div>
-                    <div class="sys-info-list">
-                        <div class="sys-info-row">
-                            <span class="sys-lbl">⚙️ Van châm 1 (Đạm - N)</span>
-                            <span class="sys-val" id="rd-aN">0°</span>
-                        </div>
-                        <div class="sys-info-row">
-                            <span class="sys-lbl">⚙️ Van châm 2 (Lân - P)</span>
-                            <span class="sys-val" id="rd-aP">0°</span>
-                        </div>
-                        <div class="sys-info-row">
-                            <span class="sys-lbl">⚙️ Van châm 3 (Kali - K)</span>
-                            <span class="sys-val" id="rd-aK">0°</span>
-                        </div>
-                    </div>
+            <!-- BIỂU ĐỒ LƯU LƯỢNG THỜI GIAN THỰC -->
+            <div class="iot-card" style="margin-top: 20px;">
+                <div class="iot-card-title" style="display:flex;justify-content:space-between;align-items:center">
+                    <span>📈 BIỂU ĐỒ LƯU LƯỢNG THỜI GIAN THỰC</span>
+                    <button class="btn-sm" onclick="clearChart()">🗑 Xóa</button>
                 </div>
-
-                <!-- Khối 2: LƯU LƯỢNG THỰC TẾ -->
-                <div class="iot-card">
-                    <div class="iot-card-title">📊 LƯU LƯỢNG THỰC TẾ</div>
-                    <div class="sys-info-list">
-                        <div class="sys-info-row">
-                            <span class="sys-lbl">💧 Lưu lượng Bồn 1 (N)</span>
-                            <span class="sys-val"><strong id="rd-fN" style="font-weight: 800; color: var(--txt-dark);">0</strong> Lít/giờ</span>
-                        </div>
-                        <div class="sys-info-row">
-                            <span class="sys-lbl">💧 Lưu lượng Bồn 2 (P)</span>
-                            <span class="sys-val"><strong id="rd-fP" style="font-weight: 800; color: var(--txt-dark);">0</strong> Lít/giờ</span>
-                        </div>
-                        <div class="sys-info-row">
-                            <span class="sys-lbl">💧 Lưu lượng Bồn 3 (K)</span>
-                            <span class="sys-val"><strong id="rd-fK" style="font-weight: 800; color: var(--txt-dark);">0</strong> Lít/giờ</span>
-                        </div>
-                        <div class="sys-info-row">
-                            <span class="sys-lbl">📊 Lưu lượng đường ống chính</span>
-                            <span class="sys-val"><strong id="rd-fMain" style="font-weight: 800; color: var(--txt-dark);">0</strong> Lít/giờ</span>
-                        </div>
-                    </div>
+                <div class="chart-wrap">
+                    <canvas id="flowChart"></canvas>
                 </div>
             </div>
         </section>
@@ -845,6 +863,199 @@
         </section>
 
         <!-- ========================================
+             PAGE: HIỆU CHUẨN CẢM BIẾN (HIDDEN / ACCESS VIA LINK)
+        ======================================== -->
+        <section class="page" id="page-calibration">
+            <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 20px;">
+                <div>
+                    <h2>⚖️ Hiệu Chuẩn Cảm Biến</h2>
+                    <p>Hiệu chỉnh và đo đạc hệ số xung của các cảm biến lưu lượng</p>
+                </div>
+                <button type="button" class="btn" onclick="showPage('system')" style="background: var(--bg-input); border: 1.5px solid var(--border); color: var(--txt-main); font-weight: 700; height: 42px; display: inline-flex; align-items: center; gap: 8px; border-radius: 6px; padding: 0 16px; cursor: pointer; transition: all 0.2s;">
+                    <i class="fas fa-arrow-left"></i> QUAY LẠI
+                </button>
+            </div>
+
+            <!-- GRID CẢM BIẾN HIỂN THỊ 4 GIÁ TRỊ -->
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;">
+                <!-- Sensor N -->
+                <div class="iot-card" style="margin-bottom: 0; padding: 20px; border: 1.5px solid var(--border); text-align: center; border-radius: 8px;">
+                    <div style="font-size: 14px; font-weight: 800; color: #16a34a; margin-bottom: 10px; text-transform: uppercase;">🌿 Cảm Biến Bồn 1 (N)</div>
+                    <div style="font-size: 28px; font-weight: 900; color: var(--txt-dark); margin: 10px 0;">
+                        <span id="calib-flowN">0.00</span> <small style="font-size: 14px; color: var(--txt-muted); font-weight: 600;">L/min</small>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--txt-muted); border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px;">
+                        <span>Thể tích: <strong id="calib-volN" style="color: var(--txt-main);">0</strong> mL</span>
+                        <span>Xung: <strong id="calib-pulseN" style="color: var(--txt-main);">0</strong></span>
+                    </div>
+                </div>
+                <!-- Sensor P -->
+                <div class="iot-card" style="margin-bottom: 0; padding: 20px; border: 1.5px solid var(--border); text-align: center; border-radius: 8px;">
+                    <div style="font-size: 14px; font-weight: 800; color: #2563eb; margin-bottom: 10px; text-transform: uppercase;">🌾 Cảm Biến Bồn 2 (P)</div>
+                    <div style="font-size: 28px; font-weight: 900; color: var(--txt-dark); margin: 10px 0;">
+                        <span id="calib-flowP">0.00</span> <small style="font-size: 14px; color: var(--txt-muted); font-weight: 600;">L/min</small>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--txt-muted); border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px;">
+                        <span>Thể tích: <strong id="calib-volP" style="color: var(--txt-main);">0</strong> mL</span>
+                        <span>Xung: <strong id="calib-pulseP" style="color: var(--txt-main);">0</strong></span>
+                    </div>
+                </div>
+                <!-- Sensor K -->
+                <div class="iot-card" style="margin-bottom: 0; padding: 20px; border: 1.5px solid var(--border); text-align: center; border-radius: 8px;">
+                    <div style="font-size: 14px; font-weight: 800; color: #d97706; margin-bottom: 10px; text-transform: uppercase;">🍂 Cảm Biến Bồn 3 (K)</div>
+                    <div style="font-size: 28px; font-weight: 900; color: var(--txt-dark); margin: 10px 0;">
+                        <span id="calib-flowK">0.00</span> <small style="font-size: 14px; color: var(--txt-muted); font-weight: 600;">L/min</small>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--txt-muted); border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px;">
+                        <span>Thể tích: <strong id="calib-volK" style="color: var(--txt-main);">0</strong> mL</span>
+                        <span>Xung: <strong id="calib-pulseK" style="color: var(--txt-main);">0</strong></span>
+                    </div>
+                </div>
+                <!-- Sensor Main -->
+                <div class="iot-card" style="margin-bottom: 0; padding: 20px; border: 1.5px solid var(--border); text-align: center; border-radius: 8px;">
+                    <div style="font-size: 14px; font-weight: 800; color: #0891b2; margin-bottom: 10px; text-transform: uppercase;">🚰 Đường Ống Chính</div>
+                    <div style="font-size: 28px; font-weight: 900; color: var(--txt-dark); margin: 10px 0;">
+                        <span id="calib-flowMain">0.00</span> <small style="font-size: 14px; color: var(--txt-muted); font-weight: 600;">L/min</small>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--txt-muted); border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px;">
+                        <span>Thể tích: <strong id="calib-volMain" style="color: var(--txt-main);">0</strong> mL</span>
+                        <span>Xung: <strong id="calib-pulseMain" style="color: var(--txt-main);">0</strong></span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
+                <!-- Cột trái: Điều khiển thủ công & Form Hiệu chuẩn -->
+                <div style="flex: 1.2; min-width: 320px; display: flex; flex-direction: column; gap: 20px;">
+                    
+                    <!-- Khối Điều Khiển Chạy Thử Hiệu Chuẩn -->
+                    <div class="iot-card" style="margin-bottom: 0;">
+                        <div class="iot-card-title">⚡ ĐIỀU KHIỂN CHẠY THỬ HIỆU CHUẨN</div>
+                        <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 10px;">
+                            <div style="background: var(--bg-hover); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center;">
+                                <div style="display: flex; gap: 15px; width: 100%;">
+                                    <button id="btnCalibStart" type="button" class="btn" onclick="startCalibrationRun()" style="flex: 1; background: #22c55e; color: white; border: none; font-weight: bold; height: 45px; cursor: pointer; border-radius: 6px; box-shadow: 0 4px 6px rgba(34, 197, 94, 0.2); font-size: 14px;">
+                                        ▶ BẮT ĐẦU CHẠY THỬ
+                                    </button>
+                                    <button id="btnCalibStop" type="button" class="btn" onclick="stopCalibrationRun()" disabled style="flex: 1; background: #ef4444; color: white; border: none; font-weight: bold; height: 45px; cursor: pointer; border-radius: 6px; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.2); font-size: 14px;">
+                                        ■ DỪNG CHẠY THỬ
+                                    </button>
+                                </div>
+                                <div id="calibRunStatus" style="font-size: 13px; color: var(--txt-main); font-weight: bold; text-align: center; margin-top: 5px;">
+                                    Trạng thái: Đang chờ chạy thử
+                                </div>
+                            </div>
+
+                            <div style="background: var(--bg-hover); border: 1px solid var(--border); padding: 15px; border-radius: 8px; display: flex; flex-direction: column; gap: 10px;">
+                                <span style="font-weight: 700; color: var(--txt-main); font-size: 14px;">⚙️ Điều khiển động cơ van kim (Vệ sinh/Reset):</span>
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <select id="calib-stepper-sel" class="field" style="max-width: 120px; font-weight: bold; height: 38px;">
+                                        <option value="N">Bồn N (Đạm)</option>
+                                        <option value="P">Bồn P (Lân)</option>
+                                        <option value="K">Bồn K (Kali)</option>
+                                    </select>
+                                    <input type="number" id="calib-stepper-steps" class="field" value="200" step="50" min="50" max="2000" style="width: 100px; text-align: center; font-weight: bold; height: 38px;">
+                                    <span style="color: var(--txt-muted); font-size: 13px; font-weight: 600;">bước</span>
+                                    <button type="button" class="btn" onclick="sendCalibStepperCmd()" style="background: var(--p-color); color: white; border: none; font-weight: bold; padding: 0 16px; height: 38px; min-height: 38px; font-size: 13px; cursor: pointer; border-radius: 4px; margin-left: auto;">
+                                        QUAY VAN
+                                    </button>
+                                </div>
+                                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 5px;">
+                                    <button class="btn-sm btn-home" onclick="sendHome()" style="flex: 1; min-height: 36px; padding: 4px;">⌂ RESET CƠ (HOME)</button>
+                                    <button class="btn-sm danger" onclick="stopMixing()" style="flex: 1; min-height: 36px; padding: 4px; background: rgba(239, 68, 68, 0.1); border-color: var(--danger); color: var(--danger);">■ DỪNG KHẨN</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Khối Tính Toán Hiệu Chuẩn -->
+                    <div class="iot-card" style="margin-bottom: 0;">
+                        <div class="iot-card-title">📝 TÍNH TOÁN HIỆU CHUẨN mL/XUNG</div>
+                        
+                        <div style="background: #f8fafc; border: 1.5px solid var(--border); border-radius: 8px; padding: 18px; display: flex; flex-direction: column; gap: 15px; margin-top: 10px;">
+                            <div style="font-size: 12px; color: var(--txt-muted); line-height: 1.4; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
+                                * Sau khi chạy thử xong, chọn cảm biến muốn hiệu chỉnh, nhập thể tích đo được bằng cốc để tự động tính toán hệ số xung mới.
+                            </div>
+
+                            <form id="calibForm" onsubmit="saveNewPulseFactor(event)" style="display: flex; flex-direction: column; gap: 12px;">
+                                <div>
+                                    <label style="font-size: 13px; font-weight: 700; color: var(--txt-main); display: block; margin-bottom: 6px;">1. Chọn Cảm Biến Cần Hiệu Chuẩn</label>
+                                    <select id="calib-sensor-select" class="field" onchange="onCalibSensorChange()" style="font-weight: bold; font-size: 14px; width: 100%; height: 38px;">
+                                        <option value="N">Cảm Biến Bồn 1 (N)</option>
+                                        <option value="P">Cảm Biến Bồn 2 (P)</option>
+                                        <option value="K">Cảm Biến Bồn 3 (K)</option>
+                                        <option value="Main">Cảm Biến Đường Ống Chính (Main)</option>
+                                    </select>
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div>
+                                        <label style="font-size: 13px; font-weight: 700; color: var(--txt-main); display: block; margin-bottom: 6px;">2. Số Xung Đo Được</label>
+                                        <input type="number" id="calib-pulses-count" class="field" readonly value="0" style="background: #f1f5f9; text-align: center; font-weight: 900; font-size: 16px; color: #1e293b; width: 100%; height: 38px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 13px; font-weight: 700; color: var(--txt-main); display: block; margin-bottom: 6px;">3. Thể Tích Thực Tế Đo (mL)</label>
+                                        <input type="number" id="calib-actual-vol" class="field" placeholder="Nhập thể tích cốc đo" required oninput="calculateCalibFactor()" style="text-align: center; font-weight: 900; font-size: 16px; color: #1e293b; width: 100%; border-color: var(--p-color); height: 38px;">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label style="font-size: 13px; font-weight: 700; color: var(--txt-main); display: block; margin-bottom: 6px;">4. Hệ Số mL/xung Mới</label>
+                                    <input type="text" id="calib-calculated-factor" class="field" readonly value="--" style="background: #eff6ff; font-weight: 900; text-align: center; font-size: 18px; color: #1d4ed8; border: 1.5px dashed #2563eb; width: 100%; height: 38px;">
+                                    <small style="color: var(--txt-muted); font-size: 11px; margin-top: 4px; display: block;">Mặc định: <strong id="calib-default-factor-label">0.1700 mL/xung</strong></small>
+                                </div>
+                                <button type="submit" class="btn" style="background: linear-gradient(135deg, #16a34a, #22c55e); color: white; border: none; font-weight: 800; font-size: 14px; height: 44px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; width: 100%; box-shadow: 0 4px 6px rgba(34, 197, 94, 0.2);">
+                                    💾 GHI VÀO CODE ESP32
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cột phải: Hướng dẫn & Bảng Lịch sử hiệu chuẩn -->
+                <div style="flex: 1.5; min-width: 320px; display: flex; flex-direction: column; gap: 20px;">
+                    <!-- Hướng dẫn sử dụng hiệu chuẩn -->
+                    <div class="iot-card" style="margin-bottom: 0;">
+                        <div class="iot-card-title">📖 QUY TRÌNH HIỆU CHUẨN CHUẨN XÁC</div>
+                        <div style="font-size: 13.5px; color: var(--txt-main); line-height: 1.6; display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 10px 15px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px;">
+                            <div>1️⃣ Chuẩn bị cốc đo thể tích chính xác (ví dụ loại 1000 mL) đặt dưới đầu ra của bồn cần test.</div>
+                            <div>2️⃣ Nhấn nút <strong style="color:#2563eb;">BẮT ĐẦU CHẠY THỬ</strong>. Van chính sẽ tự mở trước 5 giây, sau đó bơm chạy để chất lỏng chảy qua cảm biến.</div>
+                            <div>3️⃣ Khi chất lỏng chảy đến một lượng xác định, nhấn <strong style="color:#ef4444;">DỪNG CHẠY THỬ</strong> ngay lập tức.</div>
+                            <div>4️⃣ Tại khối <strong>TÍNH TOÁN HIỆU CHUẨN</strong>, chọn cảm biến tương ứng. Số xung đếm được sẽ tự động tải lên.</div>
+                            <div>5️⃣ Nhập thể tích thực tế đo được bằng cốc vào ô tương ứng để tính toán hệ số <code>mL/xung</code> mới.</div>
+                            <div>6️⃣ Nhấn nút <strong>Ghi vào code ESP32</strong> để lưu hệ số vào file code, sau đó tiến hành biên dịch và nạp lại chương trình cho ESP32.</div>
+                        </div>
+                    </div>
+
+                    <!-- Bảng Lịch sử hiệu chuẩn -->
+                    <div class="iot-card" style="margin-bottom: 0; flex-grow: 1;">
+                        <div class="iot-card-title" style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>📋 LỊCH SỬ HIỆU CHUẨN</span>
+                            <button type="button" class="btn-sm" onclick="loadCalibrationHistory()" style="font-size: 11px; padding: 4px 8px; min-height: 28px;">🔄 Làm mới</button>
+                        </div>
+                        <div style="overflow-x: auto; margin-top: 15px;">
+                            <table class="history-table">
+                                <thead>
+                                    <tr>
+                                        <th>Thời Gian</th>
+                                        <th>Chu Kỳ</th>
+                                        <th>Cảm Biến</th>
+                                        <th>Thể Tích (mL)</th>
+                                        <th>Số Xung</th>
+                                        <th>Lưu Lượng TB (L/min)</th>
+                                        <th>Thời Gian Chạy (s)</th>
+                                        <th style="text-align: center;">Thao Tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="calibrationHistoryBody">
+                                    <tr><td colspan="9" class="empty-row" style="text-align: center; padding: 20px;">Đang tải dữ liệu...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================
              PAGE: THÔNG TIN HỆ THỐNG
         ======================================== -->
         <section class="page" id="page-system">
@@ -935,6 +1146,9 @@
                                 <button class="btn-sm btn-home" onclick="sendHome()" style="min-height: 38px; padding: 4px;">⌂ RESET ĐỘNG CƠ</button>
                                 <button class="btn-sm danger" onclick="stopMixing()" style="min-height: 38px; padding: 4px; background: rgba(239, 68, 68, 0.1); border-color: var(--danger); color: var(--danger);">■ DỪNG KHẨN CẤP</button>
                             </div>
+                            <button type="button" class="btn" onclick="showPage('calibration')" style="margin-top: 8px; min-height: 42px; background: linear-gradient(135deg, var(--p-color), #22c55e); color: white; border: none; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 6px; cursor: pointer; width: 100%;">
+                                <i class="fas fa-balance-scale"></i> HIỆU CHUẨN CẢM BIẾN
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -969,7 +1183,7 @@
                     <div class="sys-info-list">
                         <div class="sys-info-row"><span class="sys-lbl">Vi điều khiển</span><span class="sys-val">ESP32 DevKit V1</span></div>
                         <div class="sys-info-row"><span class="sys-lbl">Động cơ bước</span><span class="sys-val">NEMA 17 × 3</span></div>
-                             <div class="sys-info-row"><span class="sys-lbl">Bộ điều khiển</span><span class="sys-val">A4988 (1/8 bước)</span></div>
+                        <div class="sys-info-row"><span class="sys-lbl">Bộ điều khiển</span><span class="sys-val">TB6600 (1/8 bước)</span></div>
                         <div class="sys-info-row"><span class="sys-lbl">Cảm biến lưu lượng</span><span class="sys-val">YF-S401 × 3</span></div>
                         <div class="sys-info-row"><span class="sys-lbl">GPIO Van N</span><span class="sys-val n-val">13, 14, 15</span></div>
                         <div class="sys-info-row"><span class="sys-lbl">GPIO Van P</span><span class="sys-val p-val">16, 17, 18</span></div>
@@ -1150,10 +1364,18 @@ window.startMixing = function() {
     const isSimMode = document.getElementById('autoModeToggle') ? document.getElementById('autoModeToggle').checked : false;
     let modeLabel = isSimMode ? 'Đồng thời (NPK cùng lúc)' : 'Tuần tự (N → P → K)';
 
-    if (n === 0 && p === 0 && k === 0) {
-        showToast('⚠️ Vui lòng cấu hình định lượng phân cần pha', 'warning'); return;
-    }
+    // Cho phép mở Dialog ngay cả khi bằng 0 để người dùng điền giá trị trực tiếp tại Popup!
     showConfirmDialog(n, p, k, modeLabel);
+};
+
+window.updateConfirmTotal = function() {
+    const valN = Math.max(0, parseFloat(document.getElementById('confirmInputN').value) || 0);
+    const valP = Math.max(0, parseFloat(document.getElementById('confirmInputP').value) || 0);
+    const valK = Math.max(0, parseFloat(document.getElementById('confirmInputK').value) || 0);
+    const totalEl = document.getElementById('confirmTotalVal');
+    if (totalEl) {
+        totalEl.textContent = (valN + valP + valK).toFixed(0) + ' mL';
+    }
 };
 
 function showConfirmDialog(n, p, k, modeLabel) {
@@ -1162,7 +1384,7 @@ function showConfirmDialog(n, p, k, modeLabel) {
     const descEl = document.getElementById('confirmDesc');
     if (iconEl) iconEl.textContent = '🧪';
     if (titleEl) titleEl.textContent = 'Xác nhận bắt đầu pha trộn?';
-    if (descEl) descEl.textContent = 'Vui lòng kiểm tra lại thông số phân bón trước khi khởi động hệ thống.';
+    if (descEl) descEl.textContent = 'Bạn có thể kiểm tra hoặc điều chỉnh trực tiếp thể tích dung dịch của từng bồn dưới đây.';
 
     const now = new Date();
     const hh = String(now.getHours()).padStart(2, '0');
@@ -1172,12 +1394,12 @@ function showConfirmDialog(n, p, k, modeLabel) {
     const summary = document.getElementById('confirmSummary');
     if(summary) {
         summary.innerHTML = `
-            <div class="confirm-summary-row"><span class="cs-label">Chế độ</span><span class="cs-val">${modeLabel}</span></div>
-            <div class="confirm-summary-row"><span class="cs-label">🕒 Bắt đầu lúc</span><span class="cs-val"><input type="time" id="confirmStartTime" class="confirm-input-time" style="font-weight: 700; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 15px; outline: none; background: #fff;" value="${currentTime}"></span></div>
-            <div class="confirm-summary-row"><span class="cs-label">🌿 Bồn 1</span><span class="cs-val n-val">${n.toFixed(0)} mL</span></div>
-            <div class="confirm-summary-row"><span class="cs-label">🌾 Bồn 2</span><span class="cs-val p-val">${p.toFixed(0)} mL</span></div>
-            <div class="confirm-summary-row"><span class="cs-label">🍂 Bồn 3</span><span class="cs-val k-val">${k.toFixed(0)} mL</span></div>
-            <div class="confirm-summary-row"><span class="cs-label">📊 Tổng cộng</span><span class="cs-val">${(n+p+k).toFixed(0)} mL</span></div>
+            <div class="confirm-summary-row" style="margin-bottom: 4px;"><span class="cs-label">Chế độ</span><span class="cs-val" style="font-weight:700; color:var(--primary-nlu);">${modeLabel}</span></div>
+            <div class="confirm-summary-row" style="margin-bottom: 8px;"><span class="cs-label">🕒 Bắt đầu lúc</span><span class="cs-val"><input type="time" id="confirmStartTime" class="confirm-input-time" style="font-weight: 700; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 15px; outline: none; background: #fff;" value="${currentTime}"></span></div>
+            <div class="confirm-summary-row" style="margin-top: 6px;"><span class="cs-label" style="font-weight: 700;">🌿 Bồn 1 (Đạm - N)</span><span class="cs-val"><input type="number" id="confirmInputN" class="confirm-input-val" style="width: 100px; text-align: right; font-weight: 800; color: #16a34a; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 15px; outline: none; background: #fff;" value="${n.toFixed(0)}" min="0" oninput="updateConfirmTotal()"> <small style="color: #64748b; font-size: 11px; font-weight:700;">mL</small></span></div>
+            <div class="confirm-summary-row" style="margin-top: 6px;"><span class="cs-label" style="font-weight: 700;">🌾 Bồn 2 (Lân - P)</span><span class="cs-val"><input type="number" id="confirmInputP" class="confirm-input-val" style="width: 100px; text-align: right; font-weight: 800; color: #2563eb; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 15px; outline: none; background: #fff;" value="${p.toFixed(0)}" min="0" oninput="updateConfirmTotal()"> <small style="color: #64748b; font-size: 11px; font-weight:700;">mL</small></span></div>
+            <div class="confirm-summary-row" style="margin-top: 6px;"><span class="cs-label" style="font-weight: 700;">🍂 Bồn 3 (Kali - K)</span><span class="cs-val"><input type="number" id="confirmInputK" class="confirm-input-val" style="width: 100px; text-align: right; font-weight: 800; color: #d97706; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 15px; outline: none; background: #fff;" value="${k.toFixed(0)}" min="0" oninput="updateConfirmTotal()"> <small style="color: #64748b; font-size: 11px; font-weight:700;">mL</small></span></div>
+            <div class="confirm-summary-row" style="margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 8px;"><span class="cs-label" style="font-weight: 800; color: var(--txt-main);">📊 Tổng cộng</span><span class="cs-val" id="confirmTotalVal" style="font-weight: 900; color: var(--txt-main); font-size: 16px;">${(n+p+k).toFixed(0)} mL</span></div>
         `;
     }
     window._pendingStartFn = _doActualStart;
@@ -1186,6 +1408,29 @@ function showConfirmDialog(n, p, k, modeLabel) {
 }
 
 window.confirmStartMixing = function() {
+    const confN = document.getElementById('confirmInputN');
+    const confP = document.getElementById('confirmInputP');
+    const confK = document.getElementById('confirmInputK');
+    if (confN && confP && confK) {
+        const valN = Math.max(0, parseFloat(confN.value) || 0);
+        const valP = Math.max(0, parseFloat(confP.value) || 0);
+        const valK = Math.max(0, parseFloat(confK.value) || 0);
+        
+        if (valN === 0 && valP === 0 && valK === 0) {
+            showToast('⚠️ Vui lòng châm ít nhất một loại phân bón (mL > 0)!', 'warning');
+            return;
+        }
+
+        // Cập nhật ngược lại các trường chính để đồng bộ dữ liệu toàn hệ thống
+        if (document.getElementById('inputN')) document.getElementById('inputN').value = valN;
+        if (document.getElementById('inputP')) document.getElementById('inputP').value = valP;
+        if (document.getElementById('inputK')) document.getElementById('inputK').value = valK;
+        
+        if (typeof updateDashboardSettingsDisplay === 'function') {
+            updateDashboardSettingsDisplay();
+        }
+    }
+
     const overlay = document.getElementById('confirmOverlay');
     if(overlay) overlay.classList.add('hidden');
     

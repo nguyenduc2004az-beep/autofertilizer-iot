@@ -129,6 +129,33 @@ async function initDB() {
             )
         `);
 
+        // 5b. Tạo bảng lich_su_hieu_chinh (Phiên bản chu kỳ tự động lưu thể tích, xung, tốc độ trung bình)
+        try {
+            const [columns] = await pool.query('SHOW COLUMNS FROM lich_su_hieu_chinh');
+            const colNames = columns.map(c => c.Field.toLowerCase());
+            if (!colNames.includes('xung')) {
+                console.log('[DB] Phát hiện cấu trúc cũ của bảng lich_su_hieu_chinh. Đang tự động nâng cấp sang phiên bản chu kỳ...');
+                await pool.query('DROP TABLE IF EXISTS lich_su_hieu_chinh');
+            }
+        } catch (e) {
+            // Bảng chưa tồn tại, bỏ qua lỗi để tạo mới bên dưới
+        }
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS lich_su_hieu_chinh (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                thoi_gian DATETIME NOT NULL,
+                chu_ky VARCHAR(50) NOT NULL,
+                cam_bien VARCHAR(50) NOT NULL,
+                the_tich_ml FLOAT NOT NULL,
+                xung INT NOT NULL,
+                luu_luong_tb_lpm FLOAT NOT NULL,
+                thoi_gian_chay_s INT NOT NULL,
+                ghi_chu TEXT
+            )
+        `);
+
+
         // Tự động kiểm tra và thêm cột nếu bảng đã tồn tại từ trước (bản cũ)
         try {
             const [columns] = await pool.query('SHOW COLUMNS FROM lich_hen');
@@ -715,6 +742,225 @@ app.delete('/api/history', async (req, res) => {
         res.status(500).json({ error: 'Lỗi Database' });
     }
 });
+
+
+
+
+// ================================================================
+// QUẢN LÝ LỊCH SỬ HIỆU CHUẨN CẢM BIẾN & CHẠY THỬ
+// ================================================================
+
+let calibrationRun = {
+    active: false,
+    startTime: null,
+    startValues: { N: 0, P: 0, K: 0, Main: 0 },
+    cycleId: null,
+    timer: null
+};
+
+app.post('/api/calibration/start-run', (req, res) => {
+    if (calibrationRun.active) {
+        return res.status(400).json({ error: 'Đang có một chu kỳ hiệu chuẩn chạy thử hoạt động' });
+    }
+    
+    if (calibrationRun.timer) {
+        clearTimeout(calibrationRun.timer);
+    }
+    
+    // Bật van điện từ chính trước
+    mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 1 }), { qos: 1 });
+    
+    calibrationRun.active = true;
+    calibrationRun.startTime = Date.now() + 5000; // Bơm sẽ bật sau 5 giây
+    calibrationRun.cycleId = 'C' + Date.now().toString().slice(-6);
+    calibrationRun.startValues = {
+        N: lastDeviceStatus?.valves?.N?.volume_ml || 0,
+        P: lastDeviceStatus?.valves?.P?.volume_ml || 0,
+        K: lastDeviceStatus?.valves?.K?.volume_ml || 0,
+        Main: lastDeviceStatus?.main_volume_ml || lastDeviceStatus?.total_volume_ml || 0
+    };
+    
+    console.log(`[CALIBRATION] Đang mở van chính, chờ 5 giây trước khi kích hoạt bơm...`);
+    
+    calibrationRun.timer = setTimeout(() => {
+        mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 1 }), { qos: 1 });
+        console.log(`[CALIBRATION] Đã kích hoạt bơm cho chu kỳ: ${calibrationRun.cycleId}`);
+        calibrationRun.timer = null;
+    }, 5000);
+    
+    res.json({ success: true, cycleId: calibrationRun.cycleId });
+});
+
+app.post('/api/calibration/stop-run', async (req, res) => {
+    if (calibrationRun.timer) {
+        clearTimeout(calibrationRun.timer);
+        calibrationRun.timer = null;
+    }
+    
+    // Tắt bơm và van chính ngay lập tức
+    mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 0 }), { qos: 1 });
+    mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 0 }), { qos: 1 });
+    
+    if (calibrationRun.active) {
+        calibrationRun.active = false;
+        const endTime = Date.now();
+        const duration_s = Math.max(1, Math.round((endTime - calibrationRun.startTime) / 1000));
+        
+        const endValues = {
+            N: lastDeviceStatus?.valves?.N?.volume_ml || 0,
+            P: lastDeviceStatus?.valves?.P?.volume_ml || 0,
+            K: lastDeviceStatus?.valves?.K?.volume_ml || 0,
+            Main: lastDeviceStatus?.main_volume_ml || lastDeviceStatus?.total_volume_ml || 0
+        };
+        
+        const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const cycleId = calibrationRun.cycleId;
+        
+        const results = {
+            N: { volume_ml: Math.max(0, endValues.N - calibrationRun.startValues.N), pulses: Math.round(Math.max(0, endValues.N - calibrationRun.startValues.N) / 0.170) },
+            P: { volume_ml: Math.max(0, endValues.P - calibrationRun.startValues.P), pulses: Math.round(Math.max(0, endValues.P - calibrationRun.startValues.P) / 0.170) },
+            K: { volume_ml: Math.max(0, endValues.K - calibrationRun.startValues.K), pulses: Math.round(Math.max(0, endValues.K - calibrationRun.startValues.K) / 0.170) },
+            Main: { volume_ml: Math.max(0, endValues.Main - calibrationRun.startValues.Main), pulses: Math.round(Math.max(0, endValues.Main - calibrationRun.startValues.Main) / 37.037) }
+        };
+        
+        const sensors = ['N', 'P', 'K', 'Main'];
+        for (const s of sensors) {
+            const diff_vol = results[s].volume_ml;
+            const pulses = results[s].pulses;
+            const avg_flow_lpm = parseFloat(((diff_vol * 0.06) / duration_s).toFixed(3));
+            
+            try {
+                const query = `
+                    INSERT INTO lich_su_hieu_chinh (thoi_gian, chu_ky, cam_bien, the_tich_ml, xung, luu_luong_tb_lpm, thoi_gian_chay_s, ghi_chu)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `;
+                const values = [
+                    timestamp, cycleId, s, diff_vol, pulses, avg_flow_lpm, duration_s, 'Tự động ghi nhận chạy thử'
+                ];
+                if (pool) {
+                    await pool.query(query, values);
+                }
+            } catch (dbErr) {
+                console.error(`[CALIBRATION] Lỗi lưu kết quả cảm biến ${s}:`, dbErr.message);
+            }
+        }
+        
+        console.log(`[CALIBRATION] Đã hoàn thành chu kỳ chạy thử hiệu chuẩn: ${cycleId} (${duration_s}s)`);
+        io.emit('calibration_history_updated');
+        
+        res.json({
+            success: true,
+            cycleId,
+            duration_s,
+            results
+        });
+    } else {
+        res.json({ success: true, message: 'Không có chu kỳ hiệu chuẩn nào đang hoạt động.' });
+    }
+});
+
+app.post('/api/calibration/update-firmware', (req, res) => {
+    const { sensor, factor } = req.body;
+    if (!sensor || factor === undefined) {
+        return res.status(400).json({ error: 'Thiếu thông số cảm biến hoặc hệ số mới.' });
+    }
+    
+    const fs = require('fs');
+    const inoPath = path.join(__dirname, '../esp32/fertilizer_system/fertilizer_system.ino');
+    
+    try {
+        if (!fs.existsSync(inoPath)) {
+            console.error('[CALIBRATION] Không tìm thấy file firmware ESP32 tại:', inoPath);
+            return res.status(500).json({ error: 'Không tìm thấy file mã nguồn ESP32 trên máy chủ.' });
+        }
+        
+        let content = fs.readFileSync(inoPath, 'utf8');
+        let regex;
+        let replacement;
+        const formattedFactor = parseFloat(factor).toFixed(4);
+        
+        if (sensor === 'N') {
+            regex = /#define\s+ML_PER_PULSE_N\s+[\d.]+f/;
+            replacement = `#define ML_PER_PULSE_N      ${formattedFactor}f`;
+        } else if (sensor === 'P') {
+            regex = /#define\s+ML_PER_PULSE_P\s+[\d.]+f/;
+            replacement = `#define ML_PER_PULSE_P      ${formattedFactor}f`;
+        } else if (sensor === 'K') {
+            regex = /#define\s+ML_PER_PULSE_K\s+[\d.]+f/;
+            replacement = `#define ML_PER_PULSE_K      ${formattedFactor}f`;
+        } else if (sensor === 'Main') {
+            regex = /#define\s+ML_PER_PULSE_MAIN\s+[\d.]+f/;
+            replacement = `#define ML_PER_PULSE_MAIN   ${formattedFactor}f`;
+        }
+        
+        if (regex && content.match(regex)) {
+            content = content.replace(regex, replacement);
+            fs.writeFileSync(inoPath, content, 'utf8');
+            console.log(`[CALIBRATION] Đã cập nhật hệ số ${sensor} thành ${formattedFactor}f trong file firmware.`);
+            res.json({ success: true, factor: formattedFactor });
+        } else {
+            res.status(404).json({ error: `Không tìm thấy dòng định nghĩa hệ số cho cảm biến ${sensor} trong code.` });
+        }
+    } catch (err) {
+        console.error('[CALIBRATION] Lỗi ghi file firmware:', err.message);
+        res.status(500).json({ error: 'Lỗi máy chủ khi cập nhật file code: ' + err.message });
+    }
+});
+
+app.get('/api/calibration/history', async (req, res) => {
+    try {
+        const query = `
+            SELECT id, thoi_gian AS timestamp, chu_ky AS cycle, cam_bien AS sensor, 
+                   the_tich_ml AS volume_ml, xung AS pulses, 
+                   luu_luong_tb_lpm AS flow_lpm, thoi_gian_chay_s AS duration_s, ghi_chu AS notes
+            FROM lich_su_hieu_chinh
+            ORDER BY thoi_gian DESC, id DESC
+        `;
+        const [rows] = await pool.query(query);
+        res.json(rows);
+    } catch (e) {
+        console.error('[DB] Lỗi GET /calibration/history:', e.message);
+        res.status(500).json({ error: 'Lỗi Database' });
+    }
+});
+
+app.post('/api/calibration/save', async (req, res) => {
+    try {
+        const { sensor, actual_ml, pulses, notes } = req.body;
+        const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const query = `
+            INSERT INTO lich_su_hieu_chinh (thoi_gian, chu_ky, cam_bien, the_tich_ml, xung, luu_luong_tb_lpm, thoi_gian_chay_s, ghi_chu)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        const values = [
+            timestamp, 
+            'Manual', 
+            sensor || 'N', 
+            parseFloat(actual_ml) || 0, 
+            parseInt(pulses) || 0, 
+            0, 
+            0, 
+            notes || 'Ghi nhận thủ công'
+        ];
+        const [result] = await pool.query(query, values);
+        res.json({ success: true, id: result.insertId });
+    } catch (e) {
+        console.error('[DB] Lỗi POST /calibration/save:', e.message);
+        res.status(500).json({ error: 'Lỗi Database' });
+    }
+});
+
+app.delete('/api/calibration/history/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM lich_su_hieu_chinh WHERE id = ?', [req.params.id]);
+        console.log(`[DB] Đã xóa lịch sử hiệu chuẩn id=${req.params.id}`);
+        res.json({ success: true });
+    } catch (e) {
+        console.error('[DB] Lỗi DELETE /calibration/history/:id:', e.message);
+        res.status(500).json({ error: 'Lỗi Database' });
+    }
+});
+
 
 app.get('/api/recipes', async (req, res) => {
     try {
