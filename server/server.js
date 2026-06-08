@@ -702,6 +702,14 @@ app.post('/api/home', (req, res) => {
     res.json({ success: true });
 });
 
+app.post('/api/reset-main', (req, res) => {
+    mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'reset_main' }), { qos: 1 }, (err) => {
+        if (err) return res.status(500).json({ error: 'Lỗi MQTT: ' + err.message });
+        console.log('[RESET] Đã gửi lệnh reset lưu lượng đường ống chính');
+        res.json({ success: true });
+    });
+});
+
 app.get('/api/ai-calibration', (req, res) => {
     res.json(aiCalibration);
 });

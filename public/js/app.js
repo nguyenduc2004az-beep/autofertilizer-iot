@@ -1590,6 +1590,22 @@ function quickStopAll() {
     stopMixing();
 }
 
+function resetMainVolume() {
+    if(!confirm('Bạn có chắc chắn muốn xóa thể tích tích lũy của đường ống chính về 0?')) return;
+    fetch('/api/reset-main', {
+        method: 'POST'
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Đã gửi yêu cầu reset thể tích tích lũy!', 'success');
+        } else {
+            showToast('Lỗi: ' + (data.error || 'Không xác định'), 'error');
+        }
+    })
+    .catch(err => showToast('Lỗi kết nối server', 'error'));
+}
+
 // Khởi tạo khi tải trang
 initWatering();
 loadCropsDropdown();

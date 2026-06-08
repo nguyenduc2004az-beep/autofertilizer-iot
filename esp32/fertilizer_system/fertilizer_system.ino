@@ -647,8 +647,8 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         lastSatPosN = 0; lastSatPosP = 0; lastSatPosK = 0;
         lastSatFlowN = 0.0f; lastSatFlowP = 0.0f; lastSatFlowK = 0.0f;
         // Reset pulse counters và PID state
-        noInterrupts(); pulseN = pulseP = pulseK = 0; interrupts();
-        snapPulseN = snapPulseP = snapPulseK = 0;
+        noInterrupts(); pulseN = pulseP = pulseK = pulseMain = 0; interrupts();
+        snapPulseN = snapPulseP = snapPulseK = snapPulseMain = 0;
         // Reset cửa sổ trượt
         memset(historyN, 0, sizeof(historyN));
         memset(historyP, 0, sizeof(historyP));
@@ -715,6 +715,16 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
             smartHome(3, posK, EN_K);
             Serial.println("[HOME] Đã reset động cơ về vị trí gốc an toàn.");
         }
+    }
+    // ---- Lệnh RESET THỂ TÍCH TỔNG ĐƯỜNG ỐNG CHÍNH ----
+    else if (strcmp(cmd, "reset_main") == 0) {
+        noInterrupts();
+        pulseMain = 0;
+        snapPulseMain = 0;
+        interrupts();
+        flowLpmMain = 0.0f;
+        Serial.println("[RESET] Đã reset thể tích đường ống chính về 0.");
+        publishStatus();
     }
     // ---- Lệnh ĐIỀU KHIỂN THỦ CÔNG (Bơm, Van điện từ) ----
     else if (strcmp(cmd, "manual") == 0) {
