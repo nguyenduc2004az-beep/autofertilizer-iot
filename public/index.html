@@ -159,7 +159,7 @@
                             <div id="dsh-active-recipe" style="font-weight: 800; color: #000000; font-size: 15px; word-break: break-all;">Chưa chọn</div>
                         </div>
                         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                            <span id="dsh-active-mode" style="font-size: 10px; font-weight: 800; color: white; padding: 2px 8px; border-radius: 4px; background: #22c55e;">TUẦN TỰ</span>
+                            <span id="dsh-active-mode" style="font-size: 10px; font-weight: 800; color: white; padding: 2px 8px; border-radius: 4px; background: #0ea5e9;">ĐỒNG THỜI</span>
                             <span id="dsh-set-duration" style="font-size: 10px; font-weight: 800; color: #3b82f6; background: #eff6ff; border: 1px solid #bfdbfe; padding: 2px 8px; border-radius: 4px;">-- phút</span>
                             <span id="dsh-schedule-count" style="font-size: 10px; font-weight: 800; color: #1e293b; background: #f1f5f9; padding: 2px 8px; border-radius: 4px;">0 lịch đang chạy</span>
                         </div>
@@ -660,17 +660,9 @@
                                 </style>
                             </div>
                             
-                            <!-- Bơm Mode (Hút tuần tự / Song song) -->
-                            <div style="background: #f1f5f9; padding: 12px 18px; border-radius: 8px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border);">
-                                <div>
-                                    <strong style="display: block; margin-bottom: 3px; color: var(--txt-main); font-size: 14px;">Cách thức bơm phân</strong>
-                                    <span style="font-size: 12px; color: #64748b;" id="modeDescText">Bơm lần lượt từng bồn (Độ chính xác cao).</span>
-                                </div>
-                                <label class="toggle-switch" style="width: 120px; position: relative;">
-                                    <input type="checkbox" id="autoModeToggle" onchange="toggleAutoMode(this.checked)">
-                                    <span class="toggle-slider"></span>
-                                    <span id="autoModeText" style="position: absolute; right: 55px; top: 12px; font-weight: 900; font-size: 12px; color: #3b82f6; pointer-events: none; transition: 0.3s;">TUẦN TỰ</span>
-                                </label>
+                            <!-- Bơm Mode (Ẩn - Chỉ dùng chế độ Đồng thời) -->
+                            <div style="display: none !important;">
+                                <input type="checkbox" id="autoModeToggle" checked onchange="toggleAutoMode(this.checked)">
                             </div>
                             
                             <!-- Action Buttons -->
@@ -1360,9 +1352,9 @@ window.startMixing = function() {
     const p = parseFloat(document.getElementById('inputP').value) || 0;
     const k = parseFloat(document.getElementById('inputK').value) || 0;
     
-    // Auto Mode Toggle specifies the mode
-    const isSimMode = document.getElementById('autoModeToggle') ? document.getElementById('autoModeToggle').checked : false;
-    let modeLabel = isSimMode ? 'Đồng thời (NPK cùng lúc)' : 'Tuần tự (N → P → K)';
+    // Luôn sử dụng chế độ đồng thời
+    const isSimMode = true;
+    let modeLabel = 'Đồng thời (NPK cùng lúc)';
 
     // Cho phép mở Dialog ngay cả khi bằng 0 để người dùng điền giá trị trực tiếp tại Popup!
     showConfirmDialog(n, p, k, modeLabel);
@@ -1476,23 +1468,29 @@ window.closeConfirmOnBg = function(e) {
     if (e.target === document.getElementById('confirmOverlay')) closeConfirm();
 };
 
-/* Gọi hàm startMixing gốc từ app.js hoặc fetch API trực tiếp */
 function _doActualStart() {
-    const isSimMode = document.getElementById('autoModeToggle') ? document.getElementById('autoModeToggle').checked : false;
+    const isSimMode = true;
+    const n = parseFloat(document.getElementById('inputN').value) || 0;
+    const p = parseFloat(document.getElementById('inputP').value) || 0;
+    const k = parseFloat(document.getElementById('inputK').value) || 0;
+    const calcDurationEl = document.getElementById('calc-duration');
+    const durationMin = calcDurationEl ? parseFloat(calcDurationEl.value) : 1.0;
+    const totalDosingFlowLpm = parseFloat(((n + p + k) / (durationMin * 1000)).toFixed(3));
+
     let payload = {
-        mode: isSimMode ? 'sim' : 'seq',
+        mode: 'sim',
         recipe_name: document.getElementById('recipeName') ? document.getElementById('recipeName').value : 'Không tên',
-        N_ml: document.getElementById('inputN').value || 0,
-        P_ml: document.getElementById('inputP').value || 0,
-        K_ml: document.getElementById('inputK').value || 0,
+        N_ml: n,
+        P_ml: p,
+        K_ml: k,
         N_speed: 60,
         P_speed: 60,
         K_speed: 60,
-        ratio_N: document.getElementById('inputN').value || 0,
-        ratio_P: document.getElementById('inputP').value || 0,
-        ratio_K: document.getElementById('inputK').value || 0,
-        total_vol_l: ((parseFloat(document.getElementById('inputN').value||0) + parseFloat(document.getElementById('inputP').value||0) + parseFloat(document.getElementById('inputK').value||0)) / 1000).toFixed(2),
-        total_lpm: 3.0
+        ratio_N: n,
+        ratio_P: p,
+        ratio_K: k,
+        total_vol_l: ((n + p + k) / 1000).toFixed(2),
+        total_lpm: totalDosingFlowLpm > 0.05 ? totalDosingFlowLpm : 3.0
     };
 
     fetch('/api/start', {

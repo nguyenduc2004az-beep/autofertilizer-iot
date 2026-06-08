@@ -5,7 +5,7 @@
 const socket = io();
 let isOnline = false;
 let espOnline = false;
-let simMode = false;
+let simMode = true; // Always default to simultaneous mode
 let sysThresholds = {
     minFlow: 0.1,
     maxFlow: 6.0,
@@ -31,7 +31,6 @@ function doLogin(e) {
         showPage('dashboard');
         initChart();
         loadHistory();
-        loadRecipes();
         loadRecipes();
         initWatering();
         loadSchedules();
@@ -321,7 +320,7 @@ function updateUI(data) {
     const mTxt = document.getElementById('monStatusTxt');
     if(data.running) {
         mStat.className = 'conn-pill running active';
-        mTxt.textContent = 'ĐANG PHA TRỘN ' + (simMode ? '(ĐỒNG THỜI)' : `(G.ĐOẠN ${data.phase})`);
+        mTxt.textContent = 'ĐANG PHA TRỘN (ĐỒNG THỜI)';
     } else {
         mStat.className = 'conn-pill ' + (data.phase===4 ? 'done' : 'idle');
         mTxt.textContent = data.phase===4 ? 'HOÀN THÀNH' : 'SẴN SÀNG';
@@ -429,7 +428,7 @@ function updateUI(data) {
     ['N', 'P', 'K'].forEach((ch, idx) => {
         const c = document.getElementById(`vc${ch}`);
         if(c) {
-            if(data.running && (data.phase === idx+1 || data.phase === 10)) { // 10 is SIM
+            if(data.running && (data.phase === idx+1 || data.phase === 10 || data.phase === 100)) { // 10/100 is SIM
                 c.className = `valve-card active-${ch.toLowerCase()}`;
                 const badge = document.getElementById('tn-badge-monitor');
                 if(badge && !document.getElementById('page-monitor').classList.contains('active')) {
@@ -484,7 +483,7 @@ function updateUI(data) {
     }
 
     const sysPhase = document.getElementById('sysPhase');
-    if(sysPhase) sysPhase.textContent = data.phase === 10 ? 'Đồng thời (10)' : data.phase;
+    if(sysPhase) sysPhase.textContent = (data.phase === 10 || data.phase === 100) ? `Đồng thời (${data.phase})` : data.phase;
     const sysLastTs = document.getElementById('sysLastTs');
     if(sysLastTs) sysLastTs.textContent = new Date().toLocaleTimeString();
 
@@ -616,9 +615,9 @@ function clearChart() {
 // 5. SETTINGS FORM LOGIC
 // ==========================================
 function toggleAutoMode(checked) {
-    simMode = checked; // checked == true means Đồng thời
-    document.getElementById('autoModeText').textContent = checked ? 'ĐỒNG THỜI' : 'TUẦN TỰ';
-    document.getElementById('modeDescText').textContent = checked ? 'Mở cùng lúc 3 van. Phù hợp lượng phân lớn.' : 'Bơm lần lượt từng bồn (Độ chính xác cao).';
+    simMode = true; // Always simultaneous mode
+    document.getElementById('autoModeText').textContent = 'ĐỒNG THỜI';
+    document.getElementById('modeDescText').textContent = 'Mở cùng lúc 3 van. Phù hợp lượng phân lớn.';
 }
 
 function startMixing() {
@@ -630,7 +629,7 @@ function startMixing() {
     const totalDosingFlowLpm = parseFloat(((n + p + k) / (durationMin * 1000)).toFixed(3));
 
     let payload = {
-        mode: simMode ? 'sim' : 'seq',
+        mode: 'sim',
         recipe_name: document.getElementById('recipeName').value || 'Không tên',
         N_ml: n,
         P_ml: p,
@@ -1374,8 +1373,8 @@ function updateDashboardSettingsDisplay() {
 
     const activeMode = document.getElementById('dsh-active-mode');
     if (activeMode) {
-        activeMode.textContent = simMode ? 'ĐỒNG THỜI' : 'TUẦN TỰ';
-        activeMode.style.backgroundColor = simMode ? '#0ea5e9' : '#22c55e';
+        activeMode.textContent = 'ĐỒNG THỜI';
+        activeMode.style.backgroundColor = '#0ea5e9';
     }
 
     // 2. Timer settings

@@ -394,72 +394,88 @@ mqttClient.on('message', async (topic, message) => {
     io.emit('device_status', { ...data, online: true });
 
     // Kiểm tra nếu phiên dừng hoặc hoàn thành (running=false)
-    if (currentSession && !data.running) {
-        const sess = currentSession;
-        const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
-        const isCompleted = (data.phase === 4);
-        const isFlowTimeout = (data.error === 'FLOW_TIMEOUT');
+    if (currentSession) {
+        // Hẹn giờ tưới nước sạch (water-only) chạy bằng timer trên server, không kết thúc bằng running=false của ESP32
+        const isWaterOnly = (currentSession.N_ml === 0 && currentSession.P_ml === 0 && currentSession.K_ml === 0 && !currentSession.ratio);
         
-        let status = 'completed';
-        let suffix = '';
-        if (!isCompleted) {
-            if (isFlowTimeout) {
-                status = 'failed';
-                suffix = ' [LỖI LƯU LƯỢNG]';
+        if (data.running) {
+            currentSession.started = true;
+        }
+
+        // Kế hoạch kết thúc phiên:
+        // - Với nước sạch: Chỉ kết thúc qua timer server hoặc Dừng khẩn cấp.
+        // - Với châm phân: Kết thúc khi ESP32 tắt chạy (data.running = false) VÀ (đã từng chạy hoặc quá 10s timeout chờ ESP32 phản hồi)
+        const shouldEndSession = !isWaterOnly && !data.running && (currentSession.started || (Date.now() - currentSession.start_time > 10000));
+
+        if (shouldEndSession) {
+            const sess = currentSession;
+            // Xóa ngay lập tức trước khi chạy câu lệnh bất đồng bộ để tránh bị ghi trùng lặp (re-entrancy)
+            currentSession = null;
+
+            const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+            const isCompleted = (data.phase === 4);
+            const isFlowTimeout = (data.error === 'FLOW_TIMEOUT');
+            
+            let status = 'completed';
+            let suffix = '';
+            if (!isCompleted) {
+                if (isFlowTimeout) {
+                    status = 'failed';
+                    suffix = ' [LỖI LƯU LƯỢNG]';
+                } else {
+                    status = 'stopped';
+                    suffix = ' [DỪNG]';
+                }
+            }
+
+            const record = {
+                id:          Date.now(),
+                timestamp:   timestamp,
+                recipe_name: sess.recipe_name + suffix,
+                mode:        sess.mode || 'sequential',
+                ratio_n:     sess.calc?.N?.target_ml || sess.N_ml || sess.ratio?.N || 0,
+                ratio_p:     sess.calc?.P?.target_ml || sess.P_ml || sess.ratio?.P || 0,
+                ratio_k:     sess.calc?.K?.target_ml || sess.K_ml || sess.ratio?.K || 0,
+                N_ml:        Math.round(data.valves?.N?.volume_ml || 0),
+                P_ml:        Math.round(data.valves?.P?.volume_ml || 0),
+                K_ml:        Math.round(data.valves?.K?.volume_ml || 0),
+                total_ml:    Math.round(data.total_volume_ml || 0),
+                duration_s:  Math.round((Date.now() - sess.start_time) / 1000),
+                status:      status,
+                wifi_rssi:   data.wifi_rssi || 0
+            };
+
+            try {
+                if (pool) {
+                    const query = `
+                        INSERT INTO lich_su_tron 
+                        (ma_lich_su, thoi_gian_tron, ten_cong_thuc_da_dung, che_do_tron, ti_le_bon1, ti_le_bon2, ti_le_bon3, thuc_te_bon1_ml, thuc_te_bon2_ml, thuc_te_bon3_ml, tong_the_tich_ml, thoi_gian_chay_s, trang_thai, wifi_rssi)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    `;
+                    const values = [
+                        record.id, record.timestamp, record.recipe_name, record.mode, 
+                        record.ratio_n, record.ratio_p, record.ratio_k, 
+                        record.N_ml, record.P_ml, record.K_ml, record.total_ml, 
+                        record.duration_s, record.status, record.wifi_rssi
+                    ];
+                    await pool.query(query, values);
+                    console.log(`[DB] Đã lưu phiên (${status}): "${record.recipe_name}" | ${record.total_ml} mL | ${record.duration_s}s`);
+                }
+            } catch (err) {
+                console.error('[DB] Lỗi lưu session:', err.message);
+            }
+
+            if (status === 'completed') {
+                io.emit('session_completed', record);
             } else {
-                status = 'stopped';
-                suffix = ' [DỪNG]';
+                io.emit('session_stopped', record);
             }
-        }
-
-        const record = {
-            id:          Date.now(),
-            timestamp:   timestamp,
-            recipe_name: sess.recipe_name + suffix,
-            mode:        sess.mode || 'sequential',
-            ratio_n:     sess.calc?.N?.target_ml || sess.N_ml || sess.ratio?.N || 0,
-            ratio_p:     sess.calc?.P?.target_ml || sess.P_ml || sess.ratio?.P || 0,
-            ratio_k:     sess.calc?.K?.target_ml || sess.K_ml || sess.ratio?.K || 0,
-            N_ml:        Math.round(data.valves?.N?.volume_ml || 0),
-            P_ml:        Math.round(data.valves?.P?.volume_ml || 0),
-            K_ml:        Math.round(data.valves?.K?.volume_ml || 0),
-            total_ml:    Math.round(data.total_volume_ml || 0),
-            duration_s:  Math.round((Date.now() - sess.start_time) / 1000),
-            status:      status,
-            wifi_rssi:   data.wifi_rssi || 0
-        };
-
-        try {
-            if (pool) {
-                const query = `
-                    INSERT INTO lich_su_tron 
-                    (ma_lich_su, thoi_gian_tron, ten_cong_thuc_da_dung, che_do_tron, ti_le_bon1, ti_le_bon2, ti_le_bon3, thuc_te_bon1_ml, thuc_te_bon2_ml, thuc_te_bon3_ml, tong_the_tich_ml, thoi_gian_chay_s, trang_thai, wifi_rssi)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                `;
-                const values = [
-                    record.id, record.timestamp, record.recipe_name, record.mode, 
-                    record.ratio_n, record.ratio_p, record.ratio_k, 
-                    record.N_ml, record.P_ml, record.K_ml, record.total_ml, 
-                    record.duration_s, record.status, record.wifi_rssi
-                ];
-                await pool.query(query, values);
-                console.log(`[DB] Đã lưu phiên (${status}): "${record.recipe_name}" | ${record.total_ml} mL | ${record.duration_s}s`);
+            io.emit('history_updated');
+            
+            // Cập nhật lại hệ số AI sau khi phiên kết thúc thành công
+            if (status === 'completed') {
+                setTimeout(updateCalibrationFactors, 1000);
             }
-        } catch (err) {
-            console.error('[DB] Lỗi lưu session:', err.message);
-        }
-
-        if (status === 'completed') {
-            io.emit('session_completed', record);
-        } else {
-            io.emit('session_stopped', record);
-        }
-        io.emit('history_updated');
-        currentSession = null;
-        
-        // Cập nhật lại hệ số AI sau khi phiên kết thúc thành công
-        if (status === 'completed') {
-            setTimeout(updateCalibrationFactors, 1000);
         }
     }
 });
@@ -479,16 +495,94 @@ app.get('/api/status', (req, res) => {
 
 app.post('/api/start', (req, res) => {
     const body = req.body;
-    const mode = body.mode || 'seq';
 
     let mqttCmd, sessionInfo;
 
-    if (mode === 'sim') {
-        const ratioN = parseFloat(body.ratio_N) || 0;
-        const ratioP = parseFloat(body.ratio_P) || 0;
-        const ratioK = parseFloat(body.ratio_K) || 0;
-        const total_liter = parseFloat(body.total_vol_l) || 0;
-        const total_lpm   = parseFloat(body.total_lpm)   || 0;
+    // 1. Kiểm tra xả nước sạch (water-only)
+    const nMl = parseFloat(body.N_ml) || 0;
+    const pMl = parseFloat(body.P_ml) || 0;
+    const kMl = parseFloat(body.K_ml) || 0;
+
+    if (nMl <= 0 && pMl <= 0 && kMl <= 0) {
+        if (body.recipe_name && body.recipe_name.startsWith('Chỉ tưới nước')) {
+            const duration_sec = (parseFloat(body.duration_min) || 1) * 60;
+            
+            sessionInfo = {
+                recipe_name: body.recipe_name,
+                mode: 'sequential',
+                start_time: Date.now(),
+                N_ml: 0, P_ml: 0, K_ml: 0,
+                duration_sec
+            };
+
+            mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 1 }), { qos: 1 });
+            mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 1 }), { qos: 1 });
+
+            currentSession = sessionInfo;
+            console.log(`[START] ${sessionInfo.recipe_name} - Thời gian: ${duration_sec} giây`);
+            io.emit('session_started', sessionInfo);
+
+            if (waterTimerTimeout) {
+                clearTimeout(waterTimerTimeout);
+            }
+
+            waterTimerTimeout = setTimeout(async () => {
+                if (!currentSession) return;
+                currentSession = null;
+                waterTimerTimeout = null;
+
+                mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 0 }), { qos: 1 });
+                mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 0 }), { qos: 1 });
+                
+                const record = {
+                    id: Date.now(),
+                    timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                    recipe_name: sessionInfo.recipe_name,
+                    mode: sessionInfo.mode,
+                    N_ml: 0, P_ml: 0, K_ml: 0, total_ml: 0,
+                    duration_s: duration_sec,
+                    status: 'completed',
+                    wifi_rssi: lastDeviceStatus?.wifi_rssi || 0
+                };
+                
+                try {
+                    if (pool) {
+                        const query = `
+                            INSERT INTO lich_su_tron 
+                            (ma_lich_su, thoi_gian_tron, ten_cong_thuc_da_dung, che_do_tron, ti_le_bon1, ti_le_bon2, ti_le_bon3, thuc_te_bon1_ml, thuc_te_bon2_ml, thuc_te_bon3_ml, tong_the_tich_ml, thoi_gian_chay_s, trang_thai, wifi_rssi)
+                            VALUES (?, ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, ?, 'completed', ?)
+                        `;
+                        await pool.query(query, [record.id, record.timestamp, record.recipe_name, record.mode, record.duration_s, record.wifi_rssi]);
+                    }
+                } catch (e) {
+                    console.error('[DB] Lỗi lưu session châm nước kết thúc:', e.message);
+                }
+                
+                io.emit('session_completed', record);
+                io.emit('history_updated');
+            }, duration_sec * 1000);
+
+            return res.json({ success: true, session: sessionInfo, command: { cmd: 'manual_timer', duration_sec } });
+        } else {
+            return res.status(400).json({ error: 'Cần nhập ít nhất 1 lượng phân > 0' });
+        }
+    } else {
+        // 2. Chế độ phối trộn phân bón (Luôn chạy ĐỒNG THỜI)
+        const ratioN = parseFloat(body.ratio_N) !== undefined ? parseFloat(body.ratio_N) : nMl;
+        const ratioP = parseFloat(body.ratio_P) !== undefined ? parseFloat(body.ratio_P) : pMl;
+        const ratioK = parseFloat(body.ratio_K) !== undefined ? parseFloat(body.ratio_K) : kMl;
+        
+        let total_liter = parseFloat(body.total_vol_l) || 0;
+        if (total_liter <= 0) {
+            total_liter = (nMl + pMl + kMl) / 1000;
+        }
+        
+        let total_lpm = parseFloat(body.total_lpm) || 0;
+        if (total_lpm <= 0) {
+            const durationMin = parseFloat(body.duration_min) || 1.0;
+            const totalDosingFlowLpm = (nMl + pMl + kMl) / (durationMin * 1000);
+            total_lpm = totalDosingFlowLpm > 0.05 ? totalDosingFlowLpm : 3.0;
+        }
 
         if (ratioN + ratioP + ratioK <= 0)
             return res.status(400).json({ error: 'Tổng tỉ lệ phải > 0' });
@@ -515,9 +609,9 @@ app.post('/api/start', (req, res) => {
         mqttCmd = {
             cmd: 'start_sim',
             recipe: {
-                N: { target_ml: Math.round(cN.target_ml * aiCalibration.N), target_lpm: cN.target_lpm, init_open: toInitOpen(cN.target_lpm) },
-                P: { target_ml: Math.round(cP.target_ml * aiCalibration.P), target_lpm: cP.target_lpm, init_open: toInitOpen(cP.target_lpm) },
-                K: { target_ml: Math.round(cK.target_ml * aiCalibration.K), target_lpm: cK.target_lpm, init_open: toInitOpen(cK.target_lpm) }
+                N: { target_ml: Math.round(cN.target_ml * (cN.target_ml >= 50 ? aiCalibration.N : 1.0)), target_lpm: cN.target_lpm, init_open: toInitOpen(cN.target_lpm) },
+                P: { target_ml: Math.round(cP.target_ml * (cP.target_ml >= 50 ? aiCalibration.P : 1.0)), target_lpm: cP.target_lpm, init_open: toInitOpen(cP.target_lpm) },
+                K: { target_ml: Math.round(cK.target_ml * (cK.target_ml >= 50 ? aiCalibration.K : 1.0)), target_lpm: cK.target_lpm, init_open: toInitOpen(cK.target_lpm) }
             }
         };
 
@@ -531,89 +625,6 @@ app.post('/api/start', (req, res) => {
         };
 
         console.log(`[SIM] ${sessionInfo.recipe_name} | N:${cN.target_ml}mL | P:${cP.target_ml}mL | K:${cK.target_ml}mL`);
-    } else {
-        const nMl = parseFloat(body.N_ml) || 0;
-        const pMl = parseFloat(body.P_ml) || 0;
-        const kMl = parseFloat(body.K_ml) || 0;
-
-        if (nMl <= 0 && pMl <= 0 && kMl <= 0) {
-            if (body.recipe_name && body.recipe_name.startsWith('Chỉ tưới nước')) {
-                const duration_sec = (parseFloat(body.duration_min) || 1) * 60;
-                
-                sessionInfo = {
-                    recipe_name: body.recipe_name,
-                    mode: 'sequential',
-                    start_time: Date.now(),
-                    N_ml: 0, P_ml: 0, K_ml: 0,
-                    duration_sec
-                };
-
-                mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 1 }), { qos: 1 });
-                mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 1 }), { qos: 1 });
-
-                currentSession = sessionInfo;
-                console.log(`[START] ${sessionInfo.recipe_name} - Thời gian: ${duration_sec} giây`);
-                io.emit('session_started', sessionInfo);
-
-                if (waterTimerTimeout) {
-                    clearTimeout(waterTimerTimeout);
-                }
-
-                waterTimerTimeout = setTimeout(async () => {
-                    mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 0 }), { qos: 1 });
-                    mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 0 }), { qos: 1 });
-                    
-                    const record = {
-                        id: Date.now(),
-                        timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
-                        recipe_name: sessionInfo.recipe_name,
-                        mode: sessionInfo.mode,
-                        N_ml: 0, P_ml: 0, K_ml: 0, total_ml: 0,
-                        duration_s: duration_sec,
-                        status: 'completed',
-                        wifi_rssi: lastDeviceStatus?.wifi_rssi || 0
-                    };
-                    
-                    try {
-                        if (pool) {
-                            const query = `
-                                INSERT INTO lich_su_tron 
-                                (ma_lich_su, thoi_gian_tron, ten_cong_thuc_da_dung, che_do_tron, ti_le_bon1, ti_le_bon2, ti_le_bon3, thuc_te_bon1_ml, thuc_te_bon2_ml, thuc_te_bon3_ml, tong_the_tich_ml, thoi_gian_chay_s, trang_thai, wifi_rssi)
-                                VALUES (?, ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, ?, 'completed', ?)
-                            `;
-                            await pool.query(query, [record.id, record.timestamp, record.recipe_name, record.mode, record.duration_s, record.wifi_rssi]);
-                        }
-                    } catch (e) {
-                        console.error('[DB] Lỗi lưu session châm nước kết thúc:', e.message);
-                    }
-                    
-                    io.emit('session_completed', record);
-                    io.emit('history_updated');
-                    currentSession = null;
-                    waterTimerTimeout = null;
-                }, duration_sec * 1000);
-
-                return res.json({ success: true, session: sessionInfo, command: { cmd: 'manual_timer', duration_sec } });
-            } else {
-                return res.status(400).json({ error: 'Cần nhập ít nhất 1 lượng phân > 0' });
-            }
-        }
-
-        mqttCmd = {
-            cmd: 'start_seq',
-            recipe: {
-                N: { target_ml: Math.round(nMl * aiCalibration.N), speed_percent: parseInt(body.N_speed) || 60 },
-                P: { target_ml: Math.round(pMl * aiCalibration.P), speed_percent: parseInt(body.P_speed) || 60 },
-                K: { target_ml: Math.round(kMl * aiCalibration.K), speed_percent: parseInt(body.K_speed) || 60 }
-            }
-        };
-
-        sessionInfo = {
-            recipe_name: body.recipe_name || 'Chưa đặt tên',
-            mode: 'sequential',
-            start_time: Date.now(),
-            N_ml: nMl, P_ml: pMl, K_ml: kMl
-        };
     }
 
     mqttClient.publish(TOPIC_CMD, JSON.stringify(mqttCmd), { qos: 1 }, (err) => {
@@ -638,6 +649,9 @@ app.post('/api/stop', async (req, res) => {
 
         if (currentSession) {
             const sess = currentSession;
+            // Xóa ngay lập tức để tránh tranh chấp ghi đè
+            currentSession = null;
+
             const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
             const record = {
                 id:          Date.now(),
@@ -675,7 +689,6 @@ app.post('/api/stop', async (req, res) => {
                 console.error('[DB] Lỗi lưu session [HỦY]:', e.message);
             }
             io.emit('history_updated');
-            currentSession = null;
         }
 
         console.log('[STOP] Lệnh dừng khẩn cấp đã gửi');
@@ -1196,29 +1209,44 @@ cron.schedule('* * * * *', async () => {
                 let sessionInfo = {};
                 
                 if ((s.n_ml > 0) || (s.p_ml > 0) || (s.k_ml > 0)) {
+                    const totalParts = (s.n_ml || 0) + (s.p_ml || 0) + (s.k_ml || 0);
+                    const durationMin = s.thoi_gian_tuoi_phut || 1.0;
+                    const totalDosingFlowLpm = totalParts / (durationMin * 1000);
+                    const total_lpm = totalDosingFlowLpm > 0.05 ? totalDosingFlowLpm : 3.0;
+
+                    const cN_lpm = parseFloat((((s.n_ml || 0) / totalParts) * total_lpm).toFixed(3));
+                    const cP_lpm = parseFloat((((s.p_ml || 0) / totalParts) * total_lpm).toFixed(3));
+                    const cK_lpm = parseFloat((((s.k_ml || 0) / totalParts) * total_lpm).toFixed(3));
+
+                    const Q_MAX = 4.0;
+                    const toInitOpen = (lpm) => Math.min(100, Math.round((lpm / Q_MAX) * 100));
+
                     mqttCmd = {
-                        cmd: 'start_seq',
+                        cmd: 'start_sim',
                         recipe: {
-                            N: { target_ml: s.n_ml || 0, speed_percent: 60 },
-                            P: { target_ml: s.p_ml || 0, speed_percent: 60 },
-                            K: { target_ml: s.k_ml || 0, speed_percent: 60 }
+                            N: { target_ml: Math.round((s.n_ml || 0) * ((s.n_ml || 0) >= 50 ? aiCalibration.N : 1.0)), target_lpm: cN_lpm, init_open: toInitOpen(cN_lpm) },
+                            P: { target_ml: Math.round((s.p_ml || 0) * ((s.p_ml || 0) >= 50 ? aiCalibration.P : 1.0)), target_lpm: cP_lpm, init_open: toInitOpen(cP_lpm) },
+                            K: { target_ml: Math.round((s.k_ml || 0) * ((s.k_ml || 0) >= 50 ? aiCalibration.K : 1.0)), target_lpm: cK_lpm, init_open: toInitOpen(cK_lpm) }
                         }
                     };
                     sessionInfo = {
                         recipe_name: `Hẹn giờ (${s.n_ml}-${s.p_ml}-${s.k_ml} mL)`,
-                        mode: 'sequential',
+                        mode: 'simultaneous',
                         start_time: Date.now(),
-                        N_ml: s.n_ml || 0, P_ml: s.p_ml || 0, K_ml: s.k_ml || 0,
-                        duration_sec: s.thoi_gian_tuoi_phut * 60
+                        ratio: { N: s.n_ml || 0, P: s.p_ml || 0, K: s.k_ml || 0 },
+                        total_liter: totalParts / 1000,
+                        total_lpm: total_lpm,
+                        calc: {
+                            N: { target_ml: s.n_ml || 0, target_lpm: cN_lpm },
+                            P: { target_ml: s.p_ml || 0, target_lpm: cP_lpm },
+                            K: { target_ml: s.k_ml || 0, target_lpm: cK_lpm }
+                        }
                     };
                 } else {
                     mqttCmd = {
-                        cmd: 'start_seq',
-                        recipe: {
-                            N: { target_ml: 0, speed_percent: 60 },
-                            P: { target_ml: 0, speed_percent: 60 },
-                            K: { target_ml: 0, speed_percent: 60 }
-                        }
+                        cmd: 'manual',
+                        device: 'pump',
+                        state: 1
                     };
                     sessionInfo = {
                         recipe_name: 'Chỉ tưới nước (Hẹn giờ)',

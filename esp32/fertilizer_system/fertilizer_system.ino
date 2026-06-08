@@ -1,7 +1,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-
+//====================================================================================================================================================================================================================
 // CẤU HÌNH WIFI & MQTT
 const char* WIFI_SSID     = "huuduc";       // Điền tên WiFi ở Nhà lưới vào đây
 const char* WIFI_PASSWORD = "19052004";     // Điền mật khẩu WiFi ở Nhà lưới vào đây
@@ -9,43 +9,49 @@ const char* MQTT_SERVER   = "broker.hivemq.com"; // Sử dụng Cloud MQTT
 const int   MQTT_PORT     = 1883;
 const char* MQTT_USER     = "";    // Để trống nếu không dùng xác thực
 const char* MQTT_PASS     = "";
-
+//====================================================================================================================================================================================================================
 // khai báo chân kết nối cho driver TB6600
 #define DIR_N      13
 #define STEP_N     14
-#define EN_N       15
+#define EN_N       32
 
 #define DIR_P      27
 #define STEP_P     26
-#define EN_P       32
+#define EN_P       22
 
 #define DIR_K      25
 #define STEP_K     33
-#define EN_K       22
+#define EN_K       23
+
 // khai báo chân kết nối cho cảm biến lưu lượng
 #define FLOW_N     16
 #define FLOW_P     17
 #define FLOW_K     18
 #define FLOW_MAIN  19
+
 // khai báo chân kết nối cho van điện từ và bơm
 #define PUMP_PIN   4
 #define VALVE_PIN  5
+
 // khai báo led trạng thái 
 #define STATUS_LED  2
 #define STEPS_PER_REV   200
 #define MICROSTEP       8
+
 // Khoảng 8500 bước vi bước 1/8 từ đóng hoàn toàn (min) đến mở hoàn toàn (max)
 #define MAX_OPEN_STEPS  8500  
 // Tăng từ 500us lên 800us để tăng mô-men xoắn khởi động, tránh kẹt e e
-#define STEP_DELAY_US   800   
+#define STEP_DELAY_US   800 
+ 
 // YF-S401 Flow Sensor:
 #define ML_PER_PULSE_N      0.2493f
 #define ML_PER_PULSE_P      0.2072f
 #define ML_PER_PULSE_K      0.1953f
 #define ML_PER_PULSE_MAIN   45.7516f // Cảm biến DN32 ống chính (27 xung/L -> 37.037 mL/xung)
 // Chu kỳ publish và tính flow rate (ms)
-#define PUBLISH_INTERVAL    500
-#define FLOW_CALC_INTERVAL  1000
+#define PUBLISH_INTERVAL    200
+#define FLOW_CALC_INTERVAL  200
+
 // THÔNG SỐ ĐIỀU KHIỂN PHẢN HỒI (PID-Controller)
 // Q_MAX_LPM: Lưu lượng tối đa (L/phút) khi van mở hoàn toàn.
 //   Cách đo: mở van 100%, đặt bình 1 lít, bấm giờ → Q_max = 1/thời_gian_phút
@@ -65,9 +71,10 @@ float errSumN = 0.0f, errSumP = 0.0f, errSumK = 0.0f;
 float lastErrN = 0.0f, lastErrP = 0.0f, lastErrK = 0.0f;
 // Số bước mở nhanh ban đầu khi khởi động (khoảng 1000 bước 1/8)
 #define INITIAL_STARTUP_STEPS  1000
-// Điểm bắt đầu giảm tốc khi đóng van
-#define SLOW_CLOSE_THRESHOLD_STEPS  1200
-//--------------------------------------------------------------------------------------------------------------
+// Điểm bắt đầu giảm tốc khi đóng van (giảm từ 1200 xuống 400 để đóng nhanh hơn ở thể tích nhỏ)
+#define SLOW_CLOSE_THRESHOLD_STEPS  400
+
+//====================================================================================================================================================================================================================
 // BIẾN TOÀN CỤC
 
 // --- Bộ đếm xung cảm biến (PHẢI khai báo volatile vì dùng trong ISR) ---
@@ -78,6 +85,14 @@ volatile uint32_t pulseMain = 0;
 // Snapshot để tính flow rate
 uint32_t snapPulseN = 0, snapPulseP = 0, snapPulseK = 0, snapPulseMain = 0;
 float    flowLpmN = 0.0f, flowLpmP = 0.0f, flowLpmK = 0.0f, flowLpmMain = 0.0f;
+
+// Cấu trúc cửa sổ trượt (sliding window) để tính lưu lượng phản hồi nhanh
+#define FLOW_WINDOW_SIZE    5
+uint32_t historyN[FLOW_WINDOW_SIZE] = {0};
+uint32_t historyP[FLOW_WINDOW_SIZE] = {0};
+uint32_t historyK[FLOW_WINDOW_SIZE] = {0};
+uint32_t historyMain[FLOW_WINDOW_SIZE] = {0};
+uint8_t flowWindowIdx = 0;
 // Mục tiêu thể tích (mL)
 float targetN = 0.0f, targetP = 0.0f, targetK = 0.0f;
 // Phần trăm mở van (0-100) - dùng cho chế độ tuần tự
@@ -102,9 +117,6 @@ bool  doneN = false, doneP = false, doneK = false;  // Van đã đạt đủ lư
 unsigned long lastControlTime = 0;             // Thời điểm điều khiển cuối
 // Trạng thái hệ thống
 //   0   = Chờ (Idle)
-//   1   = Đang bơm N (tuần tự)
-//   2   = Đang bơm P (tuần tự)
-//   3   = Đang bơm K (tuần tự)
 //   4   = Hoàn thành
 //   100 = Đồng thời đang chạy
 bool systemRunning = false;
@@ -135,6 +147,7 @@ void IRAM_ATTR onFlowP() { pulseP++; }
 void IRAM_ATTR onFlowK() { pulseK++; }
 void IRAM_ATTR onFlowMain() { pulseMain++; }
 
+//====================================================================================================================================================================================================================
 // ĐIỀU KHIỂN ĐỘNG CƠ BƯỚC
 // Di chuyển stepper motor một số bước chỉ định của van tương ứng (1 = N, 2 = P, 3 = K).
 // steps > 0 → hướng mở van
@@ -204,6 +217,8 @@ void moveStepper(int valve, int steps) {
         }
     }
 }
+
+//====================================================================================================================================================================================================================
 // Điều khiển đồng thời 3 động cơ bước quay cùng một lúc bằng phát xung xen kẽ
 void moveSteppersSimultaneous(int stepsN, int stepsP, int stepsK) {
     if (stepsN == 0 && stepsP == 0 && stepsK == 0) return;
@@ -257,6 +272,8 @@ void moveSteppersSimultaneous(int stepsN, int stepsP, int stepsK) {
         }
     }
 }
+
+//====================================================================================================================================================================================================================
 // Mở van đến phần trăm mong muốn (0% = đóng, 100% = mở hoàn toàn).
 void openValve(int valve, int percent) {
     int targetSteps = (MAX_OPEN_STEPS * constrain(percent, 0, 100)) / 100;
@@ -271,6 +288,8 @@ void openValve(int valve, int percent) {
                   (valve == 1 ? 'N' : (valve == 2 ? 'P' : 'K')), percent, delta, currentPos, targetSteps);
     moveStepper(valve, delta);
 }
+
+//====================================================================================================================================================================================================================
 //Đóng hoàn toàn một van và tắt driver để tiết kiệm điện.
 void closeValve(int valve) {
     openValve(valve, 0);
@@ -280,6 +299,8 @@ void closeValve(int valve) {
         case 3: digitalWrite(EN_K, HIGH); break;
     }
 }
+
+//====================================================================================================================================================================================================================
 // Dừng khẩn cấp: Tắt toàn bộ thiết bị ngay lập tức (không xoay động cơ bước về 0).
 void emergencyStop() {
     Serial.println("\n!!! DỪNG KHẨN CẤP - Ngắt toàn bộ thiết bị ngay lập tức !!!\n");
@@ -295,6 +316,8 @@ void emergencyStop() {
     digitalWrite(EN_P, HIGH);
     digitalWrite(EN_K, HIGH);
 }
+
+//====================================================================================================================================================================================================================
 // MQTT CALLBACK - Nhận lệnh từ server
 // ĐIỀU KHIỂN TỈ LỆ - CHẠY ĐỒNG THỜI (P-Controller)
 // Gọi trong loop() mỗi CONTROL_INTERVAL_MS ms
@@ -348,7 +371,7 @@ void controlSimultaneous() {
     // --- Van N ---
     if (!doneN && targetN > 0) {
         if (volN >= targetN) {
-            forceCloseValve(1);
+            adjN = -posN; // Đóng van N song song không chặn CPU
             doneN = true;
             Serial.printf("[SIM✓] Van N đủ lượng → %.0f/%.0f mL\n", volN, targetN);
         } else {
@@ -383,10 +406,14 @@ void controlSimultaneous() {
             }
         }
     }
+    if (doneN && posN == 0) {
+        digitalWrite(EN_N, HIGH); // Tắt driver van N để hạ nhiệt
+    }
+
     // --- Van P ---
     if (!doneP && targetP > 0) {
         if (volP >= targetP) {
-            forceCloseValve(2);
+            adjP = -posP; // Đóng van P song song không chặn CPU
             doneP = true;
             Serial.printf("[SIM✓] Van P đủ lượng → %.0f/%.0f mL\n", volP, targetP);
         } else {
@@ -421,10 +448,14 @@ void controlSimultaneous() {
             }
         }
     }
+    if (doneP && posP == 0) {
+        digitalWrite(EN_P, HIGH); // Tắt driver van P để hạ nhiệt
+    }
+
     // --- Van K ---
     if (!doneK && targetK > 0) {
         if (volK >= targetK) {
-            forceCloseValve(3);
+            adjK = -posK; // Đóng van K song song không chặn CPU
             doneK = true;
             Serial.printf("[SIM✓] Van K đủ lượng → %.0f/%.0f mL\n", volK, targetK);
         } else {
@@ -459,6 +490,9 @@ void controlSimultaneous() {
             }
         }
     }
+    if (doneK && posK == 0) {
+        digitalWrite(EN_K, HIGH); // Tắt driver van K để hạ nhiệt
+    }
     // 4. Kích hoạt phát xung quay van đồng thời bằng phương án xen kẽ
     if (adjN != 0 || adjP != 0 || adjK != 0) {
         moveSteppersSimultaneous(adjN, adjP, adjK);
@@ -476,10 +510,17 @@ void controlSimultaneous() {
         simMode       = false;
         digitalWrite(PUMP_PIN, LOW);
         digitalWrite(VALVE_PIN, LOW);
+        
+        // Siết chặt chống rò rỉ tất cả van hoạt động sau khi bơm chính đã tắt (không gây trễ cho các van khác)
+        if (targetN > 0) forceCloseValve(1);
+        if (targetP > 0) forceCloseValve(2);
+        if (targetK > 0) forceCloseValve(3);
+        
         Serial.println("[SIM✓✓] Hoàn thành toàn bộ - chế độ đồng thời!");
     }
 }
-// ================================================================
+
+//====================================================================================================================================================================================================================
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
     char buf[513];
     length = min(length, (unsigned int)512);
@@ -495,67 +536,32 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     }
     const char* cmd = doc["cmd"];
     if (!cmd) return;
-// ---- Lệnh BẮT ĐẦU TUẦN TỰ (N→P→K) ----
-    if (strcmp(cmd, "start_seq") == 0 || strcmp(cmd, "start") == 0) {
-        if (systemRunning) {
-            Serial.println("[!] Hệ thống đang chạy. Bỏ qua lệnh start.");
-            return;
-        }
-        targetN = doc["recipe"]["N"]["target_ml"] | 0.0f;
-        targetP = doc["recipe"]["P"]["target_ml"] | 0.0f;
-        targetK = doc["recipe"]["K"]["target_ml"] | 0.0f;
-        speedN  = doc["recipe"]["N"]["speed_percent"] | 60;
-        speedP  = doc["recipe"]["P"]["speed_percent"] | 60;
-        speedK  = doc["recipe"]["K"]["speed_percent"] | 60;
-        Serial.printf("[START] Mục tiêu → N: %.0f mL | P: %.0f mL | K: %.0f mL\n",
-                      targetN, targetP, targetK);
-        // Reset bộ đếm xung
-        noInterrupts();
-        pulseN = pulseP = pulseK = 0;
-        interrupts();
-        snapPulseN = snapPulseP = snapPulseK = 0;
-        systemRunning = true;
-        zeroFlowDuration = 0;
-        systemError = "";
-        // Bật Bơm và Van chính để nước chảy qua hệ thống phối trộn
-        if (targetN > 0 || targetP > 0 || targetK > 0) {
-            Serial.println("[>] Đang kích hoạt mở Van chính (chờ 5 giây để van mở hoàn toàn)...");
-            digitalWrite(VALVE_PIN, HIGH);
-            delay(5000); // Đợi 5 giây cho van điện từ mở hoàn toàn
-            
-            Serial.println("[>] Đang khởi động Bơm chính...");
-            digitalWrite(PUMP_PIN, HIGH);
-            delay(1000); // Đợi 1 giây cho dòng khởi động của Bơm ổn định để tránh sụt áp động cơ bước
-        }
-        // Cập nhật runStartTime sau khi bơm đã thực sự hoạt động
-        runStartTime = millis();
-        // Bắt đầu pha đầu tiên có target > 0, mở nhanh INITIAL_STARTUP_STEPS bước góc 1/8
-        if (targetN > 0) {
-            currentPhase = 1;
-            moveStepper(1, INITIAL_STARTUP_STEPS);
-            Serial.printf("[>] Bắt đầu pha N (mở nhanh ban đầu %d bước)\n", INITIAL_STARTUP_STEPS);
-        } else if (targetP > 0) {
-            currentPhase = 2;
-            moveStepper(2, INITIAL_STARTUP_STEPS);
-            Serial.printf("[>] Bắt đầu pha P (mở nhanh ban đầu %d bước)\n", INITIAL_STARTUP_STEPS);
-        } else if (targetK > 0) {
-            currentPhase = 3;
-            moveStepper(3, INITIAL_STARTUP_STEPS);
-            Serial.printf("[>] Bắt đầu pha K (mở nhanh ban đầu %d bước)\n", INITIAL_STARTUP_STEPS);
-        } else {
-            Serial.println("[!] Không có mục tiêu hợp lệ!");
-            systemRunning = false;
-        }
-    }
-    // ---- Lệnh BẮT ĐẦU ĐỒNG THỜI (3 van cùng lúc, có phản hồi) ----
-    else if (strcmp(cmd, "start_sim") == 0) {
-        if (systemRunning) { Serial.println("[!] Đang chạy, bỏ qua start_sim"); return; }
+    
+    // ---- Lệnh KHỞI ĐỘNG PHA TRỘN ĐỒNG THỜI (Hỗ trợ tương thích ngược cho start và start_seq) ----
+    if (strcmp(cmd, "start_sim") == 0 || strcmp(cmd, "start_seq") == 0 || strcmp(cmd, "start") == 0) {
+        if (systemRunning) { Serial.println("[!] Hệ thống đang chạy. Bỏ qua lệnh start."); return; }
         targetN    = doc["recipe"]["N"]["target_ml"] | 0.0f;
         targetP    = doc["recipe"]["P"]["target_ml"] | 0.0f;
         targetK    = doc["recipe"]["K"]["target_ml"] | 0.0f;
+        
         targetLpmN = doc["recipe"]["N"]["target_lpm"] | 0.0f;
+        if (targetLpmN <= 0.0f && targetN > 0.0f) {
+            targetLpmN = (targetN / 1000.0f) / 1.0f; // Mặc định châm trong 1 phút
+            if (targetLpmN < 0.1f) targetLpmN = 0.1f;
+        }
+        
         targetLpmP = doc["recipe"]["P"]["target_lpm"] | 0.0f;
+        if (targetLpmP <= 0.0f && targetP > 0.0f) {
+            targetLpmP = (targetP / 1000.0f) / 1.0f;
+            if (targetLpmP < 0.1f) targetLpmP = 0.1f;
+        }
+        
         targetLpmK = doc["recipe"]["K"]["target_lpm"] | 0.0f;
+        if (targetLpmK <= 0.0f && targetK > 0.0f) {
+            targetLpmK = (targetK / 1000.0f) / 1.0f;
+            if (targetLpmK < 0.1f) targetLpmK = 0.1f;
+        }
+
         // Reset vị trí về 0 nhưng sau đó sẽ chủ động mở nhanh ban đầu
         posN = 0;
         posP = 0;
@@ -566,13 +572,19 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         // Reset pulse counters và PID state
         noInterrupts(); pulseN = pulseP = pulseK = 0; interrupts();
         snapPulseN = snapPulseP = snapPulseK = 0;
+        // Reset cửa sổ trượt
+        memset(historyN, 0, sizeof(historyN));
+        memset(historyP, 0, sizeof(historyP));
+        memset(historyK, 0, sizeof(historyK));
+        memset(historyMain, 0, sizeof(historyMain));
+        flowWindowIdx = 0;
         doneN = doneP = doneK = false;
         errSumN = errSumP = errSumK = 0.0f;
         lastErrN = lastErrP = lastErrK = 0.0f;
         Serial.printf("[SIM] N=%.0fmL@%.2fL/m | P=%.0fmL@%.2fL/m | K=%.0fmL@%.2fL/m\n",
-                      targetN, targetLpmN,
-                      targetP, targetLpmP,
-                      targetK, targetLpmK);
+                       targetN, targetLpmN,
+                       targetP, targetLpmP,
+                       targetK, targetLpmK);
         simMode = true;
         systemRunning = true;
         currentPhase  = 100;  // 100 = chế độ đồng thời
@@ -586,12 +598,11 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
             Serial.println("[SIM] Đang khởi động Bơm chính...");
             digitalWrite(PUMP_PIN, HIGH);
             delay(1000); // Đợi 1 giây cho dòng khởi động ổn định trước khi bắt đầu vòng điều khiển hồi tiếp
-            // Mở nhanh ban đầu đồng thời 1000 bước vi bước 1/8 để tạo dòng chảy cho cảm biến nhận tín hiệu
-            moveSteppersSimultaneous(
-                targetN > 0 ? INITIAL_STARTUP_STEPS : 0,
-                targetP > 0 ? INITIAL_STARTUP_STEPS : 0,
-                targetK > 0 ? INITIAL_STARTUP_STEPS : 0
-            );
+            // Mở nhanh ban đầu đồng thời theo tỷ lệ thể tích mục tiêu để tránh chảy quá
+            int initN = targetN > 0 ? ((targetN < 100.0f) ? max(200, (int)(targetN * 10)) : INITIAL_STARTUP_STEPS) : 0;
+            int initP = targetP > 0 ? ((targetP < 100.0f) ? max(200, (int)(targetP * 10)) : INITIAL_STARTUP_STEPS) : 0;
+            int initK = targetK > 0 ? ((targetK < 100.0f) ? max(200, (int)(targetK * 10)) : INITIAL_STARTUP_STEPS) : 0;
+            moveSteppersSimultaneous(initN, initP, initK);
         }       
         lastControlTime = millis();
         runStartTime = millis();        
@@ -657,24 +668,20 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         }
     }
 }
+
+//====================================================================================================================================================================================================================
 // KIỂM TRA XEM KÊNH ĐANG HOẠT ĐỘNG CÓ BỊ KHÔNG CÓ LƯU LƯỢNG (CHẠY KHÔ) KHÔNG
 bool isZeroFlowActive() {
     if (!systemRunning) return false;   
-    if (simMode) {
-        // Trong chế độ đồng thời, kiểm tra xem các kênh chưa hoàn thành có bị tắc lưu lượng (lưu lượng < 0.02 LPM) không
-        bool anyActiveAndZero = false;
-        if (targetN > 0 && !doneN && flowLpmN < 0.02f) anyActiveAndZero = true;
-        if (targetP > 0 && !doneP && flowLpmP < 0.02f) anyActiveAndZero = true;
-        if (targetK > 0 && !doneK && flowLpmK < 0.02f) anyActiveAndZero = true;
-        return anyActiveAndZero;
-    } else {
-        // Trong chế độ tuần tự, kiểm tra kênh hiện tại đang chạy có bị tắc lưu lượng không
-        if (currentPhase == 1 && targetN > 0 && flowLpmN < 0.02f) return true;
-        if (currentPhase == 2 && targetP > 0 && flowLpmP < 0.02f) return true;
-        if (currentPhase == 3 && targetK > 0 && flowLpmK < 0.02f) return true;
-    }
-    return false;
+    // Kiểm tra xem các kênh chưa hoàn thành có bị tắc lưu lượng (lưu lượng < 0.02 LPM) không
+    bool anyActiveAndZero = false;
+    if (targetN > 0 && !doneN && flowLpmN < 0.02f) anyActiveAndZero = true;
+    if (targetP > 0 && !doneP && flowLpmP < 0.02f) anyActiveAndZero = true;
+    if (targetK > 0 && !doneK && flowLpmK < 0.02f) anyActiveAndZero = true;
+    return anyActiveAndZero;
 }
+
+//====================================================================================================================================================================================================================
 // TÍNH LƯU LƯỢNG (L/phút)
 void calculateFlowRates() {
     unsigned long now = millis();
@@ -695,11 +702,29 @@ void calculateFlowRates() {
     snapPulseP = pP;
     snapPulseK = pK;
     snapPulseMain = pMain;
- // Tính lưu lượng thực tế theo hệ số hiệu chuẩn đã lưu: Q(L/min) = dPulse * ML_PER_PULSE * 0.06 / dt_s
-    flowLpmN = (dN / dt_s) * ML_PER_PULSE_N * 0.06f; 
-    flowLpmP = (dP / dt_s) * ML_PER_PULSE_P * 0.06f; 
-    flowLpmK = (dK / dt_s) * ML_PER_PULSE_K * 0.06f; 
-    flowLpmMain = (dMain / dt_s) / 0.45f; // Cảm biến DN32 ống chính (F = 0.45 * Q)
+
+    // Đẩy giá trị mới vào cửa sổ trượt
+    historyN[flowWindowIdx] = dN;
+    historyP[flowWindowIdx] = dP;
+    historyK[flowWindowIdx] = dK;
+    historyMain[flowWindowIdx] = dMain;
+    
+    flowWindowIdx = (flowWindowIdx + 1) % FLOW_WINDOW_SIZE;
+
+    // Tính tổng số xung trong cửa sổ trượt (tương đương 1 giây gần nhất)
+    uint32_t sumN = 0, sumP = 0, sumK = 0, sumMain = 0;
+    for (int i = 0; i < FLOW_WINDOW_SIZE; i++) {
+        sumN += historyN[i];
+        sumP += historyP[i];
+        sumK += historyK[i];
+        sumMain += historyMain[i];
+    }
+
+    // Tính lưu lượng thực tế theo hệ số hiệu chuẩn đã lưu (dựa trên tổng 1 giây gần nhất): Q(L/min) = sumPulse * ML_PER_PULSE * 0.06 / 1.0f
+    flowLpmN = sumN * ML_PER_PULSE_N * 0.06f; 
+    flowLpmP = sumP * ML_PER_PULSE_P * 0.06f; 
+    flowLpmK = sumK * ML_PER_PULSE_K * 0.06f; 
+    flowLpmMain = sumMain / 0.45f; // Cảm biến DN32 ống chính (F = 0.45 * Q)
 
     // Kiểm tra bảo vệ chống chạy khô (Flow Timeout)
     if (systemRunning) {
@@ -721,6 +746,8 @@ void calculateFlowRates() {
     }
     lastFlowCalc = now;
 }
+
+//====================================================================================================================================================================================================================
 // ĐÓNG CHẶT VAN HỒI TIẾP (CLOSED-LOOP CLOSED VALVE FEEDBACK CORRECTION)
 // Di chuyển động cơ bước thêm cho đến khi cảm biến lưu lượng thực sự báo 0 L/phút
 void forceCloseValve(int valve) {
@@ -814,6 +841,7 @@ void forceCloseValve(int valve) {
     digitalWrite(enPin, HIGH);
 }
 
+//====================================================================================================================================================================================================================
 // KẾT NỐI MQTT
 void mqttReconnect() {
     if (millis() - lastReconnectTry < 5000) return;
@@ -838,70 +866,8 @@ void mqttReconnect() {
         digitalWrite(STATUS_LED, LOW);
     }
 }
-// XỬ LÝ LOGIC BƠM (gọi liên tục trong loop)
-void processDispensing() {
-    if (!systemRunning) return;
-    // Đọc tổng thể tích đã bơm của từng van
-    noInterrupts();
-    float volN = pulseN * ML_PER_PULSE_N;
-    float volP = pulseP * ML_PER_PULSE_P;
-    float volK = pulseK * ML_PER_PULSE_K;
-    interrupts();
-    switch (currentPhase) {
-        case 1:  // Đang bơm N
-            if (volN >= targetN) {
-                forceCloseValve(1); // Thay thế closeValve(1) để siết chặt van dựa trên cảm biến phản hồi
-                Serial.printf("[✓] Pha N hoàn thành → đã bơm %.1f mL (mục tiêu: %.1f mL)\n",
-                              volN, targetN);
-                if (targetP > 0) {
-                    currentPhase = 2;
-                    moveStepper(2, INITIAL_STARTUP_STEPS);
-                    Serial.printf("[>] Chuyển sang pha P (mở nhanh ban đầu %d bước)...\n", INITIAL_STARTUP_STEPS);
-                } else if (targetK > 0) {
-                    currentPhase = 3;
-                    moveStepper(3, INITIAL_STARTUP_STEPS);
-                    Serial.printf("[>] Chuyển sang pha K (mở nhanh ban đầu %d bước)...\n", INITIAL_STARTUP_STEPS);
-                } else {
-                    currentPhase = 4;
-                    systemRunning = false;
-                    digitalWrite(PUMP_PIN, LOW);
-                    digitalWrite(VALVE_PIN, LOW);
-                    Serial.println("[✓✓] Hoàn thành toàn bộ quá trình pha trộn!");
-                }
-            }
-            break;
-        case 2:  // Đang bơm P
-            if (volP >= targetP) {
-                forceCloseValve(2); // Thay thế closeValve(2) để siết chặt van dựa trên cảm biến phản hồi
-                Serial.printf("[✓] Pha P hoàn thành → đã bơm %.1f mL (mục tiêu: %.1f mL)\n",
-                              volP, targetP);
-                if (targetK > 0) {
-                    currentPhase = 3;
-                    moveStepper(3, INITIAL_STARTUP_STEPS);
-                    Serial.printf("[>] Chuyển sang pha K (mở nhanh ban đầu %d bước)...\n", INITIAL_STARTUP_STEPS);
-                } else {
-                    currentPhase = 4;
-                    systemRunning = false;
-                    digitalWrite(PUMP_PIN, LOW);
-                    digitalWrite(VALVE_PIN, LOW);
-                    Serial.println("[✓✓] Hoàn thành toàn bộ quá trình pha trộn!");
-                }
-            }
-            break;
-        case 3:  // Đang bơm K
-            if (volK >= targetK) {
-                forceCloseValve(3); // Thay thế closeValve(3) để siết chặt van dựa trên cảm biến phản hồi
-                currentPhase  = 4;
-                systemRunning = false;
-                digitalWrite(PUMP_PIN, LOW);
-                digitalWrite(VALVE_PIN, LOW);
-                Serial.printf("[✓] Pha K hoàn thành → đã bơm %.1f mL (mục tiêu: %.1f mL)\n",
-                              volK, targetK);
-                Serial.println("[✓✓] Hoàn thành toàn bộ quá trình pha trộn!");
-            }
-            break;
-    }
-}
+
+//====================================================================================================================================================================================================================
 // PUBLISH TRẠNG THÁI LÊN MQTT
 void publishStatus() {
     noInterrupts();
@@ -927,9 +893,9 @@ void publishStatus() {
         v["target_ml"] = roundf(target);
         v["percent"]   = (target > 0) ? min(100.0f, vol / target * 100.0f) : 0.0f;
     };
-    mkValve("N", volN, targetN, flowLpmN, posN, currentPhase == 1);
-    mkValve("P", volP, targetP, flowLpmP, posP, currentPhase == 2);
-    mkValve("K", volK, targetK, flowLpmK, posK, currentPhase == 3);
+    mkValve("N", volN, targetN, flowLpmN, posN, targetN > 0 && !doneN);
+    mkValve("P", volP, targetP, flowLpmP, posP, targetP > 0 && !doneP);
+    mkValve("K", volK, targetK, flowLpmK, posK, targetK > 0 && !doneK);
     doc["main_flow_lpm"] = roundf(flowLpmMain * 100.0f) / 100.0f;
     doc["main_volume_ml"] = roundf(volMain);
     doc["total_target_ml"] = targetN + targetP + targetK;
@@ -938,14 +904,15 @@ void publishStatus() {
     size_t len = serializeJson(doc, buffer);
     mqttClient.publish(TOPIC_STATUS, (uint8_t*)buffer, len, false);
 }
-// -----------------------------------------------------------------------------------------------------------------
+
+//====================================================================================================================================================================================================================
 // SETUP
 void setup() {
     Serial.begin(115200);
     delay(500);
     Serial.println(F("\n╔══════════════════════════════════════╗"));
-    Serial.println(F("║  HỆ THỐNG PHỐI TRỘN PHÂN TỰ ĐỘNG   ║"));
-    Serial.println(F("╚══════════════════════════════════════╝"));
+    Serial.println(F("  ║  HỆ THỐNG PHỐI TRỘN PHÂN TỰ ĐỘNG     ║"));
+    Serial.println(F("  ╚══════════════════════════════════════╝"));
 
     // LED trạng thái
     pinMode(STATUS_LED, OUTPUT);
@@ -1008,6 +975,7 @@ void setup() {
     Serial.println(F("[OK] Hệ thống sẵn sàng!\n"));
 }
 
+//====================================================================================================================================================================================================================
 // LOOP
 void loop() {
     // Kiểm tra WiFi
@@ -1026,16 +994,12 @@ void loop() {
     if (now - lastFlowCalc >= FLOW_CALC_INTERVAL) {
         calculateFlowRates();
     }
-    // Xử lý logic bơm
-    if (simMode && systemRunning) {
-        // Chế độ ĐỒNG THỜI: vòng P-controller
+    // Xử lý logic bơm (chỉ chạy chế độ ĐỒNG THỜI)
+    if (systemRunning) {
         if (now - lastControlTime >= CONTROL_INTERVAL_MS) {
             controlSimultaneous();
             lastControlTime = now;
         }
-    } else if (!simMode && systemRunning) {
-        // Chế độ TUẦN TỰ
-        processDispensing();
     }
     // Publish trạng thái về server
     if (now - lastPublish >= PUBLISH_INTERVAL) {
