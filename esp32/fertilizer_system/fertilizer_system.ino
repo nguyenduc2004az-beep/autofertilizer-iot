@@ -379,10 +379,17 @@ void controlSimultaneous() {
         if (volN >= targetN) {
             adjN = -posN; // Đóng van N song song không chặn CPU
             doneN = true;
-            monitoringN = true;
-            closeTimerN = millis();
-            extraCloseN = 0;
-            Serial.printf("[SIM✓] Van N đủ lượng → %.0f/%.0f mL. Bắt đầu giám sát rò rỉ 5s...\n", volN, targetN);
+            // Chỉ chạy giám sát 5s nếu đây không phải là van cuối cùng kết thúc
+            bool otherDone = (doneP || targetP <= 0) && (doneK || targetK <= 0);
+            if (otherDone) {
+                monitoringN = false;
+                Serial.printf("[SIM✓] Van N đủ lượng (Van cuối) → %.0f/%.0f mL. Dừng hệ thống ngay lập tức.\n", volN, targetN);
+            } else {
+                monitoringN = true;
+                closeTimerN = millis();
+                extraCloseN = 0;
+                Serial.printf("[SIM✓] Van N đủ lượng → %.0f/%.0f mL. Bắt đầu giám sát rò rỉ 5s...\n", volN, targetN);
+            }
         } else {
             float volRatio = volN / targetN;
             float currentTargetLpmN = dynTargetLpmN;
@@ -437,10 +444,17 @@ void controlSimultaneous() {
         if (volP >= targetP) {
             adjP = -posP; // Đóng van P song song không chặn CPU
             doneP = true;
-            monitoringP = true;
-            closeTimerP = millis();
-            extraCloseP = 0;
-            Serial.printf("[SIM✓] Van P đủ lượng → %.0f/%.0f mL. Bắt đầu giám sát rò rỉ 5s...\n", volP, targetP);
+            // Chỉ chạy giám sát 5s nếu đây không phải là van cuối cùng kết thúc
+            bool otherDone = (doneN || targetN <= 0) && (doneK || targetK <= 0);
+            if (otherDone) {
+                monitoringP = false;
+                Serial.printf("[SIM✓] Van P đủ lượng (Van cuối) → %.0f/%.0f mL. Dừng hệ thống ngay lập tức.\n", volP, targetP);
+            } else {
+                monitoringP = true;
+                closeTimerP = millis();
+                extraCloseP = 0;
+                Serial.printf("[SIM✓] Van P đủ lượng → %.0f/%.0f mL. Bắt đầu giám sát rò rỉ 5s...\n", volP, targetP);
+            }
         } else {
             float volRatio = volP / targetP;
             float currentTargetLpmP = dynTargetLpmP;
@@ -495,10 +509,17 @@ void controlSimultaneous() {
         if (volK >= targetK) {
             adjK = -posK; // Đóng van K song song không chặn CPU
             doneK = true;
-            monitoringK = true;
-            closeTimerK = millis();
-            extraCloseK = 0;
-            Serial.printf("[SIM✓] Van K đủ lượng → %.0f/%.0f mL. Bắt đầu giám sát rò rỉ 5s...\n", volK, targetK);
+            // Chỉ chạy giám sát 5s nếu đây không phải là van cuối cùng kết thúc
+            bool otherDone = (doneN || targetN <= 0) && (doneP || targetP <= 0);
+            if (otherDone) {
+                monitoringK = false;
+                Serial.printf("[SIM✓] Van K đủ lượng (Van cuối) → %.0f/%.0f mL. Dừng hệ thống ngay lập tức.\n", volK, targetK);
+            } else {
+                monitoringK = true;
+                closeTimerK = millis();
+                extraCloseK = 0;
+                Serial.printf("[SIM✓] Van K đủ lượng → %.0f/%.0f mL. Bắt đầu giám sát rò rỉ 5s...\n", volK, targetK);
+            }
         } else {
             float volRatio = volK / targetK;
             float currentTargetLpmK = dynTargetLpmK;
@@ -554,23 +575,25 @@ void controlSimultaneous() {
         if (adjP != 0) Serial.printf("[P] Flow=%.3f (Tgt=%.3f) → Pos=%d steps\n", flowLpmP, dynTargetLpmP, posP);
         if (adjK != 0) Serial.printf("[K] Flow=%.3f (Tgt=%.3f) → Pos=%d steps\n", flowLpmK, dynTargetLpmK, posK);
     }
-    // Kiểm tra hoàn thành tất cả van (bao gồm cả thời gian giám sát 5s)
-    bool nOk = (doneN && !monitoringN) || targetN <= 0;
-    bool pOk = (doneP && !monitoringP) || targetP <= 0;
-    bool kOk = (doneK && !monitoringK) || targetK <= 0;
-    if (nOk && pOk && kOk) {
+    // Kiểm tra hoàn thành tất cả van (bơm tắt ngay khi tất cả van đạt đủ lượng châm)
+    bool allDosingDone = (doneN || targetN <= 0) && (doneP || targetP <= 0) && (doneK || targetK <= 0);
+    if (allDosingDone) {
         currentPhase  = 4;
         systemRunning = false;
         simMode       = false;
         digitalWrite(PUMP_PIN, LOW);
         digitalWrite(VALVE_PIN, LOW);
         
-        // Siết chặt chống rò rỉ tất cả van hoạt động sau khi bơm chính đã tắt (không gây trễ cho các van khác)
-        if (targetN > 0) forceCloseValve(1);
-        if (targetP > 0) forceCloseValve(2);
-        if (targetK > 0) forceCloseValve(3);
+        // Tắt giám sát rò rỉ và ngắt điện driver của tất cả van
+        monitoringN = false;
+        monitoringP = false;
+        monitoringK = false;
         
-        Serial.println("[SIM✓✓] Hoàn thành toàn bộ - chế độ đồng thời!");
+        posN = 0; learnedMinN = 0; digitalWrite(EN_N, HIGH);
+        posP = 0; learnedMinP = 0; digitalWrite(EN_P, HIGH);
+        posK = 0; learnedMinK = 0; digitalWrite(EN_K, HIGH);
+        
+        Serial.println("[SIM✓✓] Hoàn thành toàn bộ - chế độ đồng thời (Dừng bơm lập tức, đóng van an toàn)!");
     }
 }
 
