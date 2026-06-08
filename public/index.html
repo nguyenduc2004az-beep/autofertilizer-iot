@@ -1489,7 +1489,7 @@ function _doActualStart() {
         ratio_N: n,
         ratio_P: p,
         ratio_K: k,
-        total_vol_l: ((n + p + k) / 1000).toFixed(2),
+        total_vol_l: (n + p + k) / 1000,
         total_lpm: totalDosingFlowLpm > 0.05 ? totalDosingFlowLpm : 3.0
     };
 

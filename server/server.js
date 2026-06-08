@@ -593,15 +593,15 @@ app.post('/api/start', (req, res) => {
 
         const totalParts = ratioN + ratioP + ratioK;
 
-        const calc = (ratio) => ({
+        const calc = (ratio, directMl) => ({
             pct:        (ratio / totalParts) * 100,
-            target_ml:  Math.round((ratio / totalParts) * total_liter * 1000),
+            target_ml:  directMl > 0 ? Math.round(directMl) : Math.round((ratio / totalParts) * total_liter * 1000),
             target_lpm: parseFloat(((ratio / totalParts) * total_lpm).toFixed(3))
         });
 
-        const cN = calc(ratioN);
-        const cP = calc(ratioP);
-        const cK = calc(ratioK);
+        const cN = calc(ratioN, nMl);
+        const cP = calc(ratioP, pMl);
+        const cK = calc(ratioK, kMl);
 
         const Q_MAX = 4.0;
         const toInitOpen = (lpm) => Math.min(100, Math.round((lpm / Q_MAX) * 100));

@@ -174,6 +174,7 @@ function syncStatus() {
         if(srvDot) srvDot.className = 'ov-chip-dot green';
 
         setESPStatus(data.device_online);
+        window.currentSession = data.current_session;
         if(data.last_status) updateUI(data.last_status);
     }).catch(err => {
         console.warn('Sync status failed:', err);
@@ -217,6 +218,7 @@ function fetchAiCalibration() {
 }
 
 socket.on('session_started', (sess) => {
+    window.currentSession = sess;
     showToast(`Bắt đầu trộn: ${sess.recipe_name}`, 'success');
     document.getElementById('btnStart').disabled = true;
     document.getElementById('btnStop').disabled = false;
@@ -225,6 +227,7 @@ socket.on('session_started', (sess) => {
 });
 
 socket.on('session_completed', (record) => {
+    window.currentSession = null;
     showToast(`Đã hoàn thành phối trộn! Tổng: ${record.total_ml}mL`, 'success');
     document.getElementById('btnStart').disabled = false;
     document.getElementById('btnStop').disabled = true;
@@ -234,6 +237,7 @@ socket.on('session_completed', (record) => {
 });
 
 socket.on('session_stopped', () => {
+    window.currentSession = null;
     showToast('Đã dừng khẩn cấp!', 'error');
     document.getElementById('btnStart').disabled = false;
     document.getElementById('btnStop').disabled = true;
@@ -405,13 +409,22 @@ function updateUI(data) {
 
     // Dashboard Stats Update
     if(document.getElementById('dsh-volN')) {
+        let tgtN = V.N.target_ml || 0;
+        let tgtP = V.P.target_ml || 0;
+        let tgtK = V.K.target_ml || 0;
+        if (window.currentSession && window.currentSession.calc) {
+            if (window.currentSession.calc.N) tgtN = window.currentSession.calc.N.target_ml || tgtN;
+            if (window.currentSession.calc.P) tgtP = window.currentSession.calc.P.target_ml || tgtP;
+            if (window.currentSession.calc.K) tgtK = window.currentSession.calc.K.target_ml || tgtK;
+        }
+
         // Volume (Current / Target)
         document.getElementById('dsh-volN').textContent = Math.round(V.N.volume_ml||0);
-        document.getElementById('dsh-tgtN').textContent = Math.round(V.N.target_ml||0);
+        document.getElementById('dsh-tgtN').textContent = Math.round(tgtN);
         document.getElementById('dsh-volP').textContent = Math.round(V.P.volume_ml||0);
-        document.getElementById('dsh-tgtP').textContent = Math.round(V.P.target_ml||0);
+        document.getElementById('dsh-tgtP').textContent = Math.round(tgtP);
         document.getElementById('dsh-volK').textContent = Math.round(V.K.volume_ml||0);
-        document.getElementById('dsh-tgtK').textContent = Math.round(V.K.target_ml||0);
+        document.getElementById('dsh-tgtK').textContent = Math.round(tgtK);
 
         // Flow Velocity
         document.getElementById('dsh-flowN').textContent = parseFloat(V.N.flow_lpm||0).toFixed(2);
@@ -539,10 +552,15 @@ function updateValve(ch, d) {
     if(!d) return;
     document.getElementById(`flow${ch}`).textContent = parseFloat(d.flow_lpm||0).toFixed(2);
     document.getElementById(`vol${ch}`).textContent = Math.round(d.volume_ml||0);
-    document.getElementById(`tgt${ch}`).textContent = Math.round(d.target_ml||0);
+    
+    let targetMl = d.target_ml || 0;
+    if (window.currentSession && window.currentSession.calc && window.currentSession.calc[ch]) {
+        targetMl = window.currentSession.calc[ch].target_ml || targetMl;
+    }
+    document.getElementById(`tgt${ch}`).textContent = Math.round(targetMl);
     document.getElementById(`steps${ch}`).textContent = d.steps;
 
-    const p = d.target_ml > 0 ? Math.min(100, (d.volume_ml / d.target_ml) * 100) : 0;
+    const p = targetMl > 0 ? Math.min(100, (d.volume_ml / targetMl) * 100) : 0;
     document.getElementById(`pct${ch}`).textContent = Math.round(p);
 
     const ring = document.getElementById(`ring${ch}`);
@@ -560,7 +578,7 @@ function updateValve(ch, d) {
     const rdBar = document.getElementById(`rd-bar${ch}`);
     const rdPct = document.getElementById(`rd-pct${ch}`);
     if(rdVol) {
-        const remaining = Math.max(0, d.target_ml - d.volume_ml);
+        const remaining = Math.max(0, targetMl - d.volume_ml);
         rdVol.textContent = (remaining / 1000).toFixed(1);
         const rmPct = 100 - p;
         rdBar.style.width = rmPct + '%';
@@ -640,7 +658,7 @@ function startMixing() {
         ratio_N: n,
         ratio_P: p,
         ratio_K: k,
-        total_vol_l: ((n + p + k) / 1000).toFixed(2),
+        total_vol_l: (n + p + k) / 1000,
         total_lpm: totalDosingFlowLpm > 0.05 ? totalDosingFlowLpm : 3.0
     };
 
