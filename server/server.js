@@ -292,39 +292,14 @@ let aiCalibration = {
 async function updateCalibrationFactors() {
     if (!pool) return;
     try {
-        // Lấy 10 phiên hoàn thành gần nhất
-        const query = `
-            SELECT ti_le_bon1 as target_n, ti_le_bon2 as target_p, ti_le_bon3 as target_k, 
-                   thuc_te_bon1_ml as actual_n, thuc_te_bon2_ml as actual_p, thuc_te_bon3_ml as actual_k
-            FROM lich_su_tron 
-            WHERE trang_thai = 'completed' AND tong_the_tich_ml > 0
-            ORDER BY thoi_gian_tron DESC 
-            LIMIT 10
-        `;
-        const [rows] = await pool.query(query);
-        if (rows.length === 0) return;
-
-        let fn_sum = 0, cn = 0;
-        let fp_sum = 0, cp = 0;
-        let fk_sum = 0, ck = 0;
-
-        rows.forEach(r => {
-            // Chỉ tính nếu mục tiêu > 50ml để tránh nhiễu
-            if (r.target_n > 50 && r.actual_n > 0) { fn_sum += (r.target_n / r.actual_n); cn++; }
-            if (r.target_p > 50 && r.actual_p > 0) { fp_sum += (r.target_p / r.actual_p); cp++; }
-            if (r.target_k > 50 && r.actual_k > 0) { fk_sum += (r.target_k / r.actual_k); ck++; }
-        });
-
-        const clamp = (val) => Math.max(0.5, Math.min(2.0, val));
-
-        if (cn > 0) aiCalibration.N = clamp(fn_sum / cn);
-        if (cp > 0) aiCalibration.P = clamp(fp_sum / cp);
-        if (ck > 0) aiCalibration.K = clamp(fk_sum / ck);
-        
-        aiCalibration.history_samples = Math.max(cn, cp, ck);
+        // Khóa hệ số bù trừ AI ở mức 1.0 cố định để tránh thay đổi mục tiêu ngầm
+        aiCalibration.N = 1.0;
+        aiCalibration.P = 1.0;
+        aiCalibration.K = 1.0;
+        aiCalibration.history_samples = 0;
         aiCalibration.last_updated = new Date().toISOString();
         
-        console.log(`[EDGE-AI] Đã cập nhật hệ số bù trừ dựa trên ${aiCalibration.history_samples} phiên: N=${aiCalibration.N.toFixed(3)}, P=${aiCalibration.P.toFixed(3)}, K=${aiCalibration.K.toFixed(3)}`);
+        console.log(`[EDGE-AI] Đã khóa hệ số bù trừ cố định: N=${aiCalibration.N.toFixed(3)}, P=${aiCalibration.P.toFixed(3)}, K=${aiCalibration.K.toFixed(3)}`);
         io.emit('ai_calibration_updated', aiCalibration);
     } catch (err) {
         console.error('[EDGE-AI] Lỗi tính toán:', err.message);
@@ -439,7 +414,7 @@ mqttClient.on('message', async (topic, message) => {
                 N_ml:        Math.round(data.valves?.N?.volume_ml || 0),
                 P_ml:        Math.round(data.valves?.P?.volume_ml || 0),
                 K_ml:        Math.round(data.valves?.K?.volume_ml || 0),
-                total_ml:    Math.round(data.total_volume_ml || 0),
+                total_ml:    Math.round((data.main_volume_ml !== undefined ? data.main_volume_ml : data.total_volume_ml) || 0),
                 duration_s:  Math.round((Date.now() - sess.start_time) / 1000),
                 status:      status,
                 wifi_rssi:   data.wifi_rssi || 0
@@ -567,7 +542,7 @@ app.post('/api/start', (req, res) => {
             return res.status(400).json({ error: 'Cần nhập ít nhất 1 lượng phân > 0' });
         }
     } else {
-        // 2. Chế độ phối trộn phân bón (Luôn chạy ĐỒNG THỜI)
+        // 2. Chế độ phối trộn phân bón (Volume-Based Fertigation)
         const ratioN = parseFloat(body.ratio_N) !== undefined ? parseFloat(body.ratio_N) : nMl;
         const ratioP = parseFloat(body.ratio_P) !== undefined ? parseFloat(body.ratio_P) : pMl;
         const ratioK = parseFloat(body.ratio_K) !== undefined ? parseFloat(body.ratio_K) : kMl;
@@ -577,63 +552,56 @@ app.post('/api/start', (req, res) => {
             total_liter = (nMl + pMl + kMl) / 1000;
         }
         
-        let total_lpm = parseFloat(body.total_lpm) || 0;
-        if (total_lpm <= 0) {
-            const durationMin = parseFloat(body.duration_min) || 1.0;
-            const totalDosingFlowLpm = (nMl + pMl + kMl) / (durationMin * 1000);
-            total_lpm = totalDosingFlowLpm > 0.05 ? totalDosingFlowLpm : 3.0;
+        let total_water_l = parseFloat(body.total_water_l) || 0;
+        if (total_water_l <= 0) {
+            total_water_l = (nMl + pMl + kMl) / 10.0 * 1.15; // Mặc định tự tính nếu thiếu
         }
 
         if (ratioN + ratioP + ratioK <= 0)
             return res.status(400).json({ error: 'Tổng tỉ lệ phải > 0' });
-        if (total_liter <= 0)
-            return res.status(400).json({ error: 'Tổng thể tích phải > 0' });
-        if (total_lpm <= 0)
-            return res.status(400).json({ error: 'Lưu lượng tổng phải > 0' });
 
         const totalParts = ratioN + ratioP + ratioK;
 
         const calc = (ratio, directMl) => ({
             pct:        (ratio / totalParts) * 100,
-            target_ml:  directMl > 0 ? Math.round(directMl) : Math.round((ratio / totalParts) * total_liter * 1000),
-            target_lpm: parseFloat(((ratio / totalParts) * total_lpm).toFixed(3))
+            target_ml:  directMl > 0 ? Math.round(directMl) : Math.round((ratio / totalParts) * total_liter * 1000)
         });
 
         const cN = calc(ratioN, nMl);
         const cP = calc(ratioP, pMl);
         const cK = calc(ratioK, kMl);
 
-        const Q_MAX = 4.0;
-        const toInitOpen = (lpm) => Math.min(100, Math.round((lpm / Q_MAX) * 100));
-
         mqttCmd = {
             cmd: 'start_sim',
+            total_water_l: total_water_l,
             recipe: {
-                N: { target_ml: Math.round(cN.target_ml * (cN.target_ml >= 50 ? aiCalibration.N : 1.0)), target_lpm: cN.target_lpm, init_open: toInitOpen(cN.target_lpm) },
-                P: { target_ml: Math.round(cP.target_ml * (cP.target_ml >= 50 ? aiCalibration.P : 1.0)), target_lpm: cP.target_lpm, init_open: toInitOpen(cP.target_lpm) },
-                K: { target_ml: Math.round(cK.target_ml * (cK.target_ml >= 50 ? aiCalibration.K : 1.0)), target_lpm: cK.target_lpm, init_open: toInitOpen(cK.target_lpm) }
+                N: { target_ml: Math.round(cN.target_ml * (cN.target_ml >= 50 ? aiCalibration.N : 1.0)) },
+                P: { target_ml: Math.round(cP.target_ml * (cP.target_ml >= 50 ? aiCalibration.P : 1.0)) },
+                K: { target_ml: Math.round(cK.target_ml * (cK.target_ml >= 50 ? aiCalibration.K : 1.0)) }
             }
         };
 
         sessionInfo = {
-            recipe_name: body.recipe_name || `Tỉ lệ ${ratioN}:${ratioP}:${ratioK}`,
-            mode: 'simultaneous',
+            recipe_name: body.recipe_name || `Tỉ lệ ${ratioN}:${ratioP}:${ratioK} (Volume-Based)`,
+            mode: 'volume-based',
             start_time: Date.now(),
             ratio: { N: ratioN, P: ratioP, K: ratioK },
-            total_liter, total_lpm,
+            total_liter, total_water_l,
             calc: { N: cN, P: cP, K: cK }
         };
 
-        console.log(`[SIM] ${sessionInfo.recipe_name} | N:${cN.target_ml}mL | P:${cP.target_ml}mL | K:${cK.target_ml}mL`);
-    }
+        console.log(`[VOLUME-BASED] Bắt đầu chu trình Mục tiêu Nước: ${total_water_l}L | ${sessionInfo.recipe_name}`);
+        
+        // --- GIAO QUYỀN ĐIỀU KHIỂN CHO ESP32 ---
+        // Server chỉ việc gửi lệnh, việc bật bơm, tự ngắt theo lít nước sẽ do ESP32 lo hoàn toàn!
+        if (waterTimerTimeout) clearTimeout(waterTimerTimeout);
+        
+        mqttClient.publish(TOPIC_CMD, JSON.stringify(mqttCmd), { qos: 1 });
 
-    mqttClient.publish(TOPIC_CMD, JSON.stringify(mqttCmd), { qos: 1 }, (err) => {
-        if (err) return res.status(500).json({ error: 'Lỗi MQTT: ' + err.message });
         currentSession = sessionInfo;
-        console.log(`[START] ${sessionInfo.recipe_name} - chế độ: ${sessionInfo.mode}`);
         io.emit('session_started', sessionInfo);
         res.json({ success: true, session: sessionInfo, command: mqttCmd });
-    });
+    }
 });
 
 app.post('/api/stop', async (req, res) => {
@@ -664,7 +632,7 @@ app.post('/api/stop', async (req, res) => {
                 N_ml:        Math.round(lastDeviceStatus?.valves?.N?.volume_ml || 0),
                 P_ml:        Math.round(lastDeviceStatus?.valves?.P?.volume_ml || 0),
                 K_ml:        Math.round(lastDeviceStatus?.valves?.K?.volume_ml || 0),
-                total_ml:    Math.round(lastDeviceStatus?.total_volume_ml || 0),
+                total_ml:    Math.round((lastDeviceStatus?.main_volume_ml !== undefined ? lastDeviceStatus?.main_volume_ml : lastDeviceStatus?.total_volume_ml) || 0),
                 duration_s:  Math.round((Date.now() - sess.start_time) / 1000),
                 status:      'cancelled',
                 wifi_rssi:   lastDeviceStatus?.wifi_rssi || 0
@@ -800,13 +768,26 @@ app.post('/api/calibration/start-run', (req, res) => {
         K: lastDeviceStatus?.valves?.K?.volume_ml || 0,
         Main: lastDeviceStatus?.main_volume_ml || lastDeviceStatus?.total_volume_ml || 0
     };
+    calibrationRun.startPulses = {
+        N: lastDeviceStatus?.valves?.N?.pulses || 0,
+        P: lastDeviceStatus?.valves?.P?.pulses || 0,
+        K: lastDeviceStatus?.valves?.K?.pulses || 0,
+        Main: lastDeviceStatus?.main_pulses || 0
+    };
     
     console.log(`[CALIBRATION] Đang mở van chính, chờ 5 giây trước khi kích hoạt bơm...`);
     
     calibrationRun.timer = setTimeout(() => {
         mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 1 }), { qos: 1 });
         console.log(`[CALIBRATION] Đã kích hoạt bơm cho chu kỳ: ${calibrationRun.cycleId}`);
-        calibrationRun.timer = null;
+        
+        // Tự động tắt bơm sau 15s chạy thực tế (phòng trường hợp client không gọi stop-run)
+        calibrationRun.timer = setTimeout(() => {
+            mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 0 }), { qos: 1 });
+            mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 0 }), { qos: 1 });
+            console.log(`[CALIBRATION] Đã TỰ ĐỘNG tắt bơm và van sau đúng 15s cho chu kỳ: ${calibrationRun.cycleId}`);
+            calibrationRun.timer = null;
+        }, 15000);
     }, 5000);
     
     res.json({ success: true, cycleId: calibrationRun.cycleId });
@@ -834,14 +815,26 @@ app.post('/api/calibration/stop-run', async (req, res) => {
             Main: lastDeviceStatus?.main_volume_ml || lastDeviceStatus?.total_volume_ml || 0
         };
         
+        const endPulses = {
+            N: lastDeviceStatus?.valves?.N?.pulses || 0,
+            P: lastDeviceStatus?.valves?.P?.pulses || 0,
+            K: lastDeviceStatus?.valves?.K?.pulses || 0,
+            Main: lastDeviceStatus?.main_pulses || 0
+        };
+        
         const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
         const cycleId = calibrationRun.cycleId;
         
+        const diffN = Math.max(0, endValues.N - calibrationRun.startValues.N);
+        const diffP = Math.max(0, endValues.P - calibrationRun.startValues.P);
+        const diffK = Math.max(0, endValues.K - calibrationRun.startValues.K);
+        const diffMain = Math.max(0, endValues.Main - calibrationRun.startValues.Main);
+
         const results = {
-            N: { volume_ml: Math.max(0, endValues.N - calibrationRun.startValues.N), pulses: Math.round(Math.max(0, endValues.N - calibrationRun.startValues.N) / 0.170) },
-            P: { volume_ml: Math.max(0, endValues.P - calibrationRun.startValues.P), pulses: Math.round(Math.max(0, endValues.P - calibrationRun.startValues.P) / 0.170) },
-            K: { volume_ml: Math.max(0, endValues.K - calibrationRun.startValues.K), pulses: Math.round(Math.max(0, endValues.K - calibrationRun.startValues.K) / 0.170) },
-            Main: { volume_ml: Math.max(0, endValues.Main - calibrationRun.startValues.Main), pulses: Math.round(Math.max(0, endValues.Main - calibrationRun.startValues.Main) / 37.037) }
+            N: { volume_ml: diffN, pulses: Math.max(0, endPulses.N - (calibrationRun.startPulses?.N || 0)) || Math.round(diffN / 0.170) },
+            P: { volume_ml: diffP, pulses: Math.max(0, endPulses.P - (calibrationRun.startPulses?.P || 0)) || Math.round(diffP / 0.170) },
+            K: { volume_ml: diffK, pulses: Math.max(0, endPulses.K - (calibrationRun.startPulses?.K || 0)) || Math.round(diffK / 0.170) },
+            Main: { volume_ml: diffMain, pulses: Math.max(0, endPulses.Main - (calibrationRun.startPulses?.Main || 0)) || Math.round(diffMain / 37.037) }
         };
         
         const sensors = ['N', 'P', 'K', 'Main'];

@@ -83,31 +83,29 @@
         <nav class="topbar-nav">
             <button class="tn-item active" id="tn-dashboard" onclick="showPage('dashboard')" title="Tổng Quan">
                 <i class="fas fa-home"></i>
+                <span class="tn-label">Tổng Quan</span>
                 <div class="tn-active-indicator"></div>
             </button>
-            <button class="tn-item" id="tn-monitor" onclick="showPage('monitor')" title="Giám Sát">
-                <i class="fas fa-chart-line"></i>
-                <div class="tn-active-indicator"></div>
-            </button>
+
             <button class="tn-item" id="tn-settings" onclick="showPage('settings')" title="Điều Khiển">
                 <i class="fas fa-sliders-h"></i>
+                <span class="tn-label">Điều Khiển</span>
                 <div class="tn-active-indicator"></div>
             </button>
             <button class="tn-item" id="tn-recipes" onclick="showPage('recipes')" title="Công Thức">
                 <i class="fas fa-flask"></i>
+                <span class="tn-label">Công Thức</span>
                 <div class="tn-active-indicator"></div>
             </button>
-            <button class="tn-item" id="tn-alerts" onclick="showPage('alerts')" title="Cảnh Báo">
-                <i class="fas fa-bell"></i>
-                <span class="tn-badge hidden" id="tn-badge-alerts">0</span>
-                <div class="tn-active-indicator"></div>
-            </button>
+
             <button class="tn-item" id="tn-history" onclick="showPage('history')" title="Lịch Sử">
                 <i class="fas fa-history"></i>
+                <span class="tn-label">Lịch Sử</span>
                 <div class="tn-active-indicator"></div>
             </button>
             <button class="tn-item" id="tn-system" onclick="showPage('system')" title="Hệ Thống">
                 <i class="fas fa-info-circle"></i>
+                <span class="tn-label">Hệ Thống</span>
                 <div class="tn-active-indicator"></div>
             </button>
         </nav>
@@ -355,187 +353,175 @@
                     </div>
                 </div>
 
-                <!-- Biểu đồ được di chuyển sang trang giám sát -->
-            </div>
-        </section>
-
-        <!-- ========================================
-             PAGE: GIÁM SÁT REAL-TIME
-        ======================================== -->
-        <section class="page" id="page-monitor">
-            <div class="page-header">
-                <h2>📡 Giám Sát Thời Gian Thực</h2>
-                <p>Theo dõi lưu lượng và trạng thái 3 van phân NPK</p>
-            </div>
-
-            <!-- Connection Status Bar -->
-            <div class="conn-status-bar">
-                <div class="conn-pill" id="monMQTT">
-                    <div class="conn-dot"></div><span>📶 Kết nối Server</span>
-                </div>
-                <div class="conn-pill" id="monESP">
-                    <div class="conn-dot"></div><span>🔌 Thiết bị</span>
-                </div>
-                <div class="conn-pill running" id="monStatus">
-                    <span id="monStatusTxt">CHỜ LỆNH</span>
-                </div>
-                <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
-                    <span id="monTimer" class="session-timer-label hidden">🕐 <span id="monTimerVal">00:00</span></span>
-                </div>
-            </div>
-
-            <!-- BẢNG GIÁM SÁT THỜI GIAN THỰC (ĐÃ TÁCH THÀNH 4 KHỐI) -->
-            <div class="monitor-grid">
-                
-                <!-- Khối 1: Bồn Số 1 (Đạm - N) -->
-                <div class="monitor-card card-n">
-                    <div class="monitor-card-header">
-                        <span class="monitor-card-title n-text">🌿 Bồn Số 1 (N)</span>
-                        <span id="stateN" class="sys-val" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;">
-                            <span class="state-dot closed-dot"></span> <span>Đã đóng</span>
-                        </span>
-                    </div>
-                    <div class="monitor-card-body">
-                        <div class="monitor-card-row">
-                            <span class="label">💧 Lưu lượng:</span>
-                            <span class="value"><span id="flowN">0.00</span> L/phút</span>
+                <!-- BẢNG GIÁM SÁT THỜI GIAN THỰC (4 KHỐI) -->
+                <div id="monitor-grid" class="monitor-grid" style="margin-top: 15px;">
+                    
+                    <!-- Khối 1: Bồn Số 1 (Đạm - N) -->
+                    <div class="monitor-card card-n">
+                        <div class="monitor-card-header">
+                            <span class="monitor-card-title n-text">🌿 Bồn Số 1 (N)</span>
+                            <span id="stateN" class="sys-val" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;">
+                                <span class="state-dot closed-dot"></span> <span>Đã đóng</span>
+                            </span>
                         </div>
-                        <div class="monitor-card-row">
-                            <span class="label">📈 Tiến độ:</span>
-                            <span class="value"><span id="pctN">0</span>%</span>
-                        </div>
-                        <div class="monitor-card-row">
-                            <span class="label">🧪 Thực tế:</span>
-                            <span class="value"><span id="volN">0</span> mL</span>
-                        </div>
-                        <div class="monitor-card-row">
-                            <span class="label">🎯 Mục tiêu:</span>
-                            <span class="value"><span id="tgtN">0</span> mL</span>
-                        </div>
-                        <div class="monitor-card-row border-top">
-                            <span class="label">🔧 Vị trí van:</span>
-                            <span class="value"><span id="stepsN">0</span> bước</span>
+                        <div class="monitor-card-body">
+                            <div class="monitor-card-row">
+                                <span class="label">💧 Lưu lượng:</span>
+                                <span class="value"><span id="flowN">0.00</span> L/phút</span>
+                            </div>
+                            <div class="monitor-card-row">
+                                <span class="label">📈 Tiến độ:</span>
+                                <span class="value"><span id="pctN">0</span>%</span>
+                            </div>
+                            <div class="monitor-card-row">
+                                <span class="label">🧪 Thực tế:</span>
+                                <span class="value"><span id="volN">0</span> mL</span>
+                            </div>
+                            <div class="monitor-card-row">
+                                <span class="label">🎯 Mục tiêu:</span>
+                                <span class="value"><span id="tgtN">0</span> mL</span>
+                            </div>
+                            <div class="monitor-card-row border-top">
+                                <span class="label">🔧 Vị trí van:</span>
+                                <span class="value"><span id="stepsN">0</span> bước</span>
+                            </div>
+                            <div class="monitor-card-row">
+                                <span class="label">⚡ Số xung:</span>
+                                <span class="value"><span id="pulseN">0</span></span>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Khối 2: Bồn Số 2 (Lân - P) -->
-                <div class="monitor-card card-p">
-                    <div class="monitor-card-header">
-                        <span class="monitor-card-title p-text">🌾 Bồn Số 2 (P)</span>
-                        <span id="stateP" class="sys-val" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;">
-                            <span class="state-dot closed-dot"></span> <span>Đã đóng</span>
-                        </span>
-                    </div>
-                    <div class="monitor-card-body">
-                        <div class="monitor-card-row">
-                            <span class="label">💧 Lưu lượng:</span>
-                            <span class="value"><span id="flowP">0.00</span> L/phút</span>
+                    <!-- Khối 2: Bồn Số 2 (Lân - P) -->
+                    <div class="monitor-card card-p">
+                        <div class="monitor-card-header">
+                            <span class="monitor-card-title p-text">🌾 Bồn Số 2 (P)</span>
+                            <span id="stateP" class="sys-val" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;">
+                                <span class="state-dot closed-dot"></span> <span>Đã đóng</span>
+                            </span>
                         </div>
-                        <div class="monitor-card-row">
-                            <span class="label">📈 Tiến độ:</span>
-                            <span class="value"><span id="pctP">0</span>%</span>
-                        </div>
-                        <div class="monitor-card-row">
-                            <span class="label">🧪 Thực tế:</span>
-                            <span class="value"><span id="volP">0</span> mL</span>
-                        </div>
-                        <div class="monitor-card-row">
-                            <span class="label">🎯 Mục tiêu:</span>
-                            <span class="value"><span id="tgtP">0</span> mL</span>
-                        </div>
-                        <div class="monitor-card-row border-top">
-                            <span class="label">🔧 Vị trí van:</span>
-                            <span class="value"><span id="stepsP">0</span> bước</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Khối 3: Bồn Số 3 (Kali - K) -->
-                <div class="monitor-card card-k">
-                    <div class="monitor-card-header">
-                        <span class="monitor-card-title k-text">🍂 Bồn Số 3 (K)</span>
-                        <span id="stateK" class="sys-val" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;">
-                            <span class="state-dot closed-dot"></span> <span>Đã đóng</span>
-                        </span>
-                    </div>
-                    <div class="monitor-card-body">
-                        <div class="monitor-card-row">
-                            <span class="label">💧 Lưu lượng:</span>
-                            <span class="value"><span id="flowK">0.00</span> L/phút</span>
-                        </div>
-                        <div class="monitor-card-row">
-                            <span class="label">📈 Tiến độ:</span>
-                            <span class="value"><span id="pctK">0</span>%</span>
-                        </div>
-                        <div class="monitor-card-row">
-                            <span class="label">🧪 Thực tế:</span>
-                            <span class="value"><span id="volK">0</span> mL</span>
-                        </div>
-                        <div class="monitor-card-row">
-                            <span class="label">🎯 Mục tiêu:</span>
-                            <span class="value"><span id="tgtK">0</span> mL</span>
-                        </div>
-                        <div class="monitor-card-row border-top">
-                            <span class="label">🔧 Vị trí van:</span>
-                            <span class="value"><span id="stepsK">0</span> bước</span>
+                        <div class="monitor-card-body">
+                            <div class="monitor-card-row">
+                                <span class="label">💧 Lưu lượng:</span>
+                                <span class="value"><span id="flowP">0.00</span> L/phút</span>
+                            </div>
+                            <div class="monitor-card-row">
+                                <span class="label">📈 Tiến độ:</span>
+                                <span class="value"><span id="pctP">0</span>%</span>
+                            </div>
+                            <div class="monitor-card-row">
+                                <span class="label">🧪 Thực tế:</span>
+                                <span class="value"><span id="volP">0</span> mL</span>
+                            </div>
+                            <div class="monitor-card-row">
+                                <span class="label">🎯 Mục tiêu:</span>
+                                <span class="value"><span id="tgtP">0</span> mL</span>
+                            </div>
+                            <div class="monitor-card-row border-top">
+                                <span class="label">🔧 Vị trí van:</span>
+                                <span class="value"><span id="stepsP">0</span> bước</span>
+                            </div>
+                            <div class="monitor-card-row">
+                                <span class="label">⚡ Số xung:</span>
+                                <span class="value"><span id="pulseP">0</span></span>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Khối 4: Đường ống chính -->
-                <div class="monitor-card card-main">
-                    <div class="monitor-card-header">
-                        <span class="monitor-card-title main-text">🚰 Đường Ống Chính</span>
-                        <span id="stateMain" class="sys-val" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;">
-                            <span class="state-dot closed-dot"></span> <span>Đang dừng</span>
-                        </span>
+                    <!-- Khối 3: Bồn Số 3 (Kali - K) -->
+                    <div class="monitor-card card-k">
+                        <div class="monitor-card-header">
+                            <span class="monitor-card-title k-text">🍂 Bồn Số 3 (K)</span>
+                            <span id="stateK" class="sys-val" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;">
+                                <span class="state-dot closed-dot"></span> <span>Đã đóng</span>
+                            </span>
+                        </div>
+                        <div class="monitor-card-body">
+                            <div class="monitor-card-row">
+                                <span class="label">💧 Lưu lượng:</span>
+                                <span class="value"><span id="flowK">0.00</span> L/phút</span>
+                            </div>
+                            <div class="monitor-card-row">
+                                <span class="label">📈 Tiến độ:</span>
+                                <span class="value"><span id="pctK">0</span>%</span>
+                            </div>
+                            <div class="monitor-card-row">
+                                <span class="label">🧪 Thực tế:</span>
+                                <span class="value"><span id="volK">0</span> mL</span>
+                            </div>
+                            <div class="monitor-card-row">
+                                <span class="label">🎯 Mục tiêu:</span>
+                                <span class="value"><span id="tgtK">0</span> mL</span>
+                            </div>
+                            <div class="monitor-card-row border-top">
+                                <span class="label">🔧 Vị trí van:</span>
+                                <span class="value"><span id="stepsK">0</span> bước</span>
+                            </div>
+                            <div class="monitor-card-row">
+                                <span class="label">⚡ Số xung:</span>
+                                <span class="value"><span id="pulseK">0</span></span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="monitor-card-body">
-                        <div class="monitor-card-row">
-                            <span class="label">📊 Lưu lượng:</span>
-                            <span class="value"><span id="flowMain">0.00</span> L/phút</span>
+
+                    <!-- Khối 4: Đường ống chính -->
+                    <div class="monitor-card card-main">
+                        <div class="monitor-card-header">
+                            <span class="monitor-card-title main-text">🚰 Đường Ống Chính</span>
+                            <span id="stateMain" class="sys-val" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;">
+                                <span class="state-dot closed-dot"></span> <span>Đang dừng</span>
+                            </span>
                         </div>
-                        <div class="monitor-card-row">
-                            <span class="label">💧 Lưu lượng tổng:</span>
-                            <span class="value"><span id="flowMainLarge">0.0</span> L/phút</span>
+                        <div class="monitor-card-body">
+                            <div class="monitor-card-row">
+                                <span class="label">📊 Lưu lượng:</span>
+                                <span class="value"><span id="flowMain">0.00</span> L/phút</span>
+                            </div>
+                            <div class="monitor-card-row">
+                                <span class="label">💧 Lưu lượng tổng:</span>
+                                <span class="value"><span id="flowMainLarge">0.0</span> L/phút</span>
+                            </div>
+                            <div class="monitor-card-row">
+                                <span class="label">🧪 Thể tích tổng:</span>
+                                <span class="value"><span id="volMain">0</span> mL</span>
+                            </div>
+                            <div class="monitor-card-row">
+                                <span class="label">⚡ Số xung tổng:</span>
+                                <span class="value"><span id="pulseMain">0</span></span>
+                            </div>
+                            <div class="monitor-card-row border-top" style="justify-content: center; padding-top: 12px; margin-top: 10px; border-top: 1px dashed var(--border);">
+                                <button class="btn-sm" onclick="resetMainVolume()" style="background: linear-gradient(135deg, #dc2626, #ef4444); color: white; border: none; font-size: 12px; font-weight: 700; border-radius: 4px; padding: 6px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(220, 38, 38, 0.2); transition: all 0.2s;">
+                                    🗑️ Xóa tích lũy
+                                </button>
+                            </div>
                         </div>
-                        <div class="monitor-card-row">
-                            <span class="label">🧪 Thể tích tổng:</span>
-                            <span class="value"><span id="volMain">0</span> mL</span>
-                        </div>
-                        <div class="monitor-card-row border-top" style="justify-content: center; padding-top: 12px; margin-top: 10px; border-top: 1px dashed var(--border);">
-                            <button class="btn-sm" onclick="resetMainVolume()" style="background: linear-gradient(135deg, #dc2626, #ef4444); color: white; border: none; font-size: 12px; font-weight: 700; border-radius: 4px; padding: 6px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(220, 38, 38, 0.2); transition: all 0.2s;">
-                                🗑️ Xóa tích lũy
-                            </button>
-                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Tiến Độ Phiên Pha Trộn -->
+                <div class="iot-card" id="sessionProgress" style="display:none; margin-top: 15px;">
+                    <div class="iot-card-title">⏳ Tiến Độ Phiên Pha Trộn</div>
+                    <div class="progress-label">
+                        <span id="progressLabel">Đang chờ...</span>
+                        <span id="progressPct" class="n-val">0%</span>
+                    </div>
+                    <div class="progress-bar-outer">
+                        <div class="progress-bar-inner" id="totalProgressBar" style="width:0%"></div>
                     </div>
                 </div>
 
-            </div>
+                <!-- BIỂU ĐỒ LƯU LƯỢNG THỜI GIAN THỰC -->
+                <div class="iot-card" style="margin-top: 15px;">
+                    <div class="iot-card-title" style="display:flex;justify-content:space-between;align-items:center">
+                        <span>📈 BIỂU ĐỒ LƯU LƯỢNG THỜI GIAN THỰC</span>
+                        <button class="btn-sm" onclick="clearChart()">🗑 Xóa</button>
+                    </div>
+                    <div class="chart-wrap">
+                        <canvas id="flowChart"></canvas>
+                    </div>
+                </div>
 
-
-            <!-- Overall Progress -->
-            <div class="iot-card" id="sessionProgress" style="display:none">
-                <div class="iot-card-title">⏳ Tiến Độ Phiên Pha Trộn</div>
-                <div class="progress-label">
-                    <span id="progressLabel">Đang chờ...</span>
-                    <span id="progressPct" class="n-val">0%</span>
-                </div>
-                <div class="progress-bar-outer">
-                    <div class="progress-bar-inner" id="totalProgressBar" style="width:0%"></div>
-                </div>
-            </div>
-
-            <!-- BIỂU ĐỒ LƯU LƯỢNG THỜI GIAN THỰC -->
-            <div class="iot-card" style="margin-top: 20px;">
-                <div class="iot-card-title" style="display:flex;justify-content:space-between;align-items:center">
-                    <span>📈 BIỂU ĐỒ LƯU LƯỢNG THỜI GIAN THỰC</span>
-                    <button class="btn-sm" onclick="clearChart()">🗑 Xóa</button>
-                </div>
-                <div class="chart-wrap">
-                    <canvas id="flowChart"></canvas>
-                </div>
             </div>
         </section>
 
@@ -565,7 +551,7 @@
                                     <span style="background: var(--border-hl); color: #ffffff !important; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: bold; white-space: nowrap;">HỆ THỐNG PHỐI TRỘN</span>
                                 </div>
 
-                                <div style="display: grid; grid-template-columns: 1.2fr 1fr 0.8fr 0.8fr 0.8fr; gap: 12px; margin-bottom: 20px;">
+                                <div style="display: grid; grid-template-columns: 1.2fr 1fr 0.8fr 0.8fr; gap: 12px; margin-bottom: 20px;">
                                     <div>
                                         <label style="font-size: 14px; font-weight: 700; color: var(--txt-main); display: block; margin-bottom: 6px;">Loại cây trồng</label>
                                         <div style="display: flex; gap: 6px;">
@@ -589,12 +575,18 @@
                                         <input type="number" id="calc-plants" class="field" value="100" min="1" oninput="onCropOrStageChange()" style="border-color: var(--border); background: var(--bg-card); text-align: center; font-size: 18px; font-weight: 900; color: var(--txt-dark); height: 42px; padding: 6px 12px; min-height: 42px;">
                                     </div>
                                     <div>
-                                        <label style="font-size: 14px; font-weight: 700; color: var(--txt-main); display: block; margin-bottom: 6px;">Thời gian tưới (phút)</label>
-                                        <input type="number" id="calc-duration" class="field" value="1" readonly style="border-color: var(--border); background: #f1f5f9; cursor: not-allowed; opacity: 0.85; text-align: center; font-size: 18px; font-weight: 900; color: #475569; height: 42px; padding: 6px 12px; min-height: 42px;">
+                                        <label style="font-size: 14px; font-weight: 700; color: var(--txt-main); display: block; margin-bottom: 6px;">Số lần tưới/ngày</label>
+                                        <select id="calc-cycles" class="field" onchange="onCropOrStageChange()" style="border-color: var(--border); background: var(--bg-card); height: 42px; padding: 6px 12px; min-height: 42px; font-size: 15px; font-weight: bold; color: var(--txt-dark); text-align: center;">
+                                            <option value="1">1 lần</option>
+                                            <option value="2">2 lần</option>
+                                            <option value="4">4 lần</option>
+                                            <option value="6">6 lần</option>
+                                            <option value="8">8 lần</option>
+                                            <option value="10">10 lần</option>
+                                        </select>
                                     </div>
-                                    <div>
-                                        <label style="font-size: 14px; font-weight: 700; color: var(--txt-main); display: block; margin-bottom: 6px;">Số chu kỳ tưới</label>
-                                        <input type="number" id="calc-cycles" class="field" value="2" readonly style="border-color: var(--border); background: #f1f5f9; cursor: not-allowed; opacity: 0.85; text-align: center; font-size: 18px; font-weight: 900; color: #475569; height: 42px; padding: 6px 12px; min-height: 42px;">
+                                    <div style="display:none;">
+                                        <input type="number" id="calc-duration" class="field" value="1">
                                     </div>
                                 </div>
 
@@ -746,71 +738,6 @@
         </section>
 
         <!-- ========================================
-             PAGE: CẢNH BÁO
-        ======================================== -->
-        <section class="page" id="page-alerts">
-            <div class="page-header">
-                <h2>🔔 Cảnh Báo Hệ Thống</h2>
-                <p>Cấu hình ngưỡng và theo dõi cảnh báo</p>
-            </div>
-            <div class="alert-layout">
-                <div class="iot-card">
-                    <div class="iot-card-title">⚠️ Cảnh Báo Hiện Tại</div>
-                    <div id="activeAlerts" class="active-alerts">
-                        <div class="alert-empty">✅ Không có cảnh báo nào</div>
-                    </div>
-                </div>
-                <div class="iot-card">
-                    <div class="iot-card-title">🔧 Cấu Hình Ngưỡng Cảnh Báo</div>
-                    <div class="threshold-grid">
-                        <div class="threshold-item">
-                            <label>Lưu lượng tối thiểu (L/phút)</label>
-                            <p class="threshold-hint">Cảnh báo nếu van đang mở nhưng lưu lượng thấp hơn mức này</p>
-                            <div class="npk-field">
-                                <input type="number" id="thrMinFlow" class="field" value="0.1" min="0" step="0.05">
-                                <span class="field-unit">L/phút</span>
-                            </div>
-                        </div>
-                        <div class="threshold-item">
-                            <label>Lưu lượng tối đa (L/phút)</label>
-                            <p class="threshold-hint">Cảnh báo nếu lưu lượng vượt quá mức này</p>
-                            <div class="npk-field">
-                                <input type="number" id="thrMaxFlow" class="field" value="6.0" min="0" step="0.1">
-                                <span class="field-unit">L/phút</span>
-                            </div>
-                        </div>
-                        <div class="threshold-item">
-                            <label>Sóng WiFi tối thiểu (dBm)</label>
-                            <p class="threshold-hint">Cảnh báo nếu tín hiệu WiFi thiết bị ESP32 yếu hơn mức này</p>
-                            <div class="npk-field">
-                                <input type="number" id="thrRSSI" class="field" value="-80" max="0">
-                                <span class="field-unit">dBm</span>
-                            </div>
-                        </div>
-                        <div class="threshold-item">
-                            <label>Thời gian chờ phiên (phút)</label>
-                            <p class="threshold-hint">Cảnh báo nếu phiên pha trộn kéo dài quá thời gian này</p>
-                            <div class="npk-field">
-                                <input type="number" id="thrTimeout" class="field" value="30" min="1">
-                                <span class="field-unit">phút</span>
-                            </div>
-                        </div>
-                    </div>
-                    <button class="btn btn-start" style="margin-top:16px;width:100%" onclick="saveThresholds()">💾 Lưu Cấu Hình</button>
-                </div>
-                <div class="iot-card">
-                    <div class="iot-card-title" style="display:flex;justify-content:space-between">
-                        <span>📜 Nhật Ký Cảnh Báo</span>
-                        <button class="btn-sm danger" onclick="clearAlertLog()">🗑 Xóa</button>
-                    </div>
-                    <div class="alert-log" id="alertLog">
-                        <div class="alert-empty">Chưa có cảnh báo nào</div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- ========================================
              PAGE: LỊCH SỬ
         ======================================== -->
         <section class="page" id="page-history">
@@ -838,7 +765,7 @@
                                 <th class="k-col">Bồn 3 (mL)</th>
                                 <th>Tổng</th>
                                 <th>T.Gian</th>
-                                <th>WiFi</th>
+                                <th>Thể Tích Tổng</th>
                                 <th>Trạng Thái</th>
                             </tr>
                         </thead>
@@ -1007,7 +934,7 @@
                         <div style="font-size: 13.5px; color: var(--txt-main); line-height: 1.6; display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 10px 15px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px;">
                             <div>1️⃣ Chuẩn bị cốc đo thể tích chính xác (ví dụ loại 1000 mL) đặt dưới đầu ra của bồn cần test.</div>
                             <div>2️⃣ Nhấn nút <strong style="color:#2563eb;">BẮT ĐẦU CHẠY THỬ</strong>. Van chính sẽ tự mở trước 5 giây, sau đó bơm chạy để chất lỏng chảy qua cảm biến.</div>
-                            <div>3️⃣ Khi chất lỏng chảy đến một lượng xác định, nhấn <strong style="color:#ef4444;">DỪNG CHẠY THỬ</strong> ngay lập tức.</div>
+                            <div>3️⃣ Hệ thống sẽ tự động <strong style="color:#ef4444;">DỪNG CHẠY THỬ</strong> sau đúng 15 giây bơm chạy (hoặc bạn có thể nhấn dừng sớm hơn nếu cần).</div>
                             <div>4️⃣ Tại khối <strong>TÍNH TOÁN HIỆU CHUẨN</strong>, chọn cảm biến tương ứng. Số xung đếm được sẽ tự động tải lên.</div>
                             <div>5️⃣ Nhập thể tích thực tế đo được bằng cốc vào ô tương ứng để tính toán hệ số <code>mL/xung</code> mới.</div>
                             <div>6️⃣ Nhấn nút <strong>Ghi vào code ESP32</strong> để lưu hệ số vào file code, sau đó tiến hành biên dịch và nạp lại chương trình cho ESP32.</div>
@@ -1472,7 +1399,14 @@ function _doActualStart() {
     const k = parseFloat(document.getElementById('inputK').value) || 0;
     const calcDurationEl = document.getElementById('calc-duration');
     const durationMin = calcDurationEl ? parseFloat(calcDurationEl.value) : 1.0;
-    const totalDosingFlowLpm = parseFloat(((n + p + k) / (durationMin * 1000)).toFixed(3));
+    const totalFertMl = n + p + k;
+    
+    // Tính toán lượng nước dựa trên chuẩn 1/100
+    // Ví dụ: 666 mL phân -> cần 66.6 Lít nước.
+    const baseWaterLiters = totalFertMl / 10; 
+    
+    // Cộng thêm 15% nước để rửa ống (Phase 3)
+    const totalWaterLiters = parseFloat((baseWaterLiters * 1.15).toFixed(2));
 
     let payload = {
         mode: 'sim',
@@ -1480,14 +1414,11 @@ function _doActualStart() {
         N_ml: n,
         P_ml: p,
         K_ml: k,
-        N_speed: 60,
-        P_speed: 60,
-        K_speed: 60,
         ratio_N: n,
         ratio_P: p,
         ratio_K: k,
-        total_vol_l: (n + p + k) / 1000,
-        total_lpm: totalDosingFlowLpm > 0.05 ? totalDosingFlowLpm : 3.0
+        total_vol_l: totalFertMl / 1000,
+        total_water_l: totalWaterLiters > 0 ? totalWaterLiters : 1.0 // Truyền tổng lượng nước mục tiêu cho ESP32
     };
 
     fetch('/api/start', {
@@ -1499,7 +1430,7 @@ function _doActualStart() {
             showToast(data.error, 'error');
         } else {
             showToast('Hệ thống đang tính toán & áp dụng tỷ lệ bù trừ AI...', 'info');
-            showPage('monitor');
+            showPage('dashboard');
             if (document.getElementById('btnStop')) document.getElementById('btnStop').disabled = false;
             if (document.getElementById('btnStart')) document.getElementById('btnStart').disabled = true;
         }

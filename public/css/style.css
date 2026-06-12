@@ -227,11 +227,18 @@ input, textarea, .topbar-clock, .stat-card-val, .flow-number, .ring-pct, .stat-v
 .tn-item {
     position: relative; height: calc(100% - 8px); flex: 1; max-width: 110px;
     display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 2px;
     background: transparent; border: none; cursor: pointer;
-    border-radius: 6px; color: #65676b; font-size: 22px;
+    border-radius: 6px; color: #65676b; font-size: 20px;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    margin: 4px 0;
+    margin: 4px 0; padding: 0 4px;
 }
+.tn-label {
+    font-size: 9px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.4px; color: inherit; line-height: 1;
+    white-space: nowrap;
+}
+
 .tn-item:hover { background: #f2f2f2; color: #1b74e4; }
 .tn-item.active { color: #1b74e4; }
 .tn-active-indicator {

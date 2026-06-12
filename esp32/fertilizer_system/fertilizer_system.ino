@@ -40,13 +40,13 @@ const char* MQTT_PASS     = "";
 
 // Khoảng 8500 bước vi bước 1/8 từ đóng hoàn toàn (min) đến mở hoàn toàn (max)
 #define MAX_OPEN_STEPS  8500  
-// Tăng từ 500us lên 800us để tăng mô-men xoắn khởi động, tránh kẹt e e
-#define STEP_DELAY_US   800 
+// Giảm từ 800us xuống 500us để tăng tốc độ đóng/mở van kim, giúp van đóng nhanh hơn khi đạt mục tiêu
+#define STEP_DELAY_US   500 
  
 // YF-S401 Flow Sensor:
-#define ML_PER_PULSE_N      0.2493f
-#define ML_PER_PULSE_P      0.2072f
-#define ML_PER_PULSE_K      0.1953f
+#define ML_PER_PULSE_N      0.2052f
+#define ML_PER_PULSE_P      0.1985f
+#define ML_PER_PULSE_K      0.1950f
 #define ML_PER_PULSE_MAIN   45.7516f // Cảm biến DN32 ống chính (27 xung/L -> 37.037 mL/xung)
 // Chu kỳ publish và tính flow rate (ms)
 #define PUBLISH_INTERVAL    200
@@ -64,8 +64,8 @@ const char* MQTT_PASS     = "";
 #define DEADBAND_LPM    0.05f
 // Số bước tối đa điều chỉnh mỗi chu kỳ (tăng lên 150 để phản hồi nhạy bén)
 #define MAX_ADJ_STEPS   150
-// Chu kỳ vòng điều khiển (ms)
-#define CONTROL_INTERVAL_MS  1000
+// Chu kỳ vòng điều khiển (ms) - Giảm xuống 250ms để PID nhạy hơn, bắt mục tiêu chính xác hơn
+#define CONTROL_INTERVAL_MS  250
 // Biến lưu trạng thái PID cho từng van
 float errSumN = 0.0f, errSumP = 0.0f, errSumK = 0.0f;
 float lastErrN = 0.0f, lastErrP = 0.0f, lastErrK = 0.0f;
@@ -115,9 +115,10 @@ float targetLpmP = 0.0f;                       // Lưu lượng mục tiêu van 
 float targetLpmK = 0.0f;                       // Lưu lượng mục tiêu van K (L/phút)
 bool  doneN = false, doneP = false, doneK = false;  // Van đã đạt đủ lượng?
 // Biến giám sát rò rỉ van sau khi đạt mục tiêu (5 giây)
-unsigned long closeTimerN = 0, closeTimerP = 0, closeTimerK = 0;
 bool monitoringN = false, monitoringP = false, monitoringK = false;
+unsigned long closeTimerN = 0, closeTimerP = 0, closeTimerK = 0;
 int extraCloseN = 0, extraCloseP = 0, extraCloseK = 0;
+float targetTotalWaterL = 0.0f; // Tổng lượng nước mục tiêu (Lít)
 unsigned long lastControlTime = 0;             // Thời điểm điều khiển cuối
 // Trạng thái hệ thống
 //   0   = Chờ (Idle)
@@ -244,6 +245,13 @@ void moveSteppersSimultaneous(int stepsN, int stepsP, int stepsK) {
     int absP = abs(stepsP);
     int absK = abs(stepsK);
     int maxSteps = max(absN, max(absP, absK));
+    
+    // Nếu tất cả các van đều đang đóng (quay về 0), sử dụng tốc độ cực nhanh để ngắt dòng chảy
+    bool isClosingOnly = (stepsN <= 0 && stepsP <= 0 && stepsK <= 0);
+    // 200us là quá nhanh đối với động cơ bước không có gia tốc, gây trượt/kẹt cứng (stall). 
+    // Giảm xuống một tốc độ an toàn hơn (VD: 800us hoặc dùng luôn STEP_DELAY_US).
+    uint32_t currentDelay = isClosingOnly ? 800 : STEP_DELAY_US;
+
     for (int i = 0; i < maxSteps; i++) {
         // Kiểm tra an toàn giới hạn cơ khí cho từng động cơ
         bool stepN_active = (i < absN) && (stepsN > 0 ? (posN < learnedMaxN) : (posN > learnedMinN));
@@ -254,7 +262,7 @@ void moveSteppersSimultaneous(int stepsN, int stepsP, int stepsK) {
         if (stepN_active) digitalWrite(STEP_N, HIGH);
         if (stepP_active) digitalWrite(STEP_P, HIGH);
         if (stepK_active) digitalWrite(STEP_K, HIGH);
-        delayMicroseconds(STEP_DELAY_US);
+        delayMicroseconds(currentDelay);
         // Kích hoạt sườn xuống (Falling edge) và cập nhật vị trí
         if (stepN_active) {
             digitalWrite(STEP_N, LOW);
@@ -268,7 +276,7 @@ void moveSteppersSimultaneous(int stepsN, int stepsP, int stepsK) {
             digitalWrite(STEP_K, LOW);
             posK += (stepsK > 0 ? 1 : -1);
         }
-        delayMicroseconds(STEP_DELAY_US);
+        delayMicroseconds(currentDelay);
 
         // Tránh watchdog timeout
         if ((i & 0xFF) == 0xFF) {
@@ -314,13 +322,20 @@ void emergencyStop() {
     doneN = doneP = doneK = false;
     monitoringN = monitoringP = monitoringK = false;
     extraCloseN = extraCloseP = extraCloseK = 0;
+    
     // Tắt Bơm và Van điện từ chính ngay lập tức để ngắt dòng chảy
     digitalWrite(PUMP_PIN, LOW);
     digitalWrite(VALVE_PIN, LOW);
-    // Vô hiệu hóa và ngắt điện hoàn toàn driver 3 động cơ bước ngay lập tức (giữ nguyên vị trí)
-    digitalWrite(EN_N, HIGH);
-    digitalWrite(EN_P, HIGH);
-    digitalWrite(EN_K, HIGH);
+    
+    // Đóng các van kim về vị trí 0 để chống rò rỉ dung dịch phân bón
+    if (posN > 0) closeValve(1);
+    else digitalWrite(EN_N, HIGH);
+    
+    if (posP > 0) closeValve(2);
+    else digitalWrite(EN_P, HIGH);
+    
+    if (posK > 0) closeValve(3);
+    else digitalWrite(EN_K, HIGH);
 }
 
 //====================================================================================================================================================================================================================
@@ -328,6 +343,14 @@ void emergencyStop() {
 // ĐIỀU KHIỂN TỈ LỆ - CHẠY ĐỒNG THỜI (P-Controller)
 // Gọi trong loop() mỗi CONTROL_INTERVAL_MS ms
 void controlSimultaneous() {
+    unsigned long now = millis();
+    if (now - lastControlTime < CONTROL_INTERVAL_MS) return;
+    lastControlTime = now;
+
+    // Chỉ thực thi PID châm phân khi simMode = true (Tức là chưa châm xong phân)
+    // Nếu simMode = false, hệ thống vẫn đang chạy máy bơm xả ống, nhưng không chạy code châm phân này nữa.
+    if (!simMode) return;
+
     // Đọc thể tích tích lũy
     noInterrupts();
     float volN = pulseN * ML_PER_PULSE_N;
@@ -335,17 +358,20 @@ void controlSimultaneous() {
     float volK = pulseK * ML_PER_PULSE_K;
     interrupts();
     // --- PHẢN HỒI THÔNG MINH (SMART FEEDBACK) 1/100 ---
-    // Tính lưu lượng mục tiêu động dựa vào lưu lượng thực tế đo được ở ống chính
+    // (ĐÃ TẮT: Do tín hiệu cảm biến ống chính có thể dao động làm mục tiêu nhảy loạn xạ, 
+    //  kéo theo PID phản hồi gấp gáp làm động cơ bước bị trượt bước, mất vị trí 0 gốc).
     float totalTargetVol = targetN + targetP + targetK;
     float dynTargetLpmN = targetLpmN;
     float dynTargetLpmP = targetLpmP;
     float dynTargetLpmK = targetLpmK;
+    /*
     if (totalTargetVol > 0 && flowLpmMain > 0.10f) {
         float targetTotalLpm = flowLpmMain / 100.0f; // Tỷ lệ châm phân 1/100
         dynTargetLpmN = (targetN / totalTargetVol) * targetTotalLpm;
         dynTargetLpmP = (targetP / totalTargetVol) * targetTotalLpm;
         dynTargetLpmK = (targetK / totalTargetVol) * targetTotalLpm;
     }
+    */
     // Hàm lambda tính toán PID
     auto calcPID = [](float targetLpm, float flowLpm, float &errSum, float &lastErr) -> int {
         if (targetLpm <= 0.0f) {
@@ -424,7 +450,7 @@ void controlSimultaneous() {
     }
     if (doneN && monitoringN) {
         if (millis() - closeTimerN < 5000) {
-            if (flowLpmN > 0.01f && extraCloseN < 250) {
+            if (flowLpmN > 0.01f && extraCloseN < 250 && adjN == 0) {
                 adjN = -15;
                 learnedMinN -= 15; // Lùi giới hạn phần mềm để cho phép siết thêm
                 extraCloseN += 15;
@@ -489,7 +515,7 @@ void controlSimultaneous() {
     }
     if (doneP && monitoringP) {
         if (millis() - closeTimerP < 5000) {
-            if (flowLpmP > 0.01f && extraCloseP < 250) {
+            if (flowLpmP > 0.01f && extraCloseP < 250 && adjP == 0) {
                 adjP = -15;
                 learnedMinP -= 15;
                 extraCloseP += 15;
@@ -554,7 +580,7 @@ void controlSimultaneous() {
     }
     if (doneK && monitoringK) {
         if (millis() - closeTimerK < 5000) {
-            if (flowLpmK > 0.01f && extraCloseK < 250) {
+            if (flowLpmK > 0.01f && extraCloseK < 250 && adjK == 0) {
                 adjK = -15;
                 learnedMinK -= 15;
                 extraCloseK += 15;
@@ -578,11 +604,14 @@ void controlSimultaneous() {
     // Kiểm tra hoàn thành tất cả van (bơm tắt ngay khi tất cả van đạt đủ lượng châm)
     bool allDosingDone = (doneN || targetN <= 0) && (doneP || targetP <= 0) && (doneK || targetK <= 0);
     if (allDosingDone) {
-        currentPhase  = 4;
-        systemRunning = false;
+        // Dừng chế độ châm phân (Phase 2), chuyển sang chờ xả ống (Phase 3 do Server điều khiển)
         simMode       = false;
-        digitalWrite(PUMP_PIN, LOW);
-        digitalWrite(VALVE_PIN, LOW);
+        
+        // Cố tình GIỮ NGUYÊN trạng thái Bơm và Van điện từ, không tắt!
+        // digitalWrite(PUMP_PIN, LOW);
+        // digitalWrite(VALVE_PIN, LOW);
+        // systemRunning = false;
+
         
         // Tắt giám sát rò rỉ và ngắt điện driver của tất cả van
         monitoringN = false;
@@ -593,7 +622,22 @@ void controlSimultaneous() {
         posP = 0; learnedMinP = 0; digitalWrite(EN_P, HIGH);
         posK = 0; learnedMinK = 0; digitalWrite(EN_K, HIGH);
         
-        Serial.println("[SIM✓✓] Hoàn thành toàn bộ - chế độ đồng thời (Dừng bơm lập tức, đóng van an toàn)!");
+        Serial.println("[SIM✓✓] Hoàn thành châm phân (Phase 2)! Máy bơm vẫn tiếp tục chạy xả ống (Phase 3)...");
+    }
+
+    // --- KIỂM TRA THỂ TÍCH NƯỚC TỔNG (PHASE 3 -> KẾT THÚC) ---
+    // Kiểm tra xem tổng lượng nước đã đạt mục tiêu chưa
+    if (systemRunning && targetTotalWaterL > 0) {
+        float currentVolL = (pulseMain * ML_PER_PULSE_MAIN) / 1000.0f;
+        if (currentVolL >= targetTotalWaterL) {
+            Serial.printf("[KẾT THÚC] Đã bơm đủ %.1f Lít nước. Tắt toàn bộ hệ thống!\n", currentVolL);
+            emergencyStop();
+            digitalWrite(PUMP_PIN, LOW);
+            digitalWrite(VALVE_PIN, LOW);
+            systemRunning = false;
+            currentPhase = 4; // Phase 4 = Completed
+            publishStatus(); // Gửi báo cáo MQTT ngay lập tức để Node.js lưu DataBase
+        }
     }
 }
 
@@ -639,10 +683,34 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
             if (targetLpmK < 0.1f) targetLpmK = 0.1f;
         }
 
+        // Đọc tổng lượng nước mục tiêu (từ Server)
+        float total_water_l = doc["total_water_l"] | 0.0f;
+        targetTotalWaterL = total_water_l;
+
+        // Đóng chặt các van về 0 trước khi khởi động phiên mới để tránh sai lệch cơ khí
+        if (posN > 0) {
+            Serial.printf("[INIT] Đang đóng van N (%d bước) về vị trí gốc...\n", posN);
+            closeValve(1);
+        }
+        if (posP > 0) {
+            Serial.printf("[INIT] Đang đóng van P (%d bước) về vị trí gốc...\n", posP);
+            closeValve(2);
+        }
+        if (posK > 0) {
+            Serial.printf("[INIT] Đang đóng van K (%d bước) về vị trí gốc...\n", posK);
+            closeValve(3);
+        }
+
         // Reset vị trí về 0 nhưng sau đó sẽ chủ động mở nhanh ban đầu
         posN = 0;
         posP = 0;
         posK = 0;
+
+        // Reset các giới hạn an toàn tự học về mặc định cho chu kỳ mới
+        learnedMinN = 0; learnedMaxN = MAX_OPEN_STEPS;
+        learnedMinP = 0; learnedMaxP = MAX_OPEN_STEPS;
+        learnedMinK = 0; learnedMaxK = MAX_OPEN_STEPS;
+
         // Reset các mốc học bão hòa cho chu kỳ mới
         lastSatPosN = 0; lastSatPosP = 0; lastSatPosK = 0;
         lastSatFlowN = 0.0f; lastSatFlowP = 0.0f; lastSatFlowK = 0.0f;
@@ -973,20 +1041,22 @@ void publishStatus() {
     doc["error"]     = systemError;
 
     auto mkValve = [&](const char* key, float vol, float target,
-                       float flow, int32_t steps, bool isOpen) {
+                       float flow, int32_t steps, bool isOpen, uint32_t rawPulses) {
         JsonObject v = doc["valves"][key].to<JsonObject>();
         v["open"]      = isOpen;
         v["steps"]     = steps;
         v["flow_lpm"]  = roundf(flow * 100.0f) / 100.0f;
         v["volume_ml"] = roundf(vol);
+        v["pulses"]    = rawPulses;
         v["target_ml"] = roundf(target);
         v["percent"]   = (target > 0) ? min(100.0f, vol / target * 100.0f) : 0.0f;
     };
-    mkValve("N", volN, targetN, flowLpmN, posN, targetN > 0 && !doneN);
-    mkValve("P", volP, targetP, flowLpmP, posP, targetP > 0 && !doneP);
-    mkValve("K", volK, targetK, flowLpmK, posK, targetK > 0 && !doneK);
+    mkValve("N", volN, targetN, flowLpmN, posN, targetN > 0 && !doneN, pulseN);
+    mkValve("P", volP, targetP, flowLpmP, posP, targetP > 0 && !doneP, pulseP);
+    mkValve("K", volK, targetK, flowLpmK, posK, targetK > 0 && !doneK, pulseK);
     doc["main_flow_lpm"] = roundf(flowLpmMain * 100.0f) / 100.0f;
     doc["main_volume_ml"] = roundf(volMain);
+    doc["main_pulses"] = pulseMain;
     doc["total_target_ml"] = targetN + targetP + targetK;
     doc["total_volume_ml"] = volN + volP + volK;
     char buffer[700];

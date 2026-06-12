@@ -78,17 +78,12 @@ function showPage(pageId) {
 
     // Update Title
     const titles = {
-        'dashboard': 'Tổng Quan', 'monitor': 'Giám Sát', 'settings': 'Cài Đặt',
-        'recipes': 'Công Thức', 'alerts': 'Cảnh Báo', 'history': 'Lịch Sử', 'system': 'Thông Tin Hệ Thống',
+        'dashboard': 'Tổng Quan', 'settings': 'Cài Đặt',
+        'recipes': 'Công Thức', 'history': 'Lịch Sử', 'system': 'Thông Tin Hệ Thống',
         'calibration': 'Hiệu Chuẩn Cảm Biến'
     };
     document.getElementById('topbarTitle').textContent = titles[pageId] || 'AutoFertilizer';
 
-    // Clear monitor badge if viewing monitor
-    if(pageId === 'monitor') {
-        const bm = document.getElementById('tn-badge-monitor');
-        if(bm) bm.classList.add('hidden');
-    }
 
     if(window.innerWidth <= 768) toggleSidebar(false);
 
@@ -129,10 +124,10 @@ function showToast(msg, type='info') {
 socket.on('connect', () => {
     console.log('Connected to Server');
     isOnline = true;
-    document.getElementById('sysSocket').textContent = 'Đã kết nối';
-    document.getElementById('monServer').classList.add('online');
-    document.getElementById('monMQTT').classList.add('online');
-    document.getElementById('sysConnMQTT').textContent = 'Đã kết nối';
+    const sysSocket = document.getElementById('sysSocket'); if (sysSocket) sysSocket.textContent = 'Đã kết nối';
+    const monServer = document.getElementById('monServer'); if (monServer) monServer.classList.add('online');
+    const monMQTT = document.getElementById('monMQTT'); if (monMQTT) monMQTT.classList.add('online');
+    const sysConnMQTT = document.getElementById('sysConnMQTT'); if (sysConnMQTT) sysConnMQTT.textContent = 'Đã kết nối';
     
     // Dashboard new elements
     const mqttDash = document.getElementById('sysConnMQTT_dash');
@@ -146,10 +141,10 @@ socket.on('connect', () => {
 socket.on('disconnect', () => {
     console.log('Disconnected from Server');
     isOnline = false;
-    document.getElementById('sysSocket').textContent = 'Mất kết nối';
-    document.getElementById('monServer').classList.remove('online');
-    document.getElementById('monMQTT').classList.remove('online');
-    document.getElementById('sysConnMQTT').textContent = 'Mất kết nối';
+    const sysSocket = document.getElementById('sysSocket'); if (sysSocket) sysSocket.textContent = 'Mất kết nối';
+    const monServer = document.getElementById('monServer'); if (monServer) monServer.classList.remove('online');
+    const monMQTT = document.getElementById('monMQTT'); if (monMQTT) monMQTT.classList.remove('online');
+    const sysConnMQTT = document.getElementById('sysConnMQTT'); if (sysConnMQTT) sysConnMQTT.textContent = 'Mất kết nối';
     
     // Dashboard new elements
     const mqttDash = document.getElementById('sysConnMQTT_dash');
@@ -229,20 +224,20 @@ socket.on('session_started', (sess) => {
 socket.on('session_completed', (record) => {
     window.currentSession = null;
     showToast(`Đã hoàn thành phối trộn! Tổng: ${record.total_ml}mL`, 'success');
-    document.getElementById('btnStart').disabled = false;
-    document.getElementById('btnStop').disabled = true;
-    document.getElementById('monStatusTxt').textContent = 'HOÀN THÀNH';
-    document.getElementById('monStatus').className = 'conn-pill done';
+    const btnStart = document.getElementById('btnStart'); if(btnStart) btnStart.disabled = false;
+    const btnStop = document.getElementById('btnStop'); if(btnStop) btnStop.disabled = true;
+    const monTxt = document.getElementById('monStatusTxt'); if(monTxt) monTxt.textContent = 'HOÀN THÀNH';
+    const monStat = document.getElementById('monStatus'); if(monStat) monStat.className = 'conn-pill done';
     loadHistory();
 });
 
 socket.on('session_stopped', () => {
     window.currentSession = null;
     showToast('Đã dừng khẩn cấp!', 'error');
-    document.getElementById('btnStart').disabled = false;
-    document.getElementById('btnStop').disabled = true;
-    document.getElementById('monStatusTxt').textContent = 'ĐÃ HỦY';
-    document.getElementById('monStatus').className = 'conn-pill idle';
+    const btnStart = document.getElementById('btnStart'); if(btnStart) btnStart.disabled = false;
+    const btnStop = document.getElementById('btnStop'); if(btnStop) btnStop.disabled = true;
+    const monTxt = document.getElementById('monStatusTxt'); if(monTxt) monTxt.textContent = 'ĐÃ HỦY';
+    const monStat = document.getElementById('monStatus'); if(monStat) monStat.className = 'conn-pill idle';
 });
 
 socket.on('history_updated', () => loadHistory());
@@ -323,11 +318,11 @@ function updateUI(data) {
     const mStat = document.getElementById('monStatus');
     const mTxt = document.getElementById('monStatusTxt');
     if(data.running) {
-        mStat.className = 'conn-pill running active';
-        mTxt.textContent = 'ĐANG PHA TRỘN (ĐỒNG THỜI)';
+        if(mStat) mStat.className = 'conn-pill running active';
+        if(mTxt) mTxt.textContent = 'ĐANG PHA TRỘN (ĐỒNG THỜI)';
     } else {
-        mStat.className = 'conn-pill ' + (data.phase===4 ? 'done' : 'idle');
-        mTxt.textContent = data.phase===4 ? 'HOÀN THÀNH' : 'SẴN SÀNG';
+        if(mStat) mStat.className = 'conn-pill ' + (data.phase===4 ? 'done' : 'idle');
+        if(mTxt) mTxt.textContent = data.phase===4 ? 'HOÀN THÀNH' : 'SẴN SÀNG';
     }
 
     // Realistic Dashboard Sync
@@ -362,9 +357,11 @@ function updateUI(data) {
     const monMainF = document.getElementById('flowMain');
     const monMainFLarge = document.getElementById('flowMainLarge');
     const monMainVol = document.getElementById('volMain');
+    const monMainPulse = document.getElementById('pulseMain');
     if(monMainF) monMainF.textContent = mainFlowLpm.toFixed(2);
     if(monMainFLarge) monMainFLarge.textContent = mainFlowLpm.toFixed(1);
     if(monMainVol) monMainVol.textContent = Math.round((data.main_volume_ml ?? data.total_volume_ml) || 0);
+    if(monMainPulse) monMainPulse.textContent = data.main_pulses || 0;
 
     const stMain = document.getElementById('stateMain');
     if(stMain) {
@@ -441,12 +438,8 @@ function updateUI(data) {
     ['N', 'P', 'K'].forEach((ch, idx) => {
         const c = document.getElementById(`vc${ch}`);
         if(c) {
-            if(data.running && (data.phase === idx+1 || data.phase === 10 || data.phase === 100)) { // 10/100 is SIM
+            if(data.running && (data.phase === idx+1 || data.phase === 10 || data.phase === 100)) {
                 c.className = `valve-card active-${ch.toLowerCase()}`;
-                const badge = document.getElementById('tn-badge-monitor');
-                if(badge && !document.getElementById('page-monitor').classList.contains('active')) {
-                    badge.classList.remove('hidden');
-                }
             } else {
                 c.className = 'valve-card';
             }
@@ -559,6 +552,9 @@ function updateValve(ch, d) {
     }
     document.getElementById(`tgt${ch}`).textContent = Math.round(targetMl);
     document.getElementById(`steps${ch}`).textContent = d.steps;
+    
+    const pulseEl = document.getElementById(`pulse${ch}`);
+    if(pulseEl) pulseEl.textContent = d.pulses || 0;
 
     const p = targetMl > 0 ? Math.min(100, (d.volume_ml / targetMl) * 100) : 0;
     document.getElementById(`pct${ch}`).textContent = Math.round(p);
@@ -671,7 +667,11 @@ function startMixing() {
             showToast(data.error, 'error');
         } else {
             showToast('Hệ thống đang tính toán & áp dụng tỷ lệ bù trừ AI...', 'info');
-            showPage('monitor');
+            showPage('dashboard');
+            setTimeout(() => {
+                const monitorGrid = document.getElementById('monitor-grid');
+                if (monitorGrid) monitorGrid.scrollIntoView({ behavior: 'smooth' });
+            }, 300);
         }
     }).catch(err => showToast('Lỗi gửi lệnh', 'error'));
 }
@@ -794,18 +794,7 @@ function onCropOrStageChange() {
     }
     const durationMin_cycle = 1.0; 
 
-    // Số chu kỳ tưới tự động được khóa lại và gán theo giai đoạn sinh trưởng thực tế theo Haifa
-    const cyclesMap = {
-        'seedling': 10,
-        'vegetative': 12,
-        'flowering': 18,
-        'fruiting': 23
-    };
-    const cycles = cyclesMap[stage] || 10;
-    const calcCyclesInput = document.getElementById('calc-cycles');
-    if (calcCyclesInput) {
-        calcCyclesInput.value = cycles;
-    }
+    // Người dùng giờ tự chọn số lần tưới, không gán cứng theo map nữa.
 
     // Thời gian giãn cách nghỉ tưới (Thực tế theo biểu đồ 24h)
     const restTimes = {
@@ -823,16 +812,18 @@ function onCropOrStageChange() {
     const rates = crop.rates[stage] || { n: 0, p: 0, k: 0 };
     const multiplier = plants / 100;
 
+    // Sử dụng tổng lượng phân CỦA CẢ NGÀY
     const volN = Math.round(rates.n * multiplier);
     const volP = Math.round(rates.p * multiplier);
     const volK = Math.round(rates.k * multiplier);
 
-    // Tính toán liều lượng cho 1 chu kỳ nhỏ
+    // Tính toán liều lượng cho 1 LẦN TƯỚI (Spoon-feeding)
+    const cycles = parseInt(document.getElementById('calc-cycles') ? document.getElementById('calc-cycles').value : 1);
     const volN_cycle = Math.round(volN / cycles);
     const volP_cycle = Math.round(volP / cycles);
     const volK_cycle = Math.round(volK / cycles);
 
-    // Áp dụng định lượng của 1 chu kỳ châm phân lên các trường dữ liệu thực tế
+    // Áp dụng định lượng cho 1 lần tưới vào các ô input ẩn để truyền xuống server
     const inpN = document.getElementById('inputN');
     const inpP = document.getElementById('inputP');
     const inpK = document.getElementById('inputK');
@@ -847,19 +838,29 @@ function onCropOrStageChange() {
         'fruiting':  'Nuôi quả'
     };
     
+    // Tính toán lại thời gian chạy dựa trên liều 1 LẦN TƯỚI
+    const totalFertilizerMl_cycle = volN_cycle + volP_cycle + volK_cycle;
+    const dosingTimeMin = totalFertilizerMl_cycle / 66.6;
+    const totalDurationMin = Math.max(1.0, Math.ceil((dosingTimeMin + 2) * 10) / 10); 
+
+    // Cập nhật lên UI (ẩn, hoặc hiển thị)
+    if (calcDurationInput) {
+        calcDurationInput.value = totalDurationMin;
+    }
+
     const cropNameClean = crop.name.replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, '').trim();
     const rName = document.getElementById('recipeName');
-    if (rName) rName.value = `${cropNameClean} - ${stageNames[stage] || stage} (${plants} gốc, ${cycles} chu kỳ × ${durationMin_cycle}m, nghỉ ${restTime}m)`;
+    if (rName) rName.value = `${cropNameClean} - ${stageNames[stage] || stage} (${plants} gốc, 3-Phase × ${totalDurationMin}m)`;
 
-    // Báo cáo thủy lực
-    const Q_MAIN_LPM   = 120;   // L/min main pipe flow
-    const totalWaterL  = Q_MAIN_LPM * durationMin_cycle; // Lượng nước của 1 chu kỳ (1 phút)
+    // Báo cáo thủy lực cho 1 LẦN TƯỚI
+    const Q_MAIN_LPM   = 6.66;   
+    const totalWaterL  = Q_MAIN_LPM * totalDurationMin; 
     const waterPerPlant = totalWaterL / plants;
 
-    // Lưu lượng setpoint yêu cầu (L/phút) cho 1 chu kỳ
-    const setpointN = parseFloat((volN_cycle / (durationMin_cycle * 1000)).toFixed(3));
-    const setpointP = parseFloat((volP_cycle / (durationMin_cycle * 1000)).toFixed(3));
-    const setpointK = parseFloat((volK_cycle / (durationMin_cycle * 1000)).toFixed(3));
+    // Lưu lượng setpoint yêu cầu (L/phút) cho 1 lần tưới
+    const setpointN = parseFloat((volN_cycle / (dosingTimeMin * 1000)).toFixed(3));
+    const setpointP = parseFloat((volP_cycle / (dosingTimeMin * 1000)).toFixed(3));
+    const setpointK = parseFloat((volK_cycle / (dosingTimeMin * 1000)).toFixed(3));
 
     const totalWaterML = totalWaterL * 1000;
     const concN = ((volN_cycle / (totalWaterML + volN_cycle)) * 100).toFixed(2);
@@ -869,9 +870,9 @@ function onCropOrStageChange() {
     const summaryEl = document.getElementById('calc-summary');
     if (summaryEl) {
         summaryEl.innerHTML =
-            `<b>${plants} cây</b> × ${waterPerPlant.toFixed(2)} L/cây = <b>${totalWaterL.toFixed(0)} L nước/chu kỳ</b> &nbsp;|&nbsp; ` +
+            `<b>${plants} cây</b> × ${waterPerPlant.toFixed(2)} L/cây = <b>${totalWaterL.toFixed(1)} L nước/Lần tưới</b> &nbsp;|&nbsp; ` +
             `Giai đoạn: <b>${stageNames[stage] || stage}</b> &nbsp;|&nbsp; ` +
-            `Chu kỳ: <b>${cycles} chu kỳ × ${durationMin_cycle} phút (Nghỉ ${restTime} phút)</b>`;
+            `Thời gian châm dự kiến: <b>~${dosingTimeMin.toFixed(1)} phút</b> (Tỉ lệ chuẩn 1/100)`;
     }
 
     const tableBodyEl = document.getElementById('calc-table-body');
@@ -999,77 +1000,14 @@ function applyRecipe(n, p, k, name) {
 }
 
 // ==========================================
-// 7. ALERTS
+// 7. ALERTS (simplified - page removed)
 // ==========================================
-function saveThresholds() {
-    sysThresholds.minFlow = parseFloat(document.getElementById('thrMinFlow').value);
-    sysThresholds.maxFlow = parseFloat(document.getElementById('thrMaxFlow').value);
-    sysThresholds.minRSSI = parseFloat(document.getElementById('thrRSSI').value);
-    sysThresholds.timeout = parseFloat(document.getElementById('thrTimeout').value);
-    showToast('Đã lưu cấu hình cảnh báo', 'success');
-}
-
 function addAlert(msg, type='error') {
-    const ts = new Date().toLocaleTimeString();
-    const id = Date.now();
-    alertLog.unshift({ id, msg, type, ts });
-    if(alertLog.length > 50) alertLog.pop();
-    renderAlerts();
-
-    // Alert Badge
-    const b1 = document.getElementById('tn-badge-alerts');
-    const b2 = document.getElementById('dsh-alertBadge');
-    const b3 = document.getElementById('dsh-alertCount');
-    if (b1) {
-        let c = parseInt(b1.textContent) || 0;
-        c++;
-        b1.textContent = c; b1.classList.remove('hidden');
-    }
-    if (b3) b3.textContent = (parseInt(b3.textContent)||0) + 1;
-    if (b2) { b2.textContent = 'Mới!'; b2.style.color = '#ef4444'; }
+    console.warn(`[Alert][${type}] ${msg}`);
 }
-
-function renderAlerts() {
-    const al = document.getElementById('alertLog');
-    const ad = document.getElementById('activeAlerts');
-    if(alertLog.length === 0) {
-        al.innerHTML = '<div class="alert-empty">Trống</div>';
-        ad.innerHTML = '<div class="alert-empty">✅ Không có cảnh báo</div>';
-        return;
-    }
-
-    al.innerHTML = alertLog.map(a => `
-        <div class="log-item ${a.type}-log">
-            <span class="log-msg">${a.msg}</span>
-            <span class="log-time">${a.ts}</span>
-        </div>
-    `).join('');
-
-    // Active (last 3 errors)
-    const acts = alertLog.slice(0,3);
-    ad.innerHTML = acts.map(a => `
-        <div class="alert-item ${a.type}">
-            <div class="alert-icon">${a.type==='error'?'⚠️':'🔔'}</div>
-            <div class="alert-content">
-                <div class="alert-title">${a.msg}</div>
-                <div class="alert-time">${a.ts}</div>
-            </div>
-        </div>
-    `).join('');
-}
-function clearAlertLog() {
-    alertLog = [];
-    renderAlerts();
-    const b1 = document.getElementById('tn-badge-alerts');
-    if (b1) {
-        b1.textContent = '0';
-        b1.classList.add('hidden');
-    }
-    const b3 = document.getElementById('dsh-alertCount');
-    if (b3) b3.textContent = '0';
-    const b2 = document.getElementById('dsh-alertBadge');
-    if (b2) b2.textContent = '';
-}
+function saveThresholds() { showToast('Cảnh báo đã bị tắt', 'info'); }
+function renderAlerts() {}
+function clearAlertLog() {}
 
 // ==========================================
 // 8. HISTORY & DB
@@ -1092,13 +1030,13 @@ function loadHistory() {
                  return `
                  <tr>
                      <td>${dt.toLocaleDateString()} ${dt.toLocaleTimeString()}</td>
-                     <td><strong>${h.recipe_name}</strong> <span style="font-size:10px;color:grey">(${h.mode==='sequential'?'SEQ':'SIM'})</span></td>
+                     <td><strong>${h.recipe_name}</strong></td>
                      <td class="n-col">${h.N_ml||0}</td>
                      <td class="p-col">${h.P_ml||0}</td>
                      <td class="k-col">${h.K_ml||0}</td>
-                     <td><strong>${h.total_ml||0}</strong></td>
+                     <td><strong>${(h.N_ml||0) + (h.P_ml||0) + (h.K_ml||0)}</strong></td>
                      <td>${h.duration_s}s</td>
-                     <td>${h.wifi_rssi} dBm</td>
+                     <td><strong>${h.total_ml||0}</strong> mL</td>
                      <td><span class="status-pill ${pt(h.status)}">${h.status}</span></td>
                  </tr>
                  `;
@@ -1465,8 +1403,12 @@ function quickStartTimer() {
         }).then(res => res.json()).then(data => {
             if(data.error) showToast(data.error, 'error');
             else {
-                showPage('monitor');
+                showPage('dashboard');
                 showToast(`Đã bắt đầu chu kì tưới hẹn giờ (${durationMin} phút)!`, 'success');
+                setTimeout(() => {
+                    const monitorGrid = document.getElementById('monitor-grid');
+                    if (monitorGrid) monitorGrid.scrollIntoView({ behavior: 'smooth' });
+                }, 300);
             }
         }).catch(err => showToast('Lỗi gửi lệnh', 'error'));
     };
@@ -1625,6 +1567,7 @@ let calibOffsets = {
 
 let lastCalibRunResults = null;
 let calibStartValues = { N: 0, P: 0, K: 0, Main: 0 };
+let calibStartPulses = { N: 0, P: 0, K: 0, Main: 0 };
 let isCalibRunning = false;
 
 function startCalibrationRun() {
@@ -1645,8 +1588,15 @@ function startCalibrationRun() {
             K: lastStatusData.valves?.K?.volume_ml || 0,
             Main: lastStatusData.main_volume_ml || lastStatusData.total_volume_ml || 0
         };
+        calibStartPulses = {
+            N: lastStatusData.valves?.N?.pulses || 0,
+            P: lastStatusData.valves?.P?.pulses || 0,
+            K: lastStatusData.valves?.K?.pulses || 0,
+            Main: lastStatusData.main_pulses || 0
+        };
     } else {
         calibStartValues = { N: 0, P: 0, K: 0, Main: 0 };
+        calibStartPulses = { N: 0, P: 0, K: 0, Main: 0 };
     }
     isCalibRunning = true;
     
@@ -1658,10 +1608,27 @@ function startCalibrationRun() {
             isCalibRunning = false;
             resetCalibButtons();
         } else {
-            showToast('Đang mở van chính... Bơm sẽ tự khởi động sau 5 giây.', 'info');
+            showToast('Đang mở van chính... Bơm sẽ tự khởi động sau 5 giây và chạy trong 15 giây.', 'info');
             setTimeout(() => {
                 if (statusEl && btnStart && btnStart.disabled) {
-                    statusEl.innerHTML = 'Trạng thái: <span style="color: #22c55e; font-weight: bold;">Bơm đang chạy hiệu chuẩn...</span>';
+                    let timeLeft = 15;
+                    statusEl.innerHTML = `Trạng thái: <span style="color: #22c55e; font-weight: bold;">Bơm đang chạy hiệu chuẩn (còn lại ${timeLeft}s)...</span>`;
+                    
+                    const countdown = setInterval(() => {
+                        timeLeft--;
+                        if (timeLeft > 0) {
+                            if (statusEl && isCalibRunning) {
+                                statusEl.innerHTML = `Trạng thái: <span style="color: #22c55e; font-weight: bold;">Bơm đang chạy hiệu chuẩn (còn lại ${timeLeft}s)...</span>`;
+                            } else {
+                                clearInterval(countdown);
+                            }
+                        } else {
+                            clearInterval(countdown);
+                            if (isCalibRunning) {
+                                stopCalibrationRun();
+                            }
+                        }
+                    }, 1000);
                 }
             }, 5000);
         }
@@ -1754,10 +1721,10 @@ function updateCalibrationUIValues(data) {
         netVol.K = Math.max(0, (data.valves?.K?.volume_ml || 0) - calibStartValues.K);
         netVol.Main = Math.max(0, (data.main_volume_ml || data.total_volume_ml || 0) - calibStartValues.Main);
         
-        pulses.N = Math.round(netVol.N / 0.170);
-        pulses.P = Math.round(netVol.P / 0.170);
-        pulses.K = Math.round(netVol.K / 0.170);
-        pulses.Main = Math.round(netVol.Main / 37.037);
+        pulses.N = Math.max(0, (data.valves?.N?.pulses || 0) - calibStartPulses.N) || Math.round(netVol.N / 0.170);
+        pulses.P = Math.max(0, (data.valves?.P?.pulses || 0) - calibStartPulses.P) || Math.round(netVol.P / 0.170);
+        pulses.K = Math.max(0, (data.valves?.K?.pulses || 0) - calibStartPulses.K) || Math.round(netVol.K / 0.170);
+        pulses.Main = Math.max(0, (data.main_pulses || 0) - calibStartPulses.Main) || Math.round(netVol.Main / 37.037);
     } else if (lastCalibRunResults) {
         netVol.N = lastCalibRunResults.N?.volume_ml || 0;
         netVol.P = lastCalibRunResults.P?.volume_ml || 0;
