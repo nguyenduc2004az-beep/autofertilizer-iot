@@ -370,17 +370,13 @@ mqttClient.on('message', async (topic, message) => {
 
     // Kiểm tra nếu phiên dừng hoặc hoàn thành (running=false)
     if (currentSession) {
-        // Hẹn giờ tưới nước sạch (water-only) chạy bằng timer trên server, không kết thúc bằng running=false của ESP32
-        const isWaterOnly = (currentSession.N_ml === 0 && currentSession.P_ml === 0 && currentSession.K_ml === 0 && !currentSession.ratio);
-        
         if (data.running) {
             currentSession.started = true;
         }
 
         // Kế hoạch kết thúc phiên:
-        // - Với nước sạch: Chỉ kết thúc qua timer server hoặc Dừng khẩn cấp.
-        // - Với châm phân: Kết thúc khi ESP32 tắt chạy (data.running = false) VÀ (đã từng chạy hoặc quá 10s timeout chờ ESP32 phản hồi)
-        const shouldEndSession = !isWaterOnly && !data.running && (currentSession.started || (Date.now() - currentSession.start_time > 10000));
+        // Kết thúc khi ESP32 tắt chạy (data.running = false) VÀ (đã từng chạy hoặc quá 10s timeout chờ ESP32 phản hồi)
+        const shouldEndSession = !data.running && (currentSession.started || (Date.now() - currentSession.start_time > 10000));
 
         if (shouldEndSession) {
             const sess = currentSession;
@@ -480,64 +476,40 @@ app.post('/api/start', (req, res) => {
 
     if (nMl <= 0 && pMl <= 0 && kMl <= 0) {
         if (body.recipe_name && body.recipe_name.startsWith('Chỉ tưới nước')) {
-            const duration_sec = (parseFloat(body.duration_min) || 1) * 60;
+            const durationMin = parseFloat(body.duration_min) || 1;
+            const total_water_l = parseFloat(body.total_water_l) || (75.0 * durationMin);
             
-            sessionInfo = {
-                recipe_name: body.recipe_name,
-                mode: 'sequential',
-                start_time: Date.now(),
-                N_ml: 0, P_ml: 0, K_ml: 0,
-                duration_sec
+            mqttCmd = {
+                cmd: 'start_sim',
+                total_water_l: total_water_l,
+                recipe: {
+                    N: { target_ml: 0 },
+                    P: { target_ml: 0 },
+                    K: { target_ml: 0 }
+                }
             };
 
-            mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 1 }), { qos: 1 });
-            mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 1 }), { qos: 1 });
+            sessionInfo = {
+                recipe_name: body.recipe_name,
+                mode: 'volume-based',
+                start_time: Date.now(),
+                N_ml: 0, P_ml: 0, K_ml: 0,
+                total_water_l: total_water_l,
+                duration_sec: Math.round(durationMin * 60)
+            };
 
-            currentSession = sessionInfo;
-            console.log(`[START] ${sessionInfo.recipe_name} - Thời gian: ${duration_sec} giây`);
-            io.emit('session_started', sessionInfo);
-
+            console.log(`[START] ${sessionInfo.recipe_name} - Thể tích mục tiêu: ${total_water_l} Lít`);
+            
             if (waterTimerTimeout) {
                 clearTimeout(waterTimerTimeout);
+                waterTimerTimeout = null;
             }
 
-            waterTimerTimeout = setTimeout(async () => {
-                if (!currentSession) return;
-                currentSession = null;
-                waterTimerTimeout = null;
+            mqttClient.publish(TOPIC_CMD, JSON.stringify(mqttCmd), { qos: 1 });
+            currentSession = sessionInfo;
+            io.emit('session_started', sessionInfo);
 
-                mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 0 }), { qos: 1 });
-                mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 0 }), { qos: 1 });
-                
-                const record = {
-                    id: Date.now(),
-                    timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
-                    recipe_name: sessionInfo.recipe_name,
-                    mode: sessionInfo.mode,
-                    N_ml: 0, P_ml: 0, K_ml: 0, total_ml: 0,
-                    duration_s: duration_sec,
-                    status: 'completed',
-                    wifi_rssi: lastDeviceStatus?.wifi_rssi || 0
-                };
-                
-                try {
-                    if (pool) {
-                        const query = `
-                            INSERT INTO lich_su_tron 
-                            (ma_lich_su, thoi_gian_tron, ten_cong_thuc_da_dung, che_do_tron, ti_le_bon1, ti_le_bon2, ti_le_bon3, thuc_te_bon1_ml, thuc_te_bon2_ml, thuc_te_bon3_ml, tong_the_tich_ml, thoi_gian_chay_s, trang_thai, wifi_rssi)
-                            VALUES (?, ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, ?, 'completed', ?)
-                        `;
-                        await pool.query(query, [record.id, record.timestamp, record.recipe_name, record.mode, record.duration_s, record.wifi_rssi]);
-                    }
-                } catch (e) {
-                    console.error('[DB] Lỗi lưu session châm nước kết thúc:', e.message);
-                }
-                
-                io.emit('session_completed', record);
-                io.emit('history_updated');
-            }, duration_sec * 1000);
-
-            return res.json({ success: true, session: sessionInfo, command: { cmd: 'manual_timer', duration_sec } });
+            return res.json({ success: true, session: sessionInfo, command: mqttCmd });
         } else {
             return res.status(400).json({ error: 'Cần nhập ít nhất 1 lượng phân > 0' });
         }
@@ -554,7 +526,7 @@ app.post('/api/start', (req, res) => {
         
         let total_water_l = parseFloat(body.total_water_l) || 0;
         if (total_water_l <= 0) {
-            total_water_l = (nMl + pMl + kMl) / 10.0 * 1.15; // Mặc định tự tính nếu thiếu
+            total_water_l = (nMl + pMl + kMl) / 10.0; // Tỉ lệ 1/100 chuẩn
         }
 
         if (ratioN + ratioP + ratioK <= 0)
@@ -611,8 +583,6 @@ app.post('/api/stop', async (req, res) => {
         if (waterTimerTimeout) {
             clearTimeout(waterTimerTimeout);
             waterTimerTimeout = null;
-            mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 0 }), { qos: 1 });
-            mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 0 }), { qos: 1 });
         }
 
         if (currentSession) {
@@ -1244,49 +1214,31 @@ cron.schedule('* * * * *', async () => {
                         }
                     };
                 } else {
+                    const durationMin = s.thoi_gian_tuoi_phut || 1.0;
+                    const total_water_l = 75.0 * durationMin;
+                    
                     mqttCmd = {
-                        cmd: 'manual',
-                        device: 'pump',
-                        state: 1
+                        cmd: 'start_sim',
+                        total_water_l: total_water_l,
+                        recipe: {
+                            N: { target_ml: 0 },
+                            P: { target_ml: 0 },
+                            K: { target_ml: 0 }
+                        }
                     };
                     sessionInfo = {
                         recipe_name: 'Chỉ tưới nước (Hẹn giờ)',
-                        mode: 'sequential',
+                        mode: 'volume-based',
                         start_time: Date.now(),
                         N_ml: 0, P_ml: 0, K_ml: 0,
-                        duration_sec: s.thoi_gian_tuoi_phut * 60
+                        total_water_l,
+                        duration_sec: Math.round(durationMin * 60)
                     };
                 }
 
                 mqttClient.publish(TOPIC_CMD, JSON.stringify(mqttCmd), { qos: 1 });
                 currentSession = sessionInfo;
                 io.emit('session_started', sessionInfo);
-                
-                if (sessionInfo.recipe_name.startsWith('Chỉ tưới nước')) {
-                    mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 1 }), { qos: 1 });
-                    mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 1 }), { qos: 1 });
-                    
-                    setTimeout(() => {
-                        mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'pump', state: 0 }), { qos: 1 });
-                        mqttClient.publish(TOPIC_CMD, JSON.stringify({ cmd: 'manual', device: 'main_valve', state: 0 }), { qos: 1 });
-                        const record = {
-                            id: Date.now(),
-                            timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
-                            recipe_name: sessionInfo.recipe_name,
-                            mode: sessionInfo.mode,
-                            N_ml: 0, P_ml: 0, K_ml: 0, total_ml: 0,
-                            duration_s: s.thoi_gian_tuoi_phut * 60,
-                            status: 'completed',
-                            wifi_rssi: 0
-                        };
-                        io.emit('session_completed', record);
-                        io.emit('history_updated');
-                        currentSession = null;
-                        
-                        pool.query(`INSERT INTO lich_su_tron (ma_lich_su, thoi_gian_tron, ten_cong_thuc_da_dung, che_do_tron, tong_the_tich_ml, thoi_gian_chay_s, trang_thai) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                            [record.id, record.timestamp, record.recipe_name, record.mode, 0, record.duration_s, 'completed']);
-                    }, s.thoi_gian_tuoi_phut * 60 * 1000);
-                }
             }
         }
     } catch (e) {

@@ -511,14 +511,27 @@
                     </div>
                 </div>
 
-                <!-- BIỂU ĐỒ LƯU LƯỢNG THỜI GIAN THỰC -->
-                <div class="iot-card" style="margin-top: 15px;">
-                    <div class="iot-card-title" style="display:flex;justify-content:space-between;align-items:center">
-                        <span>📈 BIỂU ĐỒ LƯU LƯỢNG THỜI GIAN THỰC</span>
-                        <button class="btn-sm" onclick="clearChart()">🗑 Xóa</button>
+                <!-- BIỂU ĐỒ LƯU LƯỢNG THỜI GIAN THỰC (Tách biệt 2 biểu đồ) -->
+                <div class="charts-container" style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 15px; width: 100%;">
+                    <!-- Biểu đồ Ống Chính -->
+                    <div class="iot-card" style="flex: 1; min-width: 320px; margin-bottom: 0;">
+                        <div class="iot-card-title" style="display:flex;justify-content:space-between;align-items:center">
+                            <span>📈 LƯU LƯỢNG ĐƯỜNG ỐNG CHÍNH</span>
+                            <button class="btn-sm" onclick="clearChart()">🗑 Xóa</button>
+                        </div>
+                        <div class="chart-wrap" style="height: 260px; position: relative; width: 100%;">
+                            <canvas id="flowChartMain"></canvas>
+                        </div>
                     </div>
-                    <div class="chart-wrap">
-                        <canvas id="flowChart"></canvas>
+                    <!-- Biểu đồ Bồn Dinh Dưỡng NPK -->
+                    <div class="iot-card" style="flex: 1; min-width: 320px; margin-bottom: 0;">
+                        <div class="iot-card-title" style="display:flex;justify-content:space-between;align-items:center">
+                            <span>🧪 LƯU LƯỢNG CHÂM DINH DƯỠNG NPK</span>
+                            <button class="btn-sm" onclick="clearChart()">🗑 Xóa</button>
+                        </div>
+                        <div class="chart-wrap" style="height: 260px; position: relative; width: 100%;">
+                            <canvas id="flowChartNPK"></canvas>
+                        </div>
                     </div>
                 </div>
 
@@ -581,8 +594,6 @@
                                             <option value="2">2 lần</option>
                                             <option value="4">4 lần</option>
                                             <option value="6">6 lần</option>
-                                            <option value="8">8 lần</option>
-                                            <option value="10">10 lần</option>
                                         </select>
                                     </div>
                                     <div style="display:none;">
@@ -760,6 +771,7 @@
                             <tr>
                                 <th>Thời Gian</th>
                                 <th>Công Thức</th>
+                                <th>Chế Độ</th>
                                 <th class="n-col">Bồn 1 (mL)</th>
                                 <th class="p-col">Bồn 2 (mL)</th>
                                 <th class="k-col">Bồn 3 (mL)</th>
@@ -770,7 +782,7 @@
                             </tr>
                         </thead>
                         <tbody id="historyBody">
-                            <tr><td colspan="9" class="empty-row">Đang tải...</td></tr>
+                            <tr><td colspan="10" class="empty-row">Đang tải...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -945,7 +957,10 @@
                     <div class="iot-card" style="margin-bottom: 0; flex-grow: 1;">
                         <div class="iot-card-title" style="display: flex; justify-content: space-between; align-items: center;">
                             <span>📋 LỊCH SỬ HIỆU CHUẨN</span>
-                            <button type="button" class="btn-sm" onclick="loadCalibrationHistory()" style="font-size: 11px; padding: 4px 8px; min-height: 28px;">🔄 Làm mới</button>
+                            <div style="display: flex; gap: 8px;">
+                                <button type="button" class="btn-sm" onclick="loadCalibrationHistory()" style="font-size: 11px; padding: 4px 8px; min-height: 28px;">🔄 Làm mới</button>
+                                <button type="button" class="btn-sm" onclick="exportCalibrationCSV()" style="font-size: 11px; padding: 4px 8px; min-height: 28px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px;"><i class="fas fa-file-export"></i> Xuất CSV</button>
+                            </div>
                         </div>
                         <div style="overflow-x: auto; margin-top: 15px;">
                             <table class="history-table">
@@ -1401,11 +1416,8 @@ function _doActualStart() {
     const durationMin = calcDurationEl ? parseFloat(calcDurationEl.value) : 1.0;
     const totalFertMl = n + p + k;
     
-    // Tính toán lượng nước dựa trên chuẩn 1/100
-    // Ví dụ: 666 mL phân -> cần 66.6 Lít nước.
-    const baseWaterLiters = totalFertMl / 10; 
-    
-    // Cộng thêm 15% nước để rửa ống (Phase 3)
+    // Tính toán lượng nước dựa trên chuẩn 1/100 + 15% nước xả rửa đường ống chống kẹt
+    const baseWaterLiters = totalFertMl / 10.0;
     const totalWaterLiters = parseFloat((baseWaterLiters * 1.15).toFixed(2));
 
     let payload = {

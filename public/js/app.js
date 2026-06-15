@@ -13,7 +13,8 @@ let sysThresholds = {
     timeout: 30
 };
 let alertLog = [];
-let chart;
+let chartMain;
+let chartNPK;
 let chartTimeOrigin = Date.now();
 let lastStatusData = null;
 
@@ -452,18 +453,31 @@ function updateUI(data) {
     updateValve('K', V.K);
 
     // Chart update
-    if(data.running && typeof chart !== 'undefined') {
+    if(data.running) {
         const t = (Date.now() - chartTimeOrigin) / 1000;
-        chart.data.labels.push(t.toFixed(1));
-        chart.data.datasets[0].data.push(V.N.flow_lpm || 0);
-        chart.data.datasets[1].data.push(V.P.flow_lpm || 0);
-        chart.data.datasets[2].data.push(V.K.flow_lpm || 0);
-        chart.data.datasets[3].data.push(data.main_flow_lpm || 0);
-        if(chart.data.labels.length > 50) {
-            chart.data.labels.shift();
-            chart.data.datasets.forEach(d => d.data.shift());
+        const timeLabel = t.toFixed(1);
+        
+        if (typeof chartMain !== 'undefined') {
+            chartMain.data.labels.push(timeLabel);
+            chartMain.data.datasets[0].data.push(data.main_flow_lpm || 0);
+            if(chartMain.data.labels.length > 50) {
+                chartMain.data.labels.shift();
+                chartMain.data.datasets.forEach(d => d.data.shift());
+            }
+            chartMain.update('none');
         }
-        chart.update('none');
+        
+        if (typeof chartNPK !== 'undefined') {
+            chartNPK.data.labels.push(timeLabel);
+            chartNPK.data.datasets[0].data.push(V.N.flow_lpm || 0);
+            chartNPK.data.datasets[1].data.push(V.P.flow_lpm || 0);
+            chartNPK.data.datasets[2].data.push(V.K.flow_lpm || 0);
+            if(chartNPK.data.labels.length > 50) {
+                chartNPK.data.labels.shift();
+                chartNPK.data.datasets.forEach(d => d.data.shift());
+            }
+            chartNPK.update('none');
+        }
     }
 
     // Flow Alerts
@@ -550,6 +564,13 @@ function updateValve(ch, d) {
     if (window.currentSession && window.currentSession.calc && window.currentSession.calc[ch]) {
         targetMl = window.currentSession.calc[ch].target_ml || targetMl;
     }
+    // Hủy bỏ tình trạng hiển thị mục tiêu về 0 khi kết thúc hoặc reset ESP32
+    if (!targetMl || targetMl <= 0) {
+        const inputEl = document.getElementById(`input${ch}`);
+        if (inputEl && parseFloat(inputEl.value) > 0) {
+            targetMl = parseFloat(inputEl.value);
+        }
+    }
     document.getElementById(`tgt${ch}`).textContent = Math.round(targetMl);
     document.getElementById(`steps${ch}`).textContent = d.steps;
     
@@ -593,24 +614,65 @@ function formatTime(s) {
 // ==========================================
 
 function initChart() {
-    const ctx = document.getElementById('flowChart').getContext('2d');
-    chart = new Chart(ctx, {
+    const ctxMain = document.getElementById('flowChartMain').getContext('2d');
+    chartMain = new Chart(ctxMain, {
         type: 'line',
         data: {
             labels: [],
             datasets: [
-                { label: 'Đạm (L/ph)', borderColor: '#28a745', backgroundColor: 'rgba(40,167,69,0.1)', data: [], tension: 0.4, fill: true },
-                { label: 'Lân (L/ph)', borderColor: '#007bff', backgroundColor: 'rgba(0,123,255,0.1)', data: [], tension: 0.4, fill: true },
-                { label: 'Kali (L/ph)', borderColor: '#fd7e14', backgroundColor: 'rgba(253,126,20,0.1)', data: [], tension: 0.4, fill: true },
-                { label: 'TỔNG (L/ph)', borderColor: '#17a2b8', backgroundColor: 'rgba(23,162,184,0.1)', data: [], tension: 0.4, fill: false, borderDash: [5, 5] }
+                { label: 'TỔNG (L/ph)', borderColor: '#17a2b8', backgroundColor: 'rgba(23,162,184,0.1)', data: [], tension: 0.4, fill: true }
             ]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             animation: false,
             scales: {
-                y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#64748b' } },
-                x: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#64748b' } }
+                y: { 
+                    type: 'linear',
+                    display: true,
+                    beginAtZero: true, 
+                    title: { display: true, text: 'Lưu lượng Tổng (L/phút)', color: '#17a2b8', font: { weight: 'bold' } },
+                    grid: { color: 'rgba(0,0,0,0.05)' }, 
+                    ticks: { color: '#64748b' } 
+                },
+                x: { 
+                    grid: { color: 'rgba(0,0,0,0.05)' }, 
+                    ticks: { color: '#64748b' },
+                    title: { display: true, text: 'Thời gian (giây)', color: '#64748b' }
+                }
+            },
+            plugins: { legend: { labels: { color: '#1e293b', font: { weight: 'bold' } } } }
+        }
+    });
+
+    const ctxNPK = document.getElementById('flowChartNPK').getContext('2d');
+    chartNPK = new Chart(ctxNPK, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                { label: 'Đạm (L/ph)', borderColor: '#28a745', backgroundColor: 'rgba(40,167,69,0.1)', data: [], tension: 0.4, fill: true },
+                { label: 'Lân (L/ph)', borderColor: '#007bff', backgroundColor: 'rgba(0,123,255,0.1)', data: [], tension: 0.4, fill: true },
+                { label: 'Kali (L/ph)', borderColor: '#fd7e14', backgroundColor: 'rgba(253,126,20,0.1)', data: [], tension: 0.4, fill: true }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            animation: false,
+            scales: {
+                y: { 
+                    type: 'linear',
+                    display: true,
+                    beginAtZero: true, 
+                    title: { display: true, text: 'Lưu lượng NPK (L/phút)', color: '#334155', font: { weight: 'bold' } },
+                    grid: { color: 'rgba(0,0,0,0.05)' }, 
+                    ticks: { color: '#64748b' } 
+                },
+                x: { 
+                    grid: { color: 'rgba(0,0,0,0.05)' }, 
+                    ticks: { color: '#64748b' },
+                    title: { display: true, text: 'Thời gian (giây)', color: '#64748b' }
+                }
             },
             plugins: { legend: { labels: { color: '#1e293b', font: { weight: 'bold' } } } }
         }
@@ -618,10 +680,15 @@ function initChart() {
 }
 
 function clearChart() {
-    if(chart) {
-        chart.data.labels = [];
-        chart.data.datasets.forEach(d => d.data = []);
-        chart.update();
+    if(chartMain) {
+        chartMain.data.labels = [];
+        chartMain.data.datasets.forEach(d => d.data = []);
+        chartMain.update();
+    }
+    if(chartNPK) {
+        chartNPK.data.labels = [];
+        chartNPK.data.datasets.forEach(d => d.data = []);
+        chartNPK.update();
     }
 }
 
@@ -840,7 +907,7 @@ function onCropOrStageChange() {
     
     // Tính toán lại thời gian chạy dựa trên liều 1 LẦN TƯỚI
     const totalFertilizerMl_cycle = volN_cycle + volP_cycle + volK_cycle;
-    const dosingTimeMin = totalFertilizerMl_cycle / 66.6;
+    const dosingTimeMin = totalFertilizerMl_cycle / 750.0;
     const totalDurationMin = Math.max(1.0, Math.ceil((dosingTimeMin + 2) * 10) / 10); 
 
     // Cập nhật lên UI (ẩn, hoặc hiển thị)
@@ -853,7 +920,7 @@ function onCropOrStageChange() {
     if (rName) rName.value = `${cropNameClean} - ${stageNames[stage] || stage} (${plants} gốc, 3-Phase × ${totalDurationMin}m)`;
 
     // Báo cáo thủy lực cho 1 LẦN TƯỚI
-    const Q_MAIN_LPM   = 6.66;   
+    const Q_MAIN_LPM   = 75.0;   
     const totalWaterL  = Q_MAIN_LPM * totalDurationMin; 
     const waterPerPlant = totalWaterL / plants;
 
@@ -1012,12 +1079,25 @@ function clearAlertLog() {}
 // ==========================================
 // 8. HISTORY & DB
 // ==========================================
+const translateStatus = (s) => {
+    if (s === 'completed') return 'Hoàn thành';
+    if (s === 'cancelled') return 'Đã hủy';
+    if (s === 'stopped') return 'Đã dừng';
+    return s;
+};
+
+const translateMode = (m) => {
+    if (m === 'simultaneous' || m === 'sim') return 'Đồng thời';
+    if (m === 'sequential' || m === 'seq') return 'Nối tiếp';
+    return m;
+};
+
 function loadHistory() {
     fetch('/api/history').then(r=>r.json()).then(data => {
         const tb = document.getElementById('historyBody');
         const rl = document.getElementById('recentList');
         if(!data.length) {
-            if(tb) tb.innerHTML = '<tr><td colspan="9" class="empty-row">Chưa có lịch sử</td></tr>';
+            if(tb) tb.innerHTML = '<tr><td colspan="10" class="empty-row">Chưa có lịch sử</td></tr>';
             if(rl) rl.innerHTML = '<div class="recent-empty">Chưa có dữ liệu</div>';
             return;
         }
@@ -1031,13 +1111,14 @@ function loadHistory() {
                  <tr>
                      <td>${dt.toLocaleDateString()} ${dt.toLocaleTimeString()}</td>
                      <td><strong>${h.recipe_name}</strong></td>
+                     <td><span style="font-weight: 700; color: var(--txt-dark);">${translateMode(h.mode)}</span></td>
                      <td class="n-col">${h.N_ml||0}</td>
                      <td class="p-col">${h.P_ml||0}</td>
                      <td class="k-col">${h.K_ml||0}</td>
                      <td><strong>${(h.N_ml||0) + (h.P_ml||0) + (h.K_ml||0)}</strong></td>
                      <td>${h.duration_s}s</td>
                      <td><strong>${h.total_ml||0}</strong> mL</td>
-                     <td><span class="status-pill ${pt(h.status)}">${h.status}</span></td>
+                     <td><span class="status-pill ${pt(h.status)}">${translateStatus(h.status)}</span></td>
                  </tr>
                  `;
             }).join('');
@@ -1078,15 +1159,34 @@ function clearHistory() {
 }
 function exportCSV() {
     fetch('/api/history').then(r=>r.json()).then(data => {
-        let csv = "Thoi_gian,Cong_thuc,Che_do,N_ml,P_ml,K_ml,Tong_ml,Thoi_gian_s,Trang_thai\n";
+        let csv = "Thời Gian,Công Thức,Chế Độ,Bồn 1 N (ml),Bồn 2 P (ml),Bồn 3 K (ml),Tổng (ml),Thời Gian Chạy (s),Thể Tích Thực Tế (ml),Trạng Thái\n";
         data.forEach(h => {
-            csv += `${h.timestamp},${h.recipe_name},${h.mode},${h.N_ml||0},${h.P_ml||0},${h.K_ml||0},${h.total_ml},${h.duration_s},${h.status}\n`;
+            csv += `"${h.timestamp}","${h.recipe_name}","${translateMode(h.mode)}",${h.N_ml||0},${h.P_ml||0},${h.K_ml||0},${(h.N_ml||0)+(h.P_ml||0)+(h.K_ml||0)},${h.duration_s},${h.total_ml},"${translateStatus(h.status)}"\n`;
         });
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        // Sử dụng BOM để Excel nhận diện tiếng Việt có dấu đúng cách
+        const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "Fertilizer_History.csv";
+        a.download = "Lich_Su_Pha_Tron.csv";
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+}
+
+function exportCalibrationCSV() {
+    fetch('/api/calibration/history').then(r=>r.json()).then(data => {
+        let csv = "Thời Gian,Chu Kỳ Chạy Thử,Cảm Biến,Thể Tích (ml),Số Xung,Lưu Lượng TB (L/min),Thời Gian Chạy (s),Ghi Chú\n";
+        data.forEach(h => {
+            const sensorName = h.sensor === 'Main' ? 'Đường ống chính' : 'Bồn ' + h.sensor;
+            csv += `"${h.timestamp}","${h.cycle}","${sensorName}",${h.volume_ml},${h.pulses},${h.flow_lpm},${h.duration_s},"${h.notes||''}"\n`;
+        });
+        // Sử dụng BOM để Excel nhận diện tiếng Việt có dấu đúng cách
+        const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "Lich_Su_Hieu_Chuan.csv";
         a.click();
         URL.revokeObjectURL(url);
     });

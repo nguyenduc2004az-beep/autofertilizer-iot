@@ -38,8 +38,10 @@ const char* MQTT_PASS     = "";
 #define STEPS_PER_REV   200
 #define MICROSTEP       8
 
-// Khoảng 8500 bước vi bước 1/8 từ đóng hoàn toàn (min) đến mở hoàn toàn (max)
-#define MAX_OPEN_STEPS  8500  
+// Giới hạn số bước vi bước 1/8 từ đóng hoàn toàn (min) đến mở hoàn toàn (max) cho từng van
+#define MAX_OPEN_STEPS_N  12000
+#define MAX_OPEN_STEPS_P  9000
+#define MAX_OPEN_STEPS_K  8500
 // Giảm từ 800us xuống 500us để tăng tốc độ đóng/mở van kim, giúp van đóng nhanh hơn khi đạt mục tiêu
 #define STEP_DELAY_US   500 
  
@@ -69,8 +71,10 @@ const char* MQTT_PASS     = "";
 // Biến lưu trạng thái PID cho từng van
 float errSumN = 0.0f, errSumP = 0.0f, errSumK = 0.0f;
 float lastErrN = 0.0f, lastErrP = 0.0f, lastErrK = 0.0f;
-// Số bước mở nhanh ban đầu khi khởi động (khoảng 1000 bước 1/8)
-#define INITIAL_STARTUP_STEPS  1000
+// Số bước mở nhanh ban đầu khi khởi động riêng cho từng bồn
+#define INITIAL_STARTUP_STEPS_N  1300
+#define INITIAL_STARTUP_STEPS_P  900
+#define INITIAL_STARTUP_STEPS_K  850
 // Điểm bắt đầu giảm tốc khi đóng van (giảm từ 1200 xuống 400 để đóng nhanh hơn ở thể tích nhỏ)
 #define SLOW_CLOSE_THRESHOLD_STEPS  400
 
@@ -102,9 +106,9 @@ int32_t posN = 0, posP = 0, posK = 0;
 // GIỚI HẠN GÓC XOAY BAN ĐẦU (STARTUP CLAMP)
 #define STARTUP_LIMIT_STEPS 2000
 // BIẾN MÁY HỌC TỰ CÂN CHỈNH GIỚI HẠN AN TOÀN (SELF-LEARNING BOUNDARIES)
-int32_t learnedMinN = 0, learnedMaxN = MAX_OPEN_STEPS;
-int32_t learnedMinP = 0, learnedMaxP = MAX_OPEN_STEPS;
-int32_t learnedMinK = 0, learnedMaxK = MAX_OPEN_STEPS;
+int32_t learnedMinN = 0, learnedMaxN = MAX_OPEN_STEPS_N;
+int32_t learnedMinP = 0, learnedMaxP = MAX_OPEN_STEPS_P;
+int32_t learnedMinK = 0, learnedMaxK = MAX_OPEN_STEPS_K;
 // Theo dõi vị trí và lưu lượng để học độ bão hòa (saturating open limit)
 int32_t lastSatPosN = 0, lastSatPosP = 0, lastSatPosK = 0;
 float lastSatFlowN = 0.0f, lastSatFlowP = 0.0f, lastSatFlowK = 0.0f;
@@ -119,6 +123,8 @@ bool monitoringN = false, monitoringP = false, monitoringK = false;
 unsigned long closeTimerN = 0, closeTimerP = 0, closeTimerK = 0;
 int extraCloseN = 0, extraCloseP = 0, extraCloseK = 0;
 float targetTotalWaterL = 0.0f; // Tổng lượng nước mục tiêu (Lít)
+bool dosingCompletedTimeRecorded = false; // true khi hoàn thành châm phân
+float finalWaterTargetL = 0.0f;           // Thể tích nước đích sau khi cộng thêm lượng xả ống
 unsigned long lastControlTime = 0;             // Thời điểm điều khiển cuối
 // Trạng thái hệ thống
 //   0   = Chờ (Idle)
@@ -161,7 +167,7 @@ void moveStepper(int valve, int steps) {
     if (steps == 0) return;
     uint8_t stepPin, dirPin, enPin;
     int32_t *posPtr = nullptr;
-    int32_t learnedMin = 0, learnedMax = MAX_OPEN_STEPS;
+    int32_t learnedMin = 0, learnedMax = MAX_OPEN_STEPS_N;
     switch (valve) {
         case 1:
             stepPin = STEP_N; dirPin = DIR_N; enPin = EN_N;
@@ -288,7 +294,13 @@ void moveSteppersSimultaneous(int stepsN, int stepsP, int stepsK) {
 //====================================================================================================================================================================================================================
 // Mở van đến phần trăm mong muốn (0% = đóng, 100% = mở hoàn toàn).
 void openValve(int valve, int percent) {
-    int targetSteps = (MAX_OPEN_STEPS * constrain(percent, 0, 100)) / 100;
+    int maxSteps = MAX_OPEN_STEPS_N;
+    switch (valve) {
+        case 1: maxSteps = MAX_OPEN_STEPS_N; break;
+        case 2: maxSteps = MAX_OPEN_STEPS_P; break;
+        case 3: maxSteps = MAX_OPEN_STEPS_K; break;
+    }
+    int targetSteps = (maxSteps * constrain(percent, 0, 100)) / 100;
     int32_t currentPos = 0;
     switch (valve) {
         case 1: currentPos = posN; break;
@@ -347,8 +359,38 @@ void controlSimultaneous() {
     if (now - lastControlTime < CONTROL_INTERVAL_MS) return;
     lastControlTime = now;
 
+    // 1. KIỂM TRA ĐIỀU KIỆN KẾT THÚC CHU TRÌNH TOÀN BỘ (Có xả ống 10% cuối chu trình sau châm phân)
+    if (systemRunning) {
+        float currentVolL = (pulseMain * ML_PER_PULSE_MAIN) / 1000.0f;
+        bool dosingDone = (doneN || targetN <= 0) && (doneP || targetP <= 0) && (doneK || targetK <= 0);
+        
+        if (dosingDone && !dosingCompletedTimeRecorded) {
+            dosingCompletedTimeRecorded = true;
+            finalWaterTargetL = targetTotalWaterL; // Không cộng thêm nước để giữ tỉ lệ 1/100
+            Serial.printf("[XẢ ỐNG] Châm phân hoàn thành. Nước hiện tại: %.2f L. Thiết lập đích xả ống: %.2f L\n", 
+                          currentVolL, finalWaterTargetL);
+        }
+
+        bool waterDone = false;
+        if (dosingCompletedTimeRecorded) {
+            waterDone = (currentVolL >= finalWaterTargetL);
+        } else {
+            waterDone = (targetTotalWaterL <= 0.0f || currentVolL >= targetTotalWaterL);
+        }
+        
+        if (waterDone && dosingDone) {
+            Serial.printf("[KẾT THÚC] Đã đạt đủ nước chính (%.1f L / Đích xả ống: %.1f L). Tắt toàn bộ hệ thống!\n", currentVolL, finalWaterTargetL);
+            emergencyStop();
+            digitalWrite(PUMP_PIN, LOW);
+            digitalWrite(VALVE_PIN, LOW);
+            systemRunning = false;
+            currentPhase = 4; // Phase 4 = Completed
+            publishStatus(); // Gửi báo cáo MQTT ngay lập tức để Node.js lưu DataBase
+            return;
+        }
+    }
+
     // Chỉ thực thi PID châm phân khi simMode = true (Tức là chưa châm xong phân)
-    // Nếu simMode = false, hệ thống vẫn đang chạy máy bơm xả ống, nhưng không chạy code châm phân này nữa.
     if (!simMode) return;
 
     // Đọc thể tích tích lũy
@@ -357,21 +399,38 @@ void controlSimultaneous() {
     float volP = pulseP * ML_PER_PULSE_P;
     float volK = pulseK * ML_PER_PULSE_K;
     interrupts();
-    // --- PHẢN HỒI THÔNG MINH (SMART FEEDBACK) 1/100 ---
-    // (ĐÃ TẮT: Do tín hiệu cảm biến ống chính có thể dao động làm mục tiêu nhảy loạn xạ, 
-    //  kéo theo PID phản hồi gấp gáp làm động cơ bước bị trượt bước, mất vị trí 0 gốc).
+
+    // --- PHẢN HỒI DÂN DỤNG THÔNG MINH (SMART FEEDBACK 1/100) ---
+    // Loại bỏ hoàn toàn lưu lượng châm cố định theo thời gian tĩnh.
+    // Tốc độ châm của mỗi bồn (L/min) được tính toán động dựa theo lưu lượng thực tế ống chính
+    // theo đúng tỷ lệ phối trộn 1/100, được đồng bộ theo thời gian và lưu lượng ống chính.
     float totalTargetVol = targetN + targetP + targetK;
-    float dynTargetLpmN = targetLpmN;
-    float dynTargetLpmP = targetLpmP;
-    float dynTargetLpmK = targetLpmK;
-    /*
-    if (totalTargetVol > 0 && flowLpmMain > 0.10f) {
-        float targetTotalLpm = flowLpmMain / 100.0f; // Tỷ lệ châm phân 1/100
-        dynTargetLpmN = (targetN / totalTargetVol) * targetTotalLpm;
-        dynTargetLpmP = (targetP / totalTargetVol) * targetTotalLpm;
-        dynTargetLpmK = (targetK / totalTargetVol) * targetTotalLpm;
+    
+    // Sử dụng bộ lọc thông thấp (exponential moving average) để làm mượt lưu lượng nước chính,
+    // tránh dao động sụt áp đột ngột làm rung lắc setpoint châm phân khiến động cơ bị trượt bước.
+    static float smoothMainFlowLpm = 0.0f;
+    if (smoothMainFlowLpm <= 0.01f && flowLpmMain > 0.10f) {
+        smoothMainFlowLpm = flowLpmMain; // Khởi tạo nhanh giá trị ban đầu
+    } else if (flowLpmMain > 0.10f) {
+        smoothMainFlowLpm = 0.85f * smoothMainFlowLpm + 0.15f * flowLpmMain;
     }
-    */
+    
+    // Đảm bảo lưu lượng nước chính tối thiểu hợp lý (ví dụ 5.0 LPM) khi có dòng chảy thực tế để giữ van luôn chạy ổn định
+    float effectiveMainFlowLpm = max(5.0f, smoothMainFlowLpm);
+    
+    // Tổng lưu lượng phân châm cần đạt theo tỷ lệ 1/85 của nước chính để hoàn thành trước 15% nước xả rửa
+    float targetTotalDosingLpm = effectiveMainFlowLpm / 85.0f;
+    
+    float dynTargetLpmN = 0.0f;
+    float dynTargetLpmP = 0.0f;
+    float dynTargetLpmK = 0.0f;
+
+    if (totalTargetVol > 0) {
+        dynTargetLpmN = (targetN / totalTargetVol) * targetTotalDosingLpm;
+        dynTargetLpmP = (targetP / totalTargetVol) * targetTotalDosingLpm;
+        dynTargetLpmK = (targetK / totalTargetVol) * targetTotalDosingLpm;
+    }
+
     // Hàm lambda tính toán PID
     auto calcPID = [](float targetLpm, float flowLpm, float &errSum, float &lastErr) -> int {
         if (targetLpm <= 0.0f) {
@@ -429,22 +488,13 @@ void controlSimultaneous() {
                 lastSatFlowN = flowLpmN;
             }
             int adj = calcPID(currentTargetLpmN, flowLpmN, errSumN, lastErrN);
+            // Ngăn chặn mở thêm van khi lưu lượng quá thấp ở cuối hành trình (tránh dao động)
+            if (volRatio >= 0.95f && flowLpmN < 0.10f && adj > 0) {
+                adj = 0;
+            }
             int newPos = constrain(posN + adj, learnedMinN, learnedMaxN);
             if (newPos != posN) {
-                if (adj > 0 && flowLpmN > 0.15f && (newPos - lastSatPosN) >= 150) {
-                    float flowDiff = flowLpmN - lastSatFlowN;
-                    if (flowDiff < 0.02f) {
-                        learnedMaxN = posN;
-                        Serial.printf("[ML] Phát hiện bão hòa! Giới hạn MAX N học được: %d bước\n", learnedMaxN);
-                        newPos = posN;
-                    } else {
-                        lastSatPosN = newPos;
-                        lastSatFlowN = flowLpmN;
-                    }
-                }
-                if (newPos != posN) {
-                    adjN = newPos - posN;
-                }
+                adjN = newPos - posN;
             }
         }
     }
@@ -494,22 +544,13 @@ void controlSimultaneous() {
                 lastSatFlowP = flowLpmP;
             }
             int adj = calcPID(currentTargetLpmP, flowLpmP, errSumP, lastErrP);
+            // Ngăn chặn mở thêm van khi lưu lượng quá thấp ở cuối hành trình (tránh dao động)
+            if (volRatio >= 0.95f && flowLpmP < 0.10f && adj > 0) {
+                adj = 0;
+            }
             int newPos = constrain(posP + adj, learnedMinP, learnedMaxP);
             if (newPos != posP) {
-                if (adj > 0 && flowLpmP > 0.15f && (newPos - lastSatPosP) >= 150) {
-                    float flowDiff = flowLpmP - lastSatFlowP;
-                    if (flowDiff < 0.02f) {
-                        learnedMaxP = posP;
-                        Serial.printf("[ML] Phát hiện bão hòa! Giới hạn MAX P học được: %d bước\n", learnedMaxP);
-                        newPos = posP;
-                    } else {
-                        lastSatPosP = newPos;
-                        lastSatFlowP = flowLpmP;
-                    }
-                }
-                if (newPos != posP) {
-                    adjP = newPos - posP;
-                }
+                adjP = newPos - posP;
             }
         }
     }
@@ -559,22 +600,13 @@ void controlSimultaneous() {
                 lastSatFlowK = flowLpmK;
             }
             int adj = calcPID(currentTargetLpmK, flowLpmK, errSumK, lastErrK);
+            // Ngăn chặn mở thêm van khi lưu lượng quá thấp ở cuối hành trình (tránh dao động)
+            if (volRatio >= 0.95f && flowLpmK < 0.10f && adj > 0) {
+                adj = 0;
+            }
             int newPos = constrain(posK + adj, learnedMinK, learnedMaxK);
             if (newPos != posK) {
-                if (adj > 0 && flowLpmK > 0.15f && (newPos - lastSatPosK) >= 150) {
-                    float flowDiff = flowLpmK - lastSatFlowK;
-                    if (flowDiff < 0.02f) {
-                        learnedMaxK = posK;
-                        Serial.printf("[ML] Phát hiện bão hòa! Giới hạn MAX K học được: %d bước\n", learnedMaxK);
-                        newPos = posK;
-                    } else {
-                        lastSatPosK = newPos;
-                        lastSatFlowK = flowLpmK;
-                    }
-                }
-                if (newPos != posK) {
-                    adjK = newPos - posK;
-                }
+                adjK = newPos - posK;
             }
         }
     }
@@ -625,20 +657,7 @@ void controlSimultaneous() {
         Serial.println("[SIM✓✓] Hoàn thành châm phân (Phase 2)! Máy bơm vẫn tiếp tục chạy xả ống (Phase 3)...");
     }
 
-    // --- KIỂM TRA THỂ TÍCH NƯỚC TỔNG (PHASE 3 -> KẾT THÚC) ---
-    // Kiểm tra xem tổng lượng nước đã đạt mục tiêu chưa
-    if (systemRunning && targetTotalWaterL > 0) {
-        float currentVolL = (pulseMain * ML_PER_PULSE_MAIN) / 1000.0f;
-        if (currentVolL >= targetTotalWaterL) {
-            Serial.printf("[KẾT THÚC] Đã bơm đủ %.1f Lít nước. Tắt toàn bộ hệ thống!\n", currentVolL);
-            emergencyStop();
-            digitalWrite(PUMP_PIN, LOW);
-            digitalWrite(VALVE_PIN, LOW);
-            systemRunning = false;
-            currentPhase = 4; // Phase 4 = Completed
-            publishStatus(); // Gửi báo cáo MQTT ngay lập tức để Node.js lưu DataBase
-        }
-    }
+    // (Thể tích nước tổng và điều kiện hoàn thành toàn bộ chu trình hiện được kiểm tra ở đầu hàm để tránh lỗi bỏ qua khi simMode dừng)
 }
 
 //====================================================================================================================================================================================================================
@@ -707,9 +726,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         posK = 0;
 
         // Reset các giới hạn an toàn tự học về mặc định cho chu kỳ mới
-        learnedMinN = 0; learnedMaxN = MAX_OPEN_STEPS;
-        learnedMinP = 0; learnedMaxP = MAX_OPEN_STEPS;
-        learnedMinK = 0; learnedMaxK = MAX_OPEN_STEPS;
+        learnedMinN = 0; learnedMaxN = MAX_OPEN_STEPS_N;
+        learnedMinP = 0; learnedMaxP = MAX_OPEN_STEPS_P;
+        learnedMinK = 0; learnedMaxK = MAX_OPEN_STEPS_K;
 
         // Reset các mốc học bão hòa cho chu kỳ mới
         lastSatPosN = 0; lastSatPosP = 0; lastSatPosK = 0;
@@ -724,6 +743,8 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         memset(historyMain, 0, sizeof(historyMain));
         flowWindowIdx = 0;
         doneN = doneP = doneK = false;
+        dosingCompletedTimeRecorded = false;
+        finalWaterTargetL = 0.0f;
         monitoringN = monitoringP = monitoringK = false;
         extraCloseN = extraCloseP = extraCloseK = 0;
         errSumN = errSumP = errSumK = 0.0f;
@@ -738,18 +759,20 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         zeroFlowDuration = 0;
         systemError = "";      
         // Bật Bơm và Van chính để nước chảy qua hệ thống phối trộn đồng thời
-        if (targetN > 0 || targetP > 0 || targetK > 0) {
+        if (targetN > 0 || targetP > 0 || targetK > 0 || targetTotalWaterL > 0.0f) {
             Serial.println("[SIM] Đang kích hoạt mở Van chính (chờ 5 giây để van mở hoàn toàn)...");
             digitalWrite(VALVE_PIN, HIGH);
             delay(5000); // Đợi 5 giây cho van điện từ mở hoàn toàn           
             Serial.println("[SIM] Đang khởi động Bơm chính...");
             digitalWrite(PUMP_PIN, HIGH);
             delay(1000); // Đợi 1 giây cho dòng khởi động ổn định trước khi bắt đầu vòng điều khiển hồi tiếp
-            // Mở nhanh ban đầu đồng thời theo tỷ lệ thể tích mục tiêu để tránh chảy quá
-            int initN = targetN > 0 ? ((targetN < 100.0f) ? max(200, (int)(targetN * 10)) : INITIAL_STARTUP_STEPS) : 0;
-            int initP = targetP > 0 ? ((targetP < 100.0f) ? max(200, (int)(targetP * 10)) : INITIAL_STARTUP_STEPS) : 0;
-            int initK = targetK > 0 ? ((targetK < 100.0f) ? max(200, (int)(targetK * 10)) : INITIAL_STARTUP_STEPS) : 0;
-            moveSteppersSimultaneous(initN, initP, initK);
+            // Mở nhanh ban đầu đồng thời theo tỷ lệ thể tích mục tiêu để tránh chảy quá (giảm bước mở với thể tích nhỏ)
+            int initN = targetN > 0 ? ((targetN < 200.0f) ? max(150, (int)(targetN * (INITIAL_STARTUP_STEPS_N / 200.0f))) : INITIAL_STARTUP_STEPS_N) : 0;
+            int initP = targetP > 0 ? ((targetP < 200.0f) ? max(150, (int)(targetP * (INITIAL_STARTUP_STEPS_P / 200.0f))) : INITIAL_STARTUP_STEPS_P) : 0;
+            int initK = targetK > 0 ? ((targetK < 200.0f) ? max(150, (int)(targetK * (INITIAL_STARTUP_STEPS_K / 200.0f))) : INITIAL_STARTUP_STEPS_K) : 0;
+            if (initN > 0 || initP > 0 || initK > 0) {
+                moveSteppersSimultaneous(initN, initP, initK);
+            }
         }       
         lastControlTime = millis();
         runStartTime = millis();        
@@ -881,7 +904,7 @@ void calculateFlowRates() {
     flowLpmN = sumN * ML_PER_PULSE_N * 0.06f; 
     flowLpmP = sumP * ML_PER_PULSE_P * 0.06f; 
     flowLpmK = sumK * ML_PER_PULSE_K * 0.06f; 
-    flowLpmMain = sumMain / 0.45f; // Cảm biến DN32 ống chính (F = 0.45 * Q)
+    flowLpmMain = sumMain * ML_PER_PULSE_MAIN * 0.06f; // Cảm biến DN32 ống chính (Q = sum * ML_PER_PULSE * 0.06)
 
     // Kiểm tra bảo vệ chống chạy khô (Flow Timeout)
     if (systemRunning) {
