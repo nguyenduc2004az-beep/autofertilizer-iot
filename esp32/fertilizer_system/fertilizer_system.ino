@@ -54,10 +54,11 @@ const char* MQTT_PASS     = "";
 #define PUBLISH_INTERVAL    200
 #define FLOW_CALC_INTERVAL  200
 
-// THÔNG SỐ ĐIỀU KHIỂN PHẢN HỒI (PID-Controller)
-// Q_MAX_LPM: Lưu lượng tối đa (L/phút) khi van mở hoàn toàn.
-//   Cách đo: mở van 100%, đặt bình 1 lít, bấm giờ → Q_max = 1/thời_gian_phút
-#define Q_MAX_LPM       4.0f
+// THÔNG SỐ ĐIỀU KHIỂN PHẢN HỒI & ĐÓN ĐẦU (PID & Feedforward)
+// Q_MAX_LPM_X: Lưu lượng tối đa thực tế (L/phút) khi van mở tối đa (từ dữ liệu hiệu chuẩn)
+#define Q_MAX_LPM_N     1.15f
+#define Q_MAX_LPM_P     1.02f
+#define Q_MAX_LPM_K     1.00f
 
 #define KP_CONTROL     35.0f   // Hệ số tỉ lệ (Proportional)
 #define KI_CONTROL      8.0f   // Hệ số tích phân (Integral)
@@ -71,6 +72,8 @@ const char* MQTT_PASS     = "";
 // Biến lưu trạng thái PID cho từng van
 float errSumN = 0.0f, errSumP = 0.0f, errSumK = 0.0f;
 float lastErrN = 0.0f, lastErrP = 0.0f, lastErrK = 0.0f;
+// Tích lũy hiệu chỉnh từ PID (được giới hạn an toàn)
+float pidOffsetN = 0.0f, pidOffsetP = 0.0f, pidOffsetK = 0.0f;
 // Số bước mở nhanh ban đầu khi khởi động riêng cho từng bồn
 #define INITIAL_STARTUP_STEPS_N  1300
 #define INITIAL_STARTUP_STEPS_P  900
@@ -431,21 +434,20 @@ void controlSimultaneous() {
         dynTargetLpmK = (targetK / totalTargetVol) * targetTotalDosingLpm;
     }
 
-    // Hàm lambda tính toán PID
+    // Hàm lambda tính toán PID (Hiệu chỉnh tích lũy offset)
     auto calcPID = [](float targetLpm, float flowLpm, float &errSum, float &lastErr) -> int {
         if (targetLpm <= 0.0f) {
             errSum = 0.0f;
             lastErr = 0.0f;
             return 0;
         }
-        float err = targetLpm - flowLpm;
-        // Giai đoạn 1: Mồi dòng chảy nhanh
+        // Chờ mồi dòng chảy: không chạy PID điều chỉnh khi chưa có dòng chảy thực tế
         if (flowLpm < 0.02f) {
             errSum = 0.0f;
-            lastErr = err;
-            return 100; // Quay mở nhanh
+            lastErr = 0.0f;
+            return 0; // Giữ nguyên vị trí đón đầu (Feedforward)
         }
-        // Giai đoạn 2: Điều chỉnh PID
+        float err = targetLpm - flowLpm;
         if (fabsf(err) <= DEADBAND_LPM) {
             return 0;
         }
@@ -487,14 +489,24 @@ void controlSimultaneous() {
                 lastSatPosN = posN;
                 lastSatFlowN = flowLpmN;
             }
+            
+            // 1. Tính số bước mở đón đầu (Feedforward)
+            int32_t ffStepsN = (currentTargetLpmN / Q_MAX_LPM_N) * MAX_OPEN_STEPS_N;
+            ffStepsN = constrain(ffStepsN, 0, MAX_OPEN_STEPS_N);
+            
+            // 2. Tính hiệu chỉnh phản hồi (Feedback PID)
             int adj = calcPID(currentTargetLpmN, flowLpmN, errSumN, lastErrN);
-            // Ngăn chặn mở thêm van khi lưu lượng quá thấp ở cuối hành trình (tránh dao động)
             if (volRatio >= 0.95f && flowLpmN < 0.10f && adj > 0) {
                 adj = 0;
             }
-            int newPos = constrain(posN + adj, learnedMinN, learnedMaxN);
-            if (newPos != posN) {
-                adjN = newPos - posN;
+            pidOffsetN = constrain(pidOffsetN + adj, -3000.0f, 3000.0f);
+            
+            // 3. Kết hợp Đón đầu + Phản hồi
+            int32_t targetPosN = ffStepsN + (int32_t)pidOffsetN;
+            targetPosN = constrain(targetPosN, learnedMinN, learnedMaxN);
+            
+            if (targetPosN != posN) {
+                adjN = targetPosN - posN;
             }
         }
     }
@@ -543,14 +555,24 @@ void controlSimultaneous() {
                 lastSatPosP = posP;
                 lastSatFlowP = flowLpmP;
             }
+            
+            // 1. Tính số bước mở đón đầu (Feedforward)
+            int32_t ffStepsP = (currentTargetLpmP / Q_MAX_LPM_P) * MAX_OPEN_STEPS_P;
+            ffStepsP = constrain(ffStepsP, 0, MAX_OPEN_STEPS_P);
+            
+            // 2. Tính hiệu chỉnh phản hồi (Feedback PID)
             int adj = calcPID(currentTargetLpmP, flowLpmP, errSumP, lastErrP);
-            // Ngăn chặn mở thêm van khi lưu lượng quá thấp ở cuối hành trình (tránh dao động)
             if (volRatio >= 0.95f && flowLpmP < 0.10f && adj > 0) {
                 adj = 0;
             }
-            int newPos = constrain(posP + adj, learnedMinP, learnedMaxP);
-            if (newPos != posP) {
-                adjP = newPos - posP;
+            pidOffsetP = constrain(pidOffsetP + adj, -2500.0f, 2500.0f);
+            
+            // 3. Kết hợp Đón đầu + Phản hồi
+            int32_t targetPosP = ffStepsP + (int32_t)pidOffsetP;
+            targetPosP = constrain(targetPosP, learnedMinP, learnedMaxP);
+            
+            if (targetPosP != posP) {
+                adjP = targetPosP - posP;
             }
         }
     }
@@ -599,14 +621,24 @@ void controlSimultaneous() {
                 lastSatPosK = posK;
                 lastSatFlowK = flowLpmK;
             }
+            
+            // 1. Tính số bước mở đón đầu (Feedforward)
+            int32_t ffStepsK = (currentTargetLpmK / Q_MAX_LPM_K) * MAX_OPEN_STEPS_K;
+            ffStepsK = constrain(ffStepsK, 0, MAX_OPEN_STEPS_K);
+            
+            // 2. Tính hiệu chỉnh phản hồi (Feedback PID)
             int adj = calcPID(currentTargetLpmK, flowLpmK, errSumK, lastErrK);
-            // Ngăn chặn mở thêm van khi lưu lượng quá thấp ở cuối hành trình (tránh dao động)
             if (volRatio >= 0.95f && flowLpmK < 0.10f && adj > 0) {
                 adj = 0;
             }
-            int newPos = constrain(posK + adj, learnedMinK, learnedMaxK);
-            if (newPos != posK) {
-                adjK = newPos - posK;
+            pidOffsetK = constrain(pidOffsetK + adj, -2500.0f, 2500.0f);
+            
+            // 3. Kết hợp Đón đầu + Phản hồi
+            int32_t targetPosK = ffStepsK + (int32_t)pidOffsetK;
+            targetPosK = constrain(targetPosK, learnedMinK, learnedMaxK);
+            
+            if (targetPosK != posK) {
+                adjK = targetPosK - posK;
             }
         }
     }
@@ -749,6 +781,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         extraCloseN = extraCloseP = extraCloseK = 0;
         errSumN = errSumP = errSumK = 0.0f;
         lastErrN = lastErrP = lastErrK = 0.0f;
+        pidOffsetN = pidOffsetP = pidOffsetK = 0.0f;
         Serial.printf("[SIM] N=%.0fmL@%.2fL/m | P=%.0fmL@%.2fL/m | K=%.0fmL@%.2fL/m\n",
                        targetN, targetLpmN,
                        targetP, targetLpmP,
