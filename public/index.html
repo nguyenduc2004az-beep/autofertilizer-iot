@@ -103,7 +103,7 @@
                 <span class="tn-label">Lịch Sử</span>
                 <div class="tn-active-indicator"></div>
             </button>
-            <button class="tn-item" id="tn-system" onclick="showPage('system')" title="Hệ Thống">
+            <button class="tn-item" id="tn-system" onclick="showPage('system')" title="Hệ Thống" style="display: none;">
                 <i class="fas fa-info-circle"></i>
                 <span class="tn-label">Hệ Thống</span>
                 <div class="tn-active-indicator"></div>
@@ -577,23 +577,29 @@
                                     <div>
                                         <label style="font-size: 14px; font-weight: 700; color: var(--txt-main); display: block; margin-bottom: 6px;">Giai đoạn sinh trưởng</label>
                                         <select id="calc-stage" class="field" onchange="onCropOrStageChange()" style="border-color: var(--border); background: var(--bg-card); height: 42px; padding: 6px 12px; min-height: 42px; font-size: 14px; font-weight: bold; color: var(--txt-dark);">
-                                            <option value="seedling">🌱 Cây con (Độ loãng cao)</option>
-                                            <option value="vegetative">🌿 Sinh trưởng (Phát triển)</option>
-                                            <option value="flowering">🌼 Ra hoa (Tạo tán)</option>
-                                            <option value="fruiting">🍅 Nuôi quả (Chín quả)</option>
+                                            <option value="seedling">🌱 Cây con (1-1-1)</option>
+                                            <option value="vegetative">🌿 Sinh trưởng (1-1-1)</option>
+                                            <option value="flowering">🌼 Ra hoa (2-1-3)</option>
+                                            <option value="fruiting">🍅 Nuôi quả (5-3-10)</option>
                                         </select>
                                     </div>
                                     <div>
                                         <label style="font-size: 14px; font-weight: 700; color: var(--txt-main); display: block; margin-bottom: 6px;">Số lượng cây (gốc)</label>
-                                        <input type="number" id="calc-plants" class="field" value="100" min="1" oninput="onCropOrStageChange()" style="border-color: var(--border); background: var(--bg-card); text-align: center; font-size: 18px; font-weight: 900; color: var(--txt-dark); height: 42px; padding: 6px 12px; min-height: 42px;">
+                                        <input type="number" id="calc-plants" class="field" value="2400" min="1" oninput="onCropOrStageChange()" style="border-color: var(--border); background: var(--bg-card); text-align: center; font-size: 18px; font-weight: 900; color: var(--txt-dark); height: 42px; padding: 6px 12px; min-height: 42px;">
                                     </div>
                                     <div>
                                         <label style="font-size: 14px; font-weight: 700; color: var(--txt-main); display: block; margin-bottom: 6px;">Số lần tưới/ngày</label>
                                         <select id="calc-cycles" class="field" onchange="onCropOrStageChange()" style="border-color: var(--border); background: var(--bg-card); height: 42px; padding: 6px 12px; min-height: 42px; font-size: 15px; font-weight: bold; color: var(--txt-dark); text-align: center;">
                                             <option value="1">1 lần</option>
                                             <option value="2">2 lần</option>
+                                            <option value="3">3 lần</option>
                                             <option value="4">4 lần</option>
+                                            <option value="5">5 lần</option>
                                             <option value="6">6 lần</option>
+                                            <option value="7">7 lần</option>
+                                            <option value="8">8 lần</option>
+                                            <option value="9">9 lần</option>
+                                            <option value="10">10 lần</option>
                                         </select>
                                     </div>
                                     <div style="display:none;">
@@ -601,18 +607,40 @@
                                     </div>
                                 </div>
 
+                                <!-- BẢNG CÔNG THỨC 4 GIAI ĐOẠN -->
+                                <div id="crop-formula-panel" style="background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 15px;">
+                                    <div style="font-size: 14px; font-weight: 800; color: var(--txt-dark); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                                        <span>📋 TỔNG LƯỢNG PHÂN N-P-K CẦN DÙNG (mL/Ngày):</span>
+                                        <span id="formula-crop-name" style="color: var(--p-color); font-size: 13px;"></span>
+                                    </div>
+                                    <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; border: 2px solid #000;">
+                                        <thead>
+                                            <tr style="background: var(--bg-hover);">
+                                                <th style="padding: 8px 10px; border: 2px solid #000; color: var(--txt-dark); font-weight: 800; text-align: left;">Giai đoạn</th>
+                                                <th style="padding: 8px 10px; border: 2px solid #000; color: #16a34a; font-weight: 800;">Đạm (N)</th>
+                                                <th style="padding: 8px 10px; border: 2px solid #000; color: #2563eb; font-weight: 800;">Lân (P)</th>
+                                                <th style="padding: 8px 10px; border: 2px solid #000; color: #d97706; font-weight: 800;">Kali (K)</th>
+                                                <th style="padding: 8px 10px; border: 2px solid #000; color: #0ea5e9; font-weight: 800;">Nước (L/Ngày)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="crop-formula-body">
+                                            <!-- Dữ liệu render từ JS -->
+                                        </tbody>
+                                    </table>
+                                </div>
+
                                 <!-- BẢNG PHÂN TÍCH THÔNG SỐ VẬT LÝ -->
                                 <div id="calc-result-panel" style="background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 12px;">
                                     <div style="font-size: 14px; font-weight: 800; color: var(--txt-dark); margin-bottom: 10px;">📊 BÁO CÁO THỦY LỰC & NỒNG ĐỘ PHỐI TRỘN:</div>
                                     <div id="calc-summary" style="font-size: 14px; color: var(--p-color); background: var(--bg-hover); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-weight: 700; border-left: 4px solid var(--p-color);"></div>
-                                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                                    <table style="width: 100%; border-collapse: collapse; font-size: 13px; border: 2px solid #000;">
                                         <thead>
                                             <tr style="background: var(--bg-hover);">
-                                                <th style="padding: 8px 10px; text-align: left; border: 1px solid var(--border); color: var(--txt-dark); font-weight: 800;">Bồn dinh dưỡng</th>
-                                                <th style="padding: 8px 10px; text-align: center; border: 1px solid var(--border); color: var(--txt-dark); font-weight: 800;">Tổng thể tích (mL)</th>
-                                                <th style="padding: 8px 10px; text-align: center; border: 1px solid var(--border); color: var(--txt-dark); font-weight: 800;">Liều 1 chu kỳ (mL)</th>
-                                                <th style="padding: 8px 10px; text-align: center; border: 1px solid var(--border); color: var(--txt-dark); font-weight: 800;">Lưu lượng setpoint (L/phút)</th>
-                                                <th style="padding: 8px 10px; text-align: center; border: 1px solid var(--border); color: var(--txt-dark); font-weight: 800;">Nồng độ 1 chu kỳ (% V/V)</th>
+                                                <th style="padding: 8px 10px; text-align: left; border: 2px solid #000; color: var(--txt-dark); font-weight: 800;">Bồn dinh dưỡng</th>
+                                                <th style="padding: 8px 10px; text-align: center; border: 2px solid #000; color: var(--txt-dark); font-weight: 800;">Tổng thể tích (mL)</th>
+                                                <th style="padding: 8px 10px; text-align: center; border: 2px solid #000; color: var(--txt-dark); font-weight: 800;">Liều 1 chu kỳ (mL)</th>
+                                                <th style="padding: 8px 10px; text-align: center; border: 2px solid #000; color: var(--txt-dark); font-weight: 800;">Lưu lượng setpoint (L/phút)</th>
+                                                <th style="padding: 8px 10px; text-align: center; border: 2px solid #000; color: var(--txt-dark); font-weight: 800;">Nồng độ 1 chu kỳ (% V/V)</th>
                                             </tr>
                                         </thead>
                                         <tbody id="calc-table-body"></tbody>
@@ -1416,9 +1444,9 @@ function _doActualStart() {
     const durationMin = calcDurationEl ? parseFloat(calcDurationEl.value) : 1.0;
     const totalFertMl = n + p + k;
     
-    // Tính toán lượng nước dựa trên chuẩn 1/100 + 15% nước xả rửa đường ống chống kẹt
+    // Tính toán lượng nước dựa trên chuẩn 1/100 chính xác tuyệt đối (không cộng thêm dư thừa)
     const baseWaterLiters = totalFertMl / 10.0;
-    const totalWaterLiters = parseFloat((baseWaterLiters * 1.15).toFixed(2));
+    const totalWaterLiters = parseFloat(baseWaterLiters.toFixed(2));
 
     let payload = {
         mode: 'sim',

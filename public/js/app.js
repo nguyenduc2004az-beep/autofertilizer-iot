@@ -701,47 +701,7 @@ function toggleAutoMode(checked) {
     document.getElementById('modeDescText').textContent = 'Mở cùng lúc 3 van. Phù hợp lượng phân lớn.';
 }
 
-function startMixing() {
-    const n = parseFloat(document.getElementById('inputN').value) || 0;
-    const p = parseFloat(document.getElementById('inputP').value) || 0;
-    const k = parseFloat(document.getElementById('inputK').value) || 0;
-    const calcDurationEl = document.getElementById('calc-duration');
-    const durationMin = calcDurationEl ? parseFloat(calcDurationEl.value) : 1.0;
-    const totalDosingFlowLpm = parseFloat(((n + p + k) / (durationMin * 1000)).toFixed(3));
 
-    let payload = {
-        mode: 'sim',
-        recipe_name: document.getElementById('recipeName').value || 'Không tên',
-        N_ml: n,
-        P_ml: p,
-        K_ml: k,
-        N_speed: 60,
-        P_speed: 60,
-        K_speed: 60,
-        ratio_N: n,
-        ratio_P: p,
-        ratio_K: k,
-        total_vol_l: (n + p + k) / 1000,
-        total_lpm: totalDosingFlowLpm > 0.05 ? totalDosingFlowLpm : 3.0
-    };
-
-    fetch('/api/start', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(payload)
-    }).then(res => res.json()).then(data => {
-        if(data.error) {
-            showToast(data.error, 'error');
-        } else {
-            showToast('Hệ thống đang tính toán & áp dụng tỷ lệ bù trừ AI...', 'info');
-            showPage('dashboard');
-            setTimeout(() => {
-                const monitorGrid = document.getElementById('monitor-grid');
-                if (monitorGrid) monitorGrid.scrollIntoView({ behavior: 'smooth' });
-            }, 300);
-        }
-    }).catch(err => showToast('Lỗi gửi lệnh', 'error'));
-}
 
 // CẤU HÌNH CÂY TRỒNG VÀ PHỐI TRỘN DINH DƯỠNG ĐỘNG
 const DEFAULT_CROPS = {
@@ -876,13 +836,21 @@ function onCropOrStageChange() {
     const crop = crops[cropKey];
     if (!crop) return;
 
-    const rates = crop.rates[stage] || { n: 0, p: 0, k: 0 };
-    const multiplier = plants / 100;
+    // THEO YÊU CẦU: 2 Lít/cây/ngày và Tỉ lệ dung dịch phân 1/100
+    const waterPerPlantDay = 2.0; 
+    const totalWaterDay_Calc = plants * waterPerPlantDay; // Tổng nước cả ngày (L)
+    const totalFertDay_mL = totalWaterDay_Calc * 10; // Tổng phân (mL) = 1/100 nước
 
-    // Sử dụng tổng lượng phân CỦA CẢ NGÀY
-    const volN = Math.round(rates.n * multiplier);
-    const volP = Math.round(rates.p * multiplier);
-    const volK = Math.round(rates.k * multiplier);
+    let rN = 0, rP = 0, rK = 0, sum = 1;
+    if (stage === 'seedling' || stage === 'vegetative') { rN = 1; rP = 1; rK = 1; sum = 3; }
+    else if (stage === 'flowering') { rN = 2; rP = 1; rK = 3; sum = 6; }
+    else if (stage === 'fruiting') { rN = 5; rP = 3; rK = 10; sum = 18; }
+
+    // Sử dụng tổng lượng phân CỦA CẢ NGÀY dựa trên 2L/cây
+    const volN = Math.round((totalFertDay_mL * rN) / sum);
+    const volP = Math.round((totalFertDay_mL * rP) / sum);
+    const volK = Math.round((totalFertDay_mL * rK) / sum);
+    const multiplier = plants / 100; // Giữ lại cho tương thích nếu cần
 
     // Tính toán liều lượng cho 1 LẦN TƯỚI (Spoon-feeding)
     const cycles = parseInt(document.getElementById('calc-cycles') ? document.getElementById('calc-cycles').value : 1);
@@ -899,16 +867,58 @@ function onCropOrStageChange() {
     if (inpK) inpK.value = volK_cycle;
 
     const stageNames = {
-        'seedling':  'Cây con',
-        'vegetative':'Sinh trưởng',
-        'flowering': 'Ra hoa',
-        'fruiting':  'Nuôi quả'
+        'seedling':  'Cây con (1-1-1)',
+        'vegetative':'Sinh trưởng (1-1-1)',
+        'flowering': 'Ra hoa (2-1-3)',
+        'fruiting':  'Nuôi quả (5-3-10)'
     };
     
-    // Tính toán lại thời gian chạy dựa trên liều 1 LẦN TƯỚI
-    const totalFertilizerMl_cycle = volN_cycle + volP_cycle + volK_cycle;
-    const dosingTimeMin = totalFertilizerMl_cycle / 750.0;
-    const totalDurationMin = Math.max(1.0, Math.ceil((dosingTimeMin + 2) * 10) / 10); 
+    // Hiển thị Bảng Công thức 4 giai đoạn
+    const formulaNameEl = document.getElementById('formula-crop-name');
+    if (formulaNameEl) formulaNameEl.textContent = crop.name;
+    const formulaBodyEl = document.getElementById('crop-formula-body');
+    if (formulaBodyEl) {
+        formulaBodyEl.innerHTML = ['seedling', 'vegetative', 'flowering', 'fruiting'].map(s => {
+            let rN = 0, rP = 0, rK = 0, sum = 1;
+            if (s === 'seedling' || s === 'vegetative') { rN = 1; rP = 1; rK = 1; sum = 3; }
+            else if (s === 'flowering') { rN = 2; rP = 1; rK = 3; sum = 6; }
+            else if (s === 'fruiting') { rN = 5; rP = 3; rK = 10; sum = 18; }
+
+            const vN = Math.round((totalFertDay_mL * rN) / sum);
+            const vP = Math.round((totalFertDay_mL * rP) / sum);
+            const vK = Math.round((totalFertDay_mL * rK) / sum);
+            
+            const wDay = totalWaterDay_Calc;
+
+            const isCurrent = s === stage;
+            const bg = isCurrent ? 'background: #eff6ff;' : '';
+            const fw = isCurrent ? 'font-weight: 900; color: #1e3a8a;' : 'font-weight: 600; color: #475569;';
+            return `
+            <tr style="${bg}">
+                <td style="padding: 8px 10px; border: 2px solid #000; text-align: left; ${fw}">${isCurrent ? '👉 ' : ''}${stageNames[s]}</td>
+                <td style="padding: 8px 10px; border: 2px solid #000; color: #16a34a; font-weight: 700;">${vN}</td>
+                <td style="padding: 8px 10px; border: 2px solid #000; color: #2563eb; font-weight: 700;">${vP}</td>
+                <td style="padding: 8px 10px; border: 2px solid #000; color: #d97706; font-weight: 700;">${vK}</td>
+                <td style="padding: 8px 10px; border: 2px solid #000; color: #0ea5e9; font-weight: 700;">${wDay.toFixed(1)}</td>
+            </tr>
+            `;
+        }).join('');
+    }
+    
+    // Bỏ thời gian xả ống +2 phút, chốt đúng thời gian bơm của nước 
+    const totalDurationMin = (totalWaterDay_Calc / cycles) / 75.0;
+    
+    // Cài đặt lại setpoint cho phù hợp: 
+    // Ép van có lưu lượng lớn nhất chạy ở mức 0.500 L/phút để đảm bảo flow sensor quay chính xác.
+    // Các van khác sẽ mở nhỏ hơn theo tỷ lệ. Thời gian tiêm phân sẽ kết thúc sớm để xả ống.
+    const MAX_TARGET_SETPOINT = 0.500;
+    const maxVol_cycle_mL = Math.max(volN_cycle, volP_cycle, volK_cycle);
+    let dosingTimeMin = (maxVol_cycle_mL / 1000) / MAX_TARGET_SETPOINT;
+    
+    if (dosingTimeMin > totalDurationMin) {
+        dosingTimeMin = totalDurationMin; // Không được tiêm lâu hơn tổng thời gian bơm nước
+    }
+    if (dosingTimeMin < 0.1) dosingTimeMin = 0.1;
 
     // Cập nhật lên UI (ẩn, hoặc hiển thị)
     if (calcDurationInput) {
@@ -923,6 +933,7 @@ function onCropOrStageChange() {
     const Q_MAIN_LPM   = 75.0;   
     const totalWaterL  = Q_MAIN_LPM * totalDurationMin; 
     const waterPerPlant = totalWaterL / plants;
+    const totalWaterDay = totalWaterL * cycles;
 
     // Lưu lượng setpoint yêu cầu (L/phút) cho 1 lần tưới
     const setpointN = parseFloat((volN_cycle / (dosingTimeMin * 1000)).toFixed(3));
@@ -937,26 +948,28 @@ function onCropOrStageChange() {
     const summaryEl = document.getElementById('calc-summary');
     if (summaryEl) {
         summaryEl.innerHTML =
-            `<b>${plants} cây</b> × ${waterPerPlant.toFixed(2)} L/cây = <b>${totalWaterL.toFixed(1)} L nước/Lần tưới</b> &nbsp;|&nbsp; ` +
+            `<b>Tổng nước/Ngày: <span style="color:#ef4444">${totalWaterDay.toFixed(1)} L</span></b> &nbsp;|&nbsp; ` +
+            `Nước/Chu kỳ: <b>${totalWaterL.toFixed(1)} L</b> (<b>${waterPerPlant.toFixed(2)}</b> L/cây) <br/>` +
             `Giai đoạn: <b>${stageNames[stage] || stage}</b> &nbsp;|&nbsp; ` +
-            `Thời gian châm dự kiến: <b>~${dosingTimeMin.toFixed(1)} phút</b> (Tỉ lệ chuẩn 1/100)`;
+            `Thời gian bơm dự kiến: <b>~${dosingTimeMin.toFixed(1)} phút</b> (Tỉ lệ chuẩn 1/100)`;
     }
 
     const tableBodyEl = document.getElementById('calc-table-body');
     if (tableBodyEl) {
-        const colors = { N: '#16a34a', P: '#2563eb', K: '#d97706' };
-        const labels = { N: '🌿 Bồn 1 (Đạm - N)', P: '🌾 Bồn 2 (Lân - P)', K: '🍂 Bồn 3 (Kali - K)' };
+        const colors = { N: '#16a34a', P: '#2563eb', K: '#d97706', W: '#0ea5e9' };
+        const labels = { N: '🌿 Bồn 1 (Đạm - N)', P: '🌾 Bồn 2 (Lân - P)', K: '🍂 Bồn 3 (Kali - K)', W: '💧 Nước sạch (Main)' };
         tableBodyEl.innerHTML = [
-            { ch: 'N', volTotal: volN, volCycle: volN_cycle, sp: setpointN, c: concN },
-            { ch: 'P', volTotal: volP, volCycle: volP_cycle, sp: setpointP, c: concP },
-            { ch: 'K', volTotal: volK, volCycle: volK_cycle, sp: setpointK, c: concK }
+            { ch: 'N', volTotal: volN, volCycle: volN_cycle, sp: setpointN, c: concN + '%' },
+            { ch: 'P', volTotal: volP, volCycle: volP_cycle, sp: setpointP, c: concP + '%' },
+            { ch: 'K', volTotal: volK, volCycle: volK_cycle, sp: setpointK, c: concK + '%' },
+            { ch: 'W', volTotal: totalWaterDay.toFixed(1) + ' L', volCycle: totalWaterL.toFixed(1) + ' L', sp: '-', c: '-' }
         ].map(row => `
             <tr>
-                <td style="padding:8px 10px; border:1px solid var(--border); font-weight:700; font-size:14px; color:${colors[row.ch]}">${labels[row.ch]}</td>
-                <td style="padding:8px 10px; border:1px solid var(--border); text-align:center; font-weight:800; font-size:15px; color:#64748b">${row.volTotal}</td>
-                <td style="padding:8px 10px; border:1px solid var(--border); text-align:center; font-weight:900; font-size:16px; color:var(--txt-dark)">${row.volCycle}</td>
-                <td style="padding:8px 10px; border:1px solid var(--border); text-align:center; font-weight:900; font-size:16px; color:#ef4444">${row.sp}</td>
-                <td style="padding:8px 10px; border:1px solid var(--border); text-align:center; font-weight:800; font-size:14px; color:var(--txt-dark)">${row.c}%</td>
+                <td style="padding:8px 10px; border: 2px solid #000; font-weight:700; font-size:14px; color:${colors[row.ch]}">${labels[row.ch]}</td>
+                <td style="padding:8px 10px; border: 2px solid #000; text-align:center; font-weight:800; font-size:15px; color:#64748b">${row.volTotal}</td>
+                <td style="padding:8px 10px; border: 2px solid #000; text-align:center; font-weight:900; font-size:16px; color:var(--txt-dark)">${row.volCycle}</td>
+                <td style="padding:8px 10px; border: 2px solid #000; text-align:center; font-weight:900; font-size:16px; color:#ef4444">${row.sp}</td>
+                <td style="padding:8px 10px; border: 2px solid #000; text-align:center; font-weight:800; font-size:14px; color:var(--txt-dark)">${row.c}</td>
             </tr>
         `).join('');
     }
@@ -1087,8 +1100,11 @@ const translateStatus = (s) => {
 };
 
 const translateMode = (m) => {
-    if (m === 'simultaneous' || m === 'sim') return 'Đồng thời';
-    if (m === 'sequential' || m === 'seq') return 'Nối tiếp';
+    if (!m) return '';
+    const lo = m.toLowerCase();
+    if (lo === 'simultaneous' || lo === 'sim') return 'Đồng thời';
+    if (lo === 'sequential' || lo === 'seq') return 'Tuần tự';
+    if (lo === 'volume-based') return 'Định lượng';
     return m;
 };
 

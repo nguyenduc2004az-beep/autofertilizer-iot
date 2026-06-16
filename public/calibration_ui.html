@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoFertilizer - Hiệu Chuẩn Góc Mở & Lưu Lượng</title>
+    
+    <!-- Google Fonts & Chart.js -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --bg-color: #090d16;
+            --card-bg: rgba(17, 24, 39, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --primary-glow: rgba(59, 130, 246, 0.35);
+            --success: #10b981;
+            --success-glow: rgba(16, 185, 129, 0.3);
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --text-color: #f3f4f6;
+            --text-muted: #9ca3af;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.1) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%);
+            color: var(--text-color);
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* HEADER */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 24px;
+        }
+
+        .logo-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-title i {
+            font-size: 28px;
+            color: var(--success);
+            text-shadow: 0 0 15px var(--success-glow);
+        }
+
+        .logo-title h1 {
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #fff 30%, #a5f3fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .serial-conn {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--danger);
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+        }
+
+        .status-dot.connected {
+            background-color: var(--success);
+            box-shadow: 0 0 10px var(--success-glow);
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            border: 1px solid transparent;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+            box-shadow: 0 0 12px var(--primary-glow);
+        }
+
+        .btn-success {
+            background: var(--success);
+            border: 1px solid transparent;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+            box-shadow: 0 0 12px var(--success-glow);
+        }
+
+        /* GRID SYSTEM */
+        .grid-layout {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 24px;
+        }
+
+        @media (max-width: 1024px) {
+            .grid-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #e5e7eb;
+        }
+
+        /* LEFT SIDEBAR: CONTROLS */
+        .sidebar-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        /* Tabs cho van N, P, K */
+        .tabs {
+            display: flex;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 4px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            padding: 8px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn.active {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-color);
+        }
+
+        .control-group {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 8px;
+            padding: 14px;
+            margin-bottom: 12px;
+        }
+
+        .control-group-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .valve-badge {
+            font-size: 12px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: var(--primary-glow);
+            color: #93c5fd;
+        }
+
+        .pos-display {
+            font-size: 20px;
+            font-weight: 800;
+            font-family: monospace;
+            color: var(--success);
+        }
+
+        .btn-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .btn-stepper {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            color: var(--text-color);
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .btn-stepper:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .btn-stepper.plus {
+            color: #60a5fa;
+        }
+
+        .btn-stepper.minus {
+            color: #f87171;
+        }
+
+        /* AUTO SWEEP CARD */
+        .sweep-btn {
+            width: 100%;
+            padding: 12px;
+            font-size: 13px;
+            font-weight: 700;
+            border-radius: 8px;
+            border: none;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            transition: all 0.2s ease;
+        }
+
+        .sweep-n { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+        .sweep-p { background: linear-gradient(135deg, #10b981, #047857); }
+        .sweep-k { background: linear-gradient(135deg, #f59e0b, #b45309); }
+
+        .sweep-btn:hover {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+        }
+
+        .progress-container {
+            margin-top: 14px;
+            display: none;
+        }
+
+        .progress-text {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .progress-bar-bg {
+            background: rgba(255, 255, 255, 0.05);
+            height: 6px;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            background: var(--success);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s linear;
+        }
+
+        /* MAIN CONTENT: CHARTS & TABLES */
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 380px;
+            width: 100%;
+        }
+
+        /* DATA TABLE */
+        .table-wrapper {
+            max-height: 250px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.15);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 13px;
+        }
+
+        th {
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text-muted);
+            font-weight: 600;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+        }
+
+        td {
+            padding: 8px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            color: #d1d5db;
+        }
+
+        tr:hover {
+            background: rgba(255, 255, 255, 0.01);
+        }
+
+        /* TERMINAL PANEL */
+        .terminal-log {
+            background: #05070c;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            height: 120px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            color: #10b981;
+            padding: 10px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin-top: 12px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .info-label {
+            color: var(--text-muted);
+        }
+
+        .info-value {
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- HEADER -->
+    <header>
+        <div class="logo-title">
+            <i class="fa-solid fa-gauge-high"></i>
+            <div>
+                <h1>AutoFertilizer Calibration</h1>
+                <p style="font-size: 11px; color: var(--text-muted);">Hệ thống hiệu chuẩn lưu lượng & Số bước động cơ</p>
+            </div>
+        </div>
+        
+        <div class="serial-conn">
+            <div id="connStatusDot" class="status-dot"></div>
+            <span id="connStatusText" style="font-size: 13px; font-weight: 600; color: var(--text-muted);">Chưa kết nối</span>
+            <button id="btnConnect" class="btn btn-primary" onclick="connectSerial()">
+                <i class="fa-solid fa-plug"></i> Kết nối ESP32
+            </button>
+        </div>
+    </header>
+
+    <!-- GRID LAYOUT -->
+    <div class="grid-layout">
+        
+        <!-- SIDEBAR CONTROLS -->
+        <div class="sidebar-controls">
+            
+            <!-- THIẾT LẬP GIỚI HẠN VAN -->
+            <div class="card">
+                <div class="card-title">
+                    <i class="fa-solid fa-sliders"></i> Căn Chỉnh Giới Hạn Van
+                </div>
+                
+                <div class="tabs">
+                    <button class="tab-btn active" id="tabN" onclick="switchValveTab('N')">Bồn N</button>
+                    <button class="tab-btn" id="tabP" onclick="switchValveTab('P')">Bồn P</button>
+                    <button class="tab-btn" id="tabK" onclick="switchValveTab('K')">Bồn K</button>
+                </div>
+
+                <!-- BỘ ĐIỀU KHIỂN ĐỘNG CƠ TẬP TRUNG -->
+                <div class="control-group">
+                    <div class="control-group-header">
+                        <span class="valve-badge" id="activeValveLabel">VAN N (BỒN A)</span>
+                        <span class="pos-display" id="activeValvePos">0</span>
+                    </div>
+
+                    <div class="btn-grid">
+                        <button class="btn-stepper plus" onclick="sendStep(1000)"><i class="fa-solid fa-angles-up"></i> Mở +1000</button>
+                        <button class="btn-stepper minus" onclick="sendStep(-1000)"><i class="fa-solid fa-angles-down"></i> Đóng -1000</button>
+                        <button class="btn-stepper plus" onclick="sendStep(100)"><i class="fa-solid fa-angle-up"></i> Mở +100</button>
+                        <button class="btn-stepper minus" onclick="sendStep(-100)"><i class="fa-solid fa-angle-down"></i> Đóng -100</button>
+                        <button class="btn-stepper plus" onclick="sendStep(10)"><i class="fa-solid fa-chevron-up"></i> Mở +10</button>
+                        <button class="btn-stepper minus" onclick="sendStep(-10)"><i class="fa-solid fa-chevron-down"></i> Đóng -10</button>
+                    </div>
+
+                    <!-- Chạy thử số bước tùy chọn -->
+                    <div style="display: flex; gap: 8px; align-items: center; margin-top: 10px; margin-bottom: 8px; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 10px;">
+                        <input type="number" id="inputTestSteps" placeholder="Số bước chạy thử..." style="flex: 1; min-width: 0; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px; font-size: 13px; color: var(--text-color); font-family: monospace;">
+                        <button class="btn" onclick="runTestStep(1)" style="padding: 8px 12px; font-size: 12px; font-weight: 700; color: #60a5fa; border-color: rgba(96, 165, 250, 0.3); background: rgba(96, 165, 250, 0.05); height: 36px; display: inline-flex; align-items: center; white-space: nowrap; gap: 4px;">
+                            <i class="fa-solid fa-plus"></i> Quay Mở
+                        </button>
+                        <button class="btn" onclick="runTestStep(-1)" style="padding: 8px 12px; font-size: 12px; font-weight: 700; color: #f87171; border-color: rgba(248, 113, 113, 0.3); background: rgba(248, 113, 113, 0.05); height: 36px; display: inline-flex; align-items: center; white-space: nowrap; gap: 4px;">
+                            <i class="fa-solid fa-minus"></i> Quay Đóng
+                        </button>
+                    </div>
+
+                    <div class="btn-grid" style="grid-template-columns: 1fr; margin-bottom: 8px;">
+                        <button class="btn" onclick="sendRaw('SET_MAX_' + currentValve)" style="justify-content: center; background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.3); color: #93c5fd;">
+                            <i class="fa-solid fa-circle-check"></i> Lưu vị trí hiện tại làm MAX
+                        </button>
+                    </div>
+                    
+                    <div style="display: flex; gap: 8px; align-items: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 12px; margin-top: 4px;">
+                        <input type="number" id="inputMaxSteps" onkeydown="if(event.key==='Enter'){saveCustomMax(); event.preventDefault();}" placeholder="Số bước..." style="flex: 1; min-width: 0; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px; font-size: 13px; color: var(--text-color); font-family: monospace;">
+                        <button class="btn btn-primary" onclick="saveCustomMax()" style="padding: 8px 12px; font-size: 12px; font-weight: 700; white-space: nowrap; height: 36px; display: inline-flex; align-items: center;">
+                            <i class="fa-solid fa-floppy-disk"></i> Lưu số bước
+                        </button>
+                    </div>
+                </div>
+
+                <div class="btn-grid" style="margin-bottom: 0;">
+                    <button class="btn" onclick="sendRaw('RESET')" style="justify-content: center; color: var(--warning); border-color: rgba(245, 158, 11, 0.3);">
+                        <i class="fa-solid fa-rotate-left"></i> Reset mốc 0
+                    </button>
+                    <button class="btn" onclick="sendRaw('STATUS')" style="justify-content: center;">
+                        <i class="fa-solid fa-circle-info"></i> Xem Status
+                    </button>
+                </div>
+            </div>
+
+            <!-- CHẠY QUÉT LƯU LƯỢNG -->
+            <div class="card">
+                <div class="card-title">
+                    <i class="fa-solid fa-chart-line"></i> Quét Lưu Lượng Tự Động
+                </div>
+                
+                <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5;">
+                    ESP32 sẽ tự mở van chính, 5s sau bật bơm trong 60s và quét van từ 0 -> MAX để tính toán lưu lượng thực tế tương ứng.
+                </p>
+
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <button id="btnStartSweep" class="sweep-btn sweep-n" onclick="startActiveSweep()" style="margin-bottom: 0; font-size: 14px; font-weight: 700; height: 45px; display: flex; justify-content: center; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-circle-play"></i> Bật Bơm & Quét Tự Động (1 Van)
+                    </button>
+                    <button id="btnSweepAll" class="sweep-btn" onclick="startSweepAll()" style="background: linear-gradient(135deg, #a855f7, #7e22ce); font-size: 14px; font-weight: 700; height: 45px; display: flex; justify-content: center; align-items: center; gap: 8px; margin-bottom: 0; box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);">
+                        <i class="fa-solid fa-chart-line"></i> Bật Bơm & Quét 3 Van Đồng Thời
+                    </button>
+                    <button id="btnEmergencyStop" class="sweep-btn" onclick="sendStop()" style="background: linear-gradient(135deg, #ef4444, #b91c1c); font-size: 14px; font-weight: 700; height: 45px; display: flex; justify-content: center; align-items: center; gap: 8px; margin-bottom: 0; box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);">
+                        <i class="fa-solid fa-circle-stop"></i> DỪNG KHẨN CẤP (STOP)
+                    </button>
+                </div>
+
+                <!-- Tiến độ quét -->
+                <div class="progress-container" id="sweepProgress">
+                    <div class="progress-text">
+                        <span id="sweepStatusText">Đang chạy quét bồn N...</span>
+                        <span id="sweepTimeText">15s / 60s</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" id="progressBarFill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- THÔNG TIN HIỆN TẠI -->
+            <div class="card">
+                <div class="card-title"><i class="fa-solid fa-circle-info"></i> Giới Hạn Đã Lưu</div>
+                <div class="info-row">
+                    <span class="info-label">MAX Bước N (Bồn A):</span>
+                    <span class="info-value" id="maxDisplayN">12500 bước</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">MAX Bước P (Bồn B):</span>
+                    <span class="info-value" id="maxDisplayP">8900 bước</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">MAX Bước K (Bồn C):</span>
+                    <span class="info-value" id="maxDisplayK">8500 bước</span>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- MAIN CONTENT -->
+        <div class="main-content">
+            
+            <!-- ĐỒ THỊ -->
+            <div class="card">
+                <div class="card-title" style="justify-content: space-between;">
+                    <span><i class="fa-solid fa-chart-area"></i> Đường Đặc Tuyến Lưu Lượng (Steps vs L/min)</span>
+                    <button class="btn btn-success" id="btnExport" onclick="exportCSV()" disabled style="padding: 6px 12px; font-size: 11px;">
+                        <i class="fa-solid fa-file-excel"></i> Xuất Excel/CSV
+                    </button>
+                </div>
+                
+                <div class="chart-container">
+                    <canvas id="calibrationChart"></canvas>
+                </div>
+            </div>
+
+            <!-- BẢNG DỮ LIỆU ĐO -->
+            <div class="card">
+                <div class="card-title">
+                    <i class="fa-solid fa-table"></i> Bảng Dữ Liệu Chi Tiết Vừa Đo Được
+                </div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Giây thứ</th>
+                                <th>Góc mở (Số bước)</th>
+                                <th>Số xung đếm được / 1s</th>
+                                <th>Lưu lượng tính toán (L/phút)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataTableBody">
+                            <tr>
+                                <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 30px 0;">
+                                    Chưa có dữ liệu. Hãy nhấn bắt đầu chạy quét.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- RAW TERMINAL -->
+            <div class="card" style="padding: 14px;">
+                <div class="card-title" style="margin-bottom: 8px; font-size: 13px;">
+                    <i class="fa-solid fa-terminal"></i> Terminal Log từ ESP32
+                </div>
+                <div class="terminal-log" id="terminalLog">Chào mừng! Vui lòng kết nối ESP32 để tiếp tục...</div>
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+<script>
+    let port;
+    let reader;
+    let keepReading = true;
+    let currentValve = 'N';
+    let currentPosMap = { N: 0, P: 0, K: 0 };
+    let maxPosMap = { N: 13600, P: 8500, K: 9000 };
+    
+    let chart;
+    let collectedData = [];
+    let isSweeping = false;
+    let sweepMode = 'single'; // 'single' hoặc 'all'
+
+    // Initialize Chart with 3 datasets for joint mode
+    function initChart() {
+        const ctx = document.getElementById('calibrationChart').getContext('2d');
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Lưu lượng N (L/phút)',
+                        data: [],
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                        borderWidth: 2.5,
+                        fill: true,
+                        tension: 0.2,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#3b82f6',
+                        hidden: false
+                    },
+                    {
+                        label: 'Lưu lượng P (L/phút)',
+                        data: [],
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.05)',
+                        borderWidth: 2.5,
+                        fill: true,
+                        tension: 0.2,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#10b981',
+                        hidden: false
+                    },
+                    {
+                        label: 'Lưu lượng K (L/phút)',
+                        data: [],
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.05)',
+                        borderWidth: 2.5,
+                        fill: true,
+                        tension: 0.2,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#f59e0b',
+                        hidden: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'linear',
+                        title: {
+                            display: true,
+                            text: 'Góc mở (Số bước của động cơ)',
+                            color: '#9ca3af'
+                        },
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#9ca3af' }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Lưu lượng thực tế (L/phút)',
+                            color: '#9ca3af'
+                        },
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#9ca3af' },
+                        suggestedMin: 0
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: { color: '#e5e7eb', font: { size: 11 } }
+                    }
+                }
+            }
+        });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        initChart();
+        document.getElementById('inputMaxSteps').value = maxPosMap.N;
+    });
+
+    // Switch Valve tab UI
+    function switchValveTab(valve) {
+        currentValve = valve;
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.getElementById('tab' + valve).classList.add('active');
+        
+        let displayLabel = "VAN N (BỒN A)";
+        let btnColor = "linear-gradient(135deg, #3b82f6, #1d4ed8)";
+        if (valve === 'P') {
+            displayLabel = "VAN P (BỒN B)";
+            btnColor = "linear-gradient(135deg, #10b981, #047857)";
+        }
+        if (valve === 'K') {
+            displayLabel = "VAN K (BỒN C)";
+            btnColor = "linear-gradient(135deg, #f59e0b, #b45309)";
+        }
+        
+        document.getElementById('activeValveLabel').textContent = displayLabel;
+        
+        const sweepBtn = document.getElementById('btnStartSweep');
+        if (sweepBtn) {
+            sweepBtn.style.background = btnColor;
+            sweepBtn.innerHTML = `<i class="fa-solid fa-circle-play"></i> Bật Bơm & Lưu Giá Trị`;
+        }
+        
+        updateUI();
+    }
+
+    function updateUI() {
+        document.getElementById('activeValvePos').textContent = currentPosMap[currentValve];
+        document.getElementById('maxDisplayN').textContent = maxPosMap.N + ' bước';
+        document.getElementById('maxDisplayP').textContent = maxPosMap.P + ' bước';
+        document.getElementById('maxDisplayK').textContent = maxPosMap.K + ' bước';
+        
+        // Cập nhật giá trị input bằng GIỚI HẠN MAX (chỉ ghi đè khi người dùng không gõ vào ô)
+        if (document.activeElement !== document.getElementById('inputMaxSteps')) {
+            document.getElementById('inputMaxSteps').value = maxPosMap[currentValve];
+        }
+    }
+
+    function saveCustomMax() {
+        const val = parseInt(document.getElementById('inputMaxSteps').value);
+        if (isNaN(val) || val < 0) {
+            alert("Số bước không hợp lệ!");
+            return;
+        }
+        sendRaw(`SET_MAX_${currentValve} ${val}`);
+    }
+
+    async function startActiveSweep() {
+        // Tự động lưu giới hạn của van hiện tại trước khi chạy quét
+        const val = parseInt(document.getElementById('inputMaxSteps').value);
+        if (!isNaN(val) && val >= 0) {
+            await sendRaw(`SET_MAX_${currentValve} ${val}`);
+            await new Promise(r => setTimeout(r, 150)); // Chờ lệnh gửi hoàn tất
+        }
+        startSweep(currentValve);
+    }
+
+    function runTestStep(direction) {
+        const val = parseInt(document.getElementById('inputTestSteps').value);
+        if (isNaN(val) || val <= 0) {
+            alert("Vui lòng nhập số bước chạy thử hợp lệ!");
+            return;
+        }
+        const stepVal = val * direction;
+        sendStep(stepVal);
+    }
+
+    // Web Serial Connect
+    async function connectSerial() {
+        if ('serial' in navigator) {
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 });
+                
+                document.getElementById('connStatusDot').className = 'status-dot connected';
+                document.getElementById('connStatusText').textContent = 'Đã kết nối';
+                document.getElementById('connStatusText').style.color = '#10b981';
+                document.getElementById('btnConnect').innerHTML = '<i class="fa-solid fa-check"></i> Đã Kết Nối';
+                document.getElementById('btnConnect').disabled = true;
+
+                appendToTerminal("\n[Serial] Kết nối thành công! Đang lắng nghe cổng COM...\n");
+                
+                keepReading = true;
+                readSerialLoop();
+            } catch (err) {
+                appendToTerminal("\n[Lỗi] Kết nối thất bại: " + err.message + "\n");
+            }
+        } else {
+            alert('Trình duyệt của bạn không hỗ trợ Web Serial API. Vui lòng mở trang này bằng Google Chrome hoặc Microsoft Edge!');
+        }
+    }
+
+    // Gửi lệnh qua Serial
+    async function sendRaw(cmd) {
+        if (!port || !port.writable) {
+            alert('Chưa kết nối cổng COM Serial. Vui lòng nhấn nút "Kết nối ESP32"!');
+            return;
+        }
+        appendToTerminal(`[Gửi →] ${cmd}\n`);
+        const encoder = new TextEncoder();
+        const writer = port.writable.getWriter();
+        await writer.write(encoder.encode(cmd + '\n'));
+        writer.releaseLock();
+    }
+
+    // Gửi lệnh quay bước cụ thể
+    function sendStep(stepVal) {
+        const sign = stepVal >= 0 ? '+' : '';
+        const cmd = currentValve + sign + stepVal;
+        sendRaw(cmd);
+    }
+
+    // Gửi lệnh dừng khẩn cấp
+    async function sendStop() {
+        await sendRaw('STOP');
+    }
+
+    // Thiết lập tiêu đề bảng dữ liệu động tùy theo chế độ quét
+    function setupTableHeader(mode) {
+        const thead = document.querySelector('table thead');
+        if (mode === 'single') {
+            thead.innerHTML = `
+                <tr>
+                    <th>Giây thứ</th>
+                    <th>Góc mở (Số bước)</th>
+                    <th>Số xung đếm được / 1s</th>
+                    <th>Lưu lượng tính toán (L/phút)</th>
+                </tr>
+            `;
+        } else {
+            thead.innerHTML = `
+                <tr>
+                    <th>Giây</th>
+                    <th>Bước N</th>
+                    <th>Flow N (L/p)</th>
+                    <th>Bước P</th>
+                    <th>Flow P (L/p)</th>
+                    <th>Bước K</th>
+                    <th>Flow K (L/p)</th>
+                </tr>
+            `;
+        }
+    }
+
+    // Chạy quét đồng thời cả 3 van
+    async function startSweepAll() {
+        if (!port || !port.writable) {
+            alert('Chưa kết nối cổng COM Serial. Vui lòng nhấn nút "Kết nối ESP32"!');
+            return;
+        }
+        
+        // Tự động lưu giới hạn của van hiện tại trước khi chạy quét đồng thời
+        const val = parseInt(document.getElementById('inputMaxSteps').value);
+        if (!isNaN(val) && val >= 0) {
+            await sendRaw(`SET_MAX_${currentValve} ${val}`);
+            await new Promise(r => setTimeout(r, 150)); // Chờ lệnh gửi hoàn tất
+        }
+        
+        sweepMode = 'all';
+        setupTableHeader('all');
+        
+        collectedData = [];
+        chart.data.labels = [];
+        
+        chart.data.datasets[0].data = [];
+        chart.data.datasets[0].label = 'Lưu lượng N (L/phút)';
+        chart.data.datasets[0].borderColor = '#3b82f6';
+        chart.data.datasets[0].pointBackgroundColor = '#3b82f6';
+        chart.data.datasets[0].hidden = false;
+        
+        chart.data.datasets[1].data = [];
+        chart.data.datasets[1].label = 'Lưu lượng P (L/phút)';
+        chart.data.datasets[1].borderColor = '#10b981';
+        chart.data.datasets[1].pointBackgroundColor = '#10b981';
+        chart.data.datasets[1].hidden = false;
+        
+        chart.data.datasets[2].data = [];
+        chart.data.datasets[2].label = 'Lưu lượng K (L/phút)';
+        chart.data.datasets[2].borderColor = '#f59e0b';
+        chart.data.datasets[2].pointBackgroundColor = '#f59e0b';
+        chart.data.datasets[2].hidden = false;
+        
+        chart.options.scales.x.title.text = 'Góc mở (Số bước của động cơ)';
+        chart.update();
+
+        document.getElementById('dataTableBody').innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px 0;">Đang khởi chạy quét đồng thời 3 van...</td></tr>';
+        document.getElementById('btnExport').disabled = true;
+
+        document.getElementById('sweepProgress').style.display = 'block';
+        document.getElementById('sweepStatusText').textContent = 'Đang chạy quét đồng thời 3 van...';
+        document.getElementById('sweepTimeText').textContent = '0s / 60s';
+        document.getElementById('progressBarFill').style.width = '0%';
+        document.getElementById('progressBarFill').style.backgroundColor = '#a855f7';
+        isSweeping = true;
+
+        sendRaw('SWEEP_ALL');
+    }
+
+    // Gửi lệnh quét tự động 1 van
+    function startSweep(valve) {
+        sweepMode = 'single';
+        setupTableHeader('single');
+        
+        collectedData = [];
+        chart.data.labels = [];
+        chart.data.datasets[0].data = [];
+        chart.data.datasets[0].label = `Lưu lượng ${valve} (L/phút)`;
+        chart.data.datasets[0].hidden = false;
+        
+        let color = '#3b82f6';
+        if (valve === 'P') color = '#10b981';
+        if (valve === 'K') color = '#f59e0b';
+        chart.data.datasets[0].borderColor = color;
+        chart.data.datasets[0].pointBackgroundColor = color;
+        
+        chart.data.datasets[1].data = [];
+        chart.data.datasets[1].hidden = true;
+        chart.data.datasets[2].data = [];
+        chart.data.datasets[2].hidden = true;
+        
+        chart.options.scales.x.title.text = 'Góc mở (Số bước của động cơ)';
+        chart.update();
+
+        document.getElementById('dataTableBody').innerHTML = '';
+        document.getElementById('btnExport').disabled = true;
+
+        // Bật UI Progress
+        document.getElementById('sweepProgress').style.display = 'block';
+        document.getElementById('sweepStatusText').textContent = `Đang chạy quét bồn ${valve}...`;
+        document.getElementById('sweepTimeText').textContent = '0s / 60s';
+        document.getElementById('progressBarFill').style.width = '0%';
+        document.getElementById('progressBarFill').style.backgroundColor = 'var(--success)';
+        isSweeping = true;
+
+        sendRaw('SWEEP_' + valve);
+    }
+
+    // Lắng nghe dữ liệu nhận từ ESP32
+    async function readSerialLoop() {
+        const textDecoder = new TextDecoder();
+        while (port.readable && keepReading) {
+            const reader = port.readable.getReader();
+            try {
+                let buffer = "";
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += textDecoder.decode(value);
+                    let lines = buffer.split('\n');
+                    buffer = lines.pop(); // giữ lại phần dang dở cuối cùng
+
+                    for (let line of lines) {
+                        line = line.trim();
+                        if (line.length > 0) {
+                            handleIncomingLine(line);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error("[Serial Read Error]", error);
+                appendToTerminal(`\n[Lỗi đọc] ${error.message}\n`);
+            } finally {
+                reader.releaseLock();
+            }
+        }
+    }
+
+    // Xử lý từng dòng phản hồi từ ESP32
+    function handleIncomingLine(line) {
+        appendToTerminal(line + '\n');
+        
+        // 1. Phản hồi chuyển động: [POS_N:500] hoặc [POS_P:-100]
+        if (line.includes('[POS_')) {
+            const match = line.match(/\[POS_([N|P|K]):(-?\d+)\]/);
+            if (match) {
+                const valve = match[1];
+                const pos = parseInt(match[2]);
+                currentPosMap[valve] = pos;
+                updateUI();
+            }
+        }
+        
+        // 2. Phản hồi cập nhật giới hạn MAX: [MAX_N:12000]
+        if (line.includes('[MAX_')) {
+            const match = line.match(/\[MAX_([N|P|K]):(\d+)\]/);
+            if (match) {
+                const valve = match[1];
+                const maxVal = parseInt(match[2]);
+                maxPosMap[valve] = maxVal;
+                updateUI();
+            }
+        }
+
+        // 3. Phản hồi lệnh STATUS: [STATUS_N:500:12500]
+        if (line.includes('[STATUS_')) {
+            const match = line.match(/\[STATUS_([N|P|K]):(-?\d+):(\d+)\]/);
+            if (match) {
+                const valve = match[1];
+                const pos = parseInt(match[2]);
+                const maxVal = parseInt(match[3]);
+                currentPosMap[valve] = pos;
+                maxPosMap[valve] = maxVal;
+                updateUI();
+            }
+        }
+
+        // 3.1. Phản hồi lệnh RESET mốc 0: [RESET_OK]
+        if (line.includes('[RESET_OK]')) {
+            currentPosMap.N = 0;
+            currentPosMap.P = 0;
+            currentPosMap.K = 0;
+            updateUI();
+        }
+
+        // 3.2. Báo hiệu chế độ test cả 3 van bắt đầu
+        if (line.includes('[TEST_ALL_STARTED]')) {
+            document.getElementById('sweepStatusText').textContent = 'Đang mở cả 3 van & chạy bơm...';
+            document.getElementById('progressBarFill').style.backgroundColor = '#a855f7';
+        }
+
+        // 4. Nhận dữ liệu CSV đo dòng chảy bồn đơn: "10,2083,15,0.190"
+        const csvParts = line.split(',');
+        if (csvParts.length === 4 && !isNaN(csvParts[0]) && !isNaN(csvParts[1]) && !line.includes('[DATA_ALL]')) {
+            const second = parseInt(csvParts[0]);
+            const step = parseInt(csvParts[1]);
+            const pulses = parseInt(csvParts[2]);
+            const flow = parseFloat(csvParts[3]);
+
+            if (second >= 1 && second <= 60) {
+                addDataPoint(second, step, pulses, flow);
+            }
+        }
+
+        // 4.1. Nhận dữ liệu quét đồng thời 3 van: "[DATA_ALL]10,2080,0.190,1480,0.180,1410,0.175"
+        if (line.includes('[DATA_ALL]')) {
+            const dataStr = line.replace('[DATA_ALL]', '').trim();
+            const parts = dataStr.split(',');
+            if (parts.length === 7) {
+                const second = parseInt(parts[0]);
+                const stepN = parseInt(parts[1]);
+                const flowN = parseFloat(parts[2]);
+                const stepP = parseInt(parts[3]);
+                const flowP = parseFloat(parts[4]);
+                const stepK = parseInt(parts[5]);
+                const flowK = parseFloat(parts[6]);
+                
+                if (second >= 1 && second <= 60) {
+                    addDataPointAll(second, stepN, flowN, stepP, flowP, stepK, flowK);
+                }
+            }
+        }
+
+        // 5. Kết thúc quét hoặc dừng khẩn cấp
+        if (line.includes('[SWEEP_FINISHED]') || line.includes('[SWEEP_ALL_FINISHED]') || line.includes('[SWEEP_ABORTED]') || line.includes('[SWEEP_ALL_ABORTED]') || line.includes('[SYSTEM_STOPPED]')) {
+            const isAbort = line.includes('[SWEEP_ABORTED]') || line.includes('[SWEEP_ALL_ABORTED]') || line.includes('[SYSTEM_STOPPED]');
+            isSweeping = false;
+            
+            if (isAbort) {
+                document.getElementById('sweepStatusText').textContent = 'ĐÃ DỪNG KHẨN CẤP!';
+                document.getElementById('progressBarFill').style.backgroundColor = 'var(--danger)';
+            } else {
+                document.getElementById('sweepStatusText').textContent = 'Hoàn thành!';
+                document.getElementById('btnExport').disabled = collectedData.length === 0;
+            }
+            
+            document.getElementById('progressBarFill').style.width = '100%';
+            setTimeout(() => {
+                document.getElementById('sweepProgress').style.display = 'none';
+                document.getElementById('progressBarFill').style.backgroundColor = 'var(--success)';
+            }, 3000);
+        }
+    }
+
+    // Thêm một mốc dữ liệu đo được vào đồ thị & bảng (Quét 1 Van)
+    function addDataPoint(second, step, pulses, flow) {
+        // Cập nhật Progress Bar UI
+        document.getElementById('sweepTimeText').textContent = `${second}s / 60s`;
+        document.getElementById('progressBarFill').style.width = `${(second / 60) * 100}%`;
+
+        // Lưu trữ
+        collectedData.push({ second, step, pulses, flow });
+
+        // Cập nhật bảng
+        const tbody = document.getElementById('dataTableBody');
+        if (second === 1) tbody.innerHTML = ''; // Clear bảng mẫu lúc đầu
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td><strong>${second}</strong></td>
+            <td>${step} bước</td>
+            <td>${pulses}</td>
+            <td style="color: #10b981; font-weight: 600;">${flow.toFixed(3)} L/phút</td>
+        `;
+        tbody.appendChild(row);
+        
+        // Tự cuộn bảng xuống cuối cùng
+        const wrapper = document.querySelector('.table-wrapper');
+        wrapper.scrollTop = wrapper.scrollHeight;
+
+        // Cập nhật đồ thị Chart.js
+        chart.data.datasets[0].data.push({ x: step, y: flow });
+        chart.update();
+    }
+
+    // Thêm một mốc dữ liệu quét đồng thời cả 3 van vào đồ thị & bảng
+    function addDataPointAll(second, stepN, flowN, stepP, flowP, stepK, flowK) {
+        // Cập nhật Progress Bar UI
+        document.getElementById('sweepTimeText').textContent = `${second}s / 60s`;
+        document.getElementById('progressBarFill').style.width = `${(second / 60) * 100}%`;
+
+        // Lưu trữ
+        collectedData.push({ second, stepN, flowN, stepP, flowP, stepK, flowK });
+
+        // Cập nhật bảng
+        const tbody = document.getElementById('dataTableBody');
+        if (second === 1) tbody.innerHTML = ''; // Clear bảng mẫu lúc đầu
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td><strong>${second}</strong></td>
+            <td>${stepN} bước</td>
+            <td style="color: #3b82f6; font-weight: 600;">${flowN.toFixed(3)}</td>
+            <td>${stepP} bước</td>
+            <td style="color: #10b981; font-weight: 600;">${flowP.toFixed(3)}</td>
+            <td>${stepK} bước</td>
+            <td style="color: #f59e0b; font-weight: 600;">${flowK.toFixed(3)}</td>
+        `;
+        tbody.appendChild(row);
+        
+        // Tự cuộn bảng xuống cuối cùng
+        const wrapper = document.querySelector('.table-wrapper');
+        wrapper.scrollTop = wrapper.scrollHeight;
+
+        // Cập nhật đồ thị Chart.js
+        chart.data.datasets[0].data.push({ x: stepN, y: flowN });
+        chart.data.datasets[1].data.push({ x: stepP, y: flowP });
+        chart.data.datasets[2].data.push({ x: stepK, y: flowK });
+        chart.update();
+    }
+
+    // In chữ vào Terminal Log giả
+    function appendToTerminal(text) {
+        const term = document.getElementById('terminalLog');
+        term.textContent += text;
+        term.scrollTop = term.scrollHeight; // tự cuộn xuống cuối
+    }
+
+    // Xuất file CSV/Excel cho người dùng tải về
+    function exportCSV() {
+        if (collectedData.length === 0) return;
+        
+        let csvContent = "\uFEFF"; // Byte Order Mark giúp hiển thị tiếng Việt và định dạng Excel chuẩn
+        
+        if (sweepMode === 'single') {
+            csvContent += "Giay thu,So buoc (Step),So xung / 1s,Luu luong (L/phut)\n";
+            collectedData.forEach(item => {
+                csvContent += `${item.second},${item.step},${item.pulses},${item.flow.toFixed(3)}\n`;
+            });
+        } else {
+            csvContent += "Giay thu,Buoc N,Flow N (L/phut),Buoc P,Flow P (L/phut),Buoc K,Flow K (L/phut)\n";
+            collectedData.forEach(item => {
+                csvContent += `${item.second},${item.stepN},${item.flowN.toFixed(3)},${item.stepP},${item.flowP.toFixed(3)},${item.stepK},${item.flowK.toFixed(3)}\n`;
+            });
+        }
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `calibration_sweeplog_${Date.now()}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+</script>
+</body>
+</html>

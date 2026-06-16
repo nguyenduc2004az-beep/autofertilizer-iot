@@ -1,16 +1,14 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-//====================================================================================================================================================================================================================
 // CẤU HÌNH WIFI & MQTT
-const char* WIFI_SSID     = "huuduc";       // Điền tên WiFi ở Nhà lưới vào đây
-const char* WIFI_PASSWORD = "19052004";     // Điền mật khẩu WiFi ở Nhà lưới vào đây
-const char* MQTT_SERVER   = "broker.hivemq.com"; // Sử dụng Cloud MQTT
+const char* WIFI_SSID     = "huuduc";
+const char* WIFI_PASSWORD = "19052004";
+const char* MQTT_SERVER   = "broker.hivemq.com"; //Cloud MQTT
 const int   MQTT_PORT     = 1883;
-const char* MQTT_USER     = "";    // Để trống nếu không dùng xác thực
+const char* MQTT_USER     = "";
 const char* MQTT_PASS     = "";
-//====================================================================================================================================================================================================================
-// khai báo chân kết nối cho driver TB6600
+
 #define DIR_N      13
 #define STEP_N     14
 #define EN_N       32
@@ -23,63 +21,131 @@ const char* MQTT_PASS     = "";
 #define STEP_K     33
 #define EN_K       23
 
-// khai báo chân kết nối cho cảm biến lưu lượng
 #define FLOW_N     16
 #define FLOW_P     17
 #define FLOW_K     18
 #define FLOW_MAIN  19
 
-// khai báo chân kết nối cho van điện từ và bơm
 #define PUMP_PIN   4
 #define VALVE_PIN  5
 
-// khai báo led trạng thái 
 #define STATUS_LED  2
 #define STEPS_PER_REV   200
 #define MICROSTEP       8
 
-// Giới hạn số bước vi bước 1/8 từ đóng hoàn toàn (min) đến mở hoàn toàn (max) cho từng van
-#define MAX_OPEN_STEPS_N  12000
-#define MAX_OPEN_STEPS_P  9000
-#define MAX_OPEN_STEPS_K  8500
-// Giảm từ 800us xuống 500us để tăng tốc độ đóng/mở van kim, giúp van đóng nhanh hơn khi đạt mục tiêu
-#define STEP_DELAY_US   500 
+// Giới hạn step
+#define MAX_OPEN_STEPS_N  1300
+#define MAX_OPEN_STEPS_P  8500
+#define MAX_OPEN_STEPS_K  9000
+// speed step
+#define STEP_DELAY_US   200 
  
-// YF-S401 Flow Sensor:
-#define ML_PER_PULSE_N      0.2052f
-#define ML_PER_PULSE_P      0.1985f
-#define ML_PER_PULSE_K      0.1950f
-#define ML_PER_PULSE_MAIN   45.7516f // Cảm biến DN32 ống chính (27 xung/L -> 37.037 mL/xung)
+// Hiệu chỉnh YF-S401
+#define ML_PER_PULSE_N      0.21314f
+#define ML_PER_PULSE_P      0.20298f
+#define ML_PER_PULSE_K      0.20195f
+#define ML_PER_PULSE_MAIN   44.35324f // Cảm biến DN32
+
 // Chu kỳ publish và tính flow rate (ms)
 #define PUBLISH_INTERVAL    200
 #define FLOW_CALC_INTERVAL  200
 
-// THÔNG SỐ ĐIỀU KHIỂN PHẢN HỒI & ĐÓN ĐẦU (PID & Feedforward)
-// Q_MAX_LPM_X: Lưu lượng tối đa thực tế (L/phút) khi van mở tối đa (từ dữ liệu hiệu chuẩn)
-#define Q_MAX_LPM_N     1.15f
-#define Q_MAX_LPM_P     1.02f
-#define Q_MAX_LPM_K     1.00f
+// lưu lượng phân max
+#define Q_MAX_LPM_N     0.56f
+#define Q_MAX_LPM_P     0.61f
+#define Q_MAX_LPM_K     0.50f
 
-#define KP_CONTROL     35.0f   // Hệ số tỉ lệ (Proportional)
-#define KI_CONTROL      8.0f   // Hệ số tích phân (Integral)
-#define KD_CONTROL      5.0f   // Hệ số vi phân (Derivative)
-// Vùng chết: bỏ qua sai số nhỏ hơn giá trị này (L/phút)
-#define DEADBAND_LPM    0.05f
-// Số bước tối đa điều chỉnh mỗi chu kỳ (tăng lên 150 để phản hồi nhạy bén)
-#define MAX_ADJ_STEPS   150
-// Chu kỳ vòng điều khiển (ms) - Giảm xuống 250ms để PID nhạy hơn, bắt mục tiêu chính xác hơn
-#define CONTROL_INTERVAL_MS  250
-// Biến lưu trạng thái PID cho từng van
-float errSumN = 0.0f, errSumP = 0.0f, errSumK = 0.0f;
-float lastErrN = 0.0f, lastErrP = 0.0f, lastErrK = 0.0f;
-// Tích lũy hiệu chỉnh từ PID (được giới hạn an toàn)
-float pidOffsetN = 0.0f, pidOffsetP = 0.0f, pidOffsetK = 0.0f;
-// Số bước mở nhanh ban đầu khi khởi động riêng cho từng bồn
-#define INITIAL_STARTUP_STEPS_N  1300
-#define INITIAL_STARTUP_STEPS_P  900
-#define INITIAL_STARTUP_STEPS_K  850
-// Điểm bắt đầu giảm tốc khi đóng van (giảm từ 1200 xuống 400 để đóng nhanh hơn ở thể tích nhỏ)
-#define SLOW_CLOSE_THRESHOLD_STEPS  400
+// tg đóng van 
+#define SLOW_CLOSE_THRESHOLD_STEPS  200
+
+// Cấu trúc và bảng tra cứu hiệu chuẩn số bước theo lưu lượng thực tế
+struct CalibrationPoint {
+    float flowLpm;  // Lưu lượng thực tế (L/phút)
+    int32_t steps;  // Số bước mở tương ứng
+};
+
+// Bảng tra cứu Bồn A (N) - Từ dữ liệu ĐỒNG THỜI
+const int NUM_POINTS_N = 14;
+CalibrationPoint lutN[NUM_POINTS_N] = {
+    {0.000f, 226},
+    {0.269f, 1133},
+    {0.294f, 2493},
+    {0.345f, 2720},
+    {0.371f, 2946},
+    {0.422f, 3400},
+    {0.435f, 3626},
+    {0.460f, 3853},
+    {0.486f, 4080},
+    {0.499f, 4760},
+    {0.512f, 5213},
+    {0.524f, 6573},
+    {0.550f, 7706},
+    {0.563f, 13600}
+};
+
+// Bảng tra cứu Bồn B (P) - Từ dữ liệu ĐỒNG THỜI
+const int NUM_POINTS_P = 16;
+CalibrationPoint lutP[NUM_POINTS_P] = {
+    {0.000f, 100},
+    {0.110f, 141},
+    {0.183f, 283},
+    {0.317f, 566},
+    {0.463f, 708},
+    {0.487f, 850},
+    {0.499f, 991},
+    {0.524f, 1133},
+    {0.536f, 1275},
+    {0.572f, 1416},
+    {0.585f, 1700},
+    {0.597f, 1841},
+    {0.609f, 2408},
+    {0.621f, 2833},
+    {0.633f, 3116},
+    {0.640f, 8500}
+};
+
+// Bảng tra cứu Bồn C (K) - Từ dữ liệu ĐỒNG THỜI
+const int NUM_POINTS_K = 14;
+CalibrationPoint lutK[NUM_POINTS_K] = {
+    {0.000f, 150},
+    {0.267f, 300},
+    {0.315f, 750},
+    {0.364f, 900},
+    {0.388f, 1050},
+    {0.424f, 1200},
+    {0.436f, 1350},
+    {0.448f, 1500},
+    {0.473f, 1800},
+    {0.497f, 1950},
+    {0.509f, 2400},
+    {0.521f, 3150},
+    {0.533f, 4650},
+    {0.540f, 9000}
+};
+
+// Hàm nội suy tuyến tính tìm số bước từ lưu lượng mục tiêu
+int32_t getStepsFromFlow(float targetFlow, CalibrationPoint* lut, int numPoints) {
+    if (targetFlow <= 0.0f) return 0;
+    
+    // Nếu vượt quá giới hạn tối đa
+    if (targetFlow >= lut[numPoints - 1].flowLpm) {
+        return lut[numPoints - 1].steps;
+    }
+    
+    // Nếu nằm dưới điểm có dòng chảy ban đầu
+    if (targetFlow < lut[0].flowLpm) {
+        return (targetFlow / lut[0].flowLpm) * lut[0].steps;
+    }
+    
+    // Nội suy giữa 2 điểm kề nhau
+    for (int i = 0; i < numPoints - 1; i++) {
+        if (targetFlow >= lut[i].flowLpm && targetFlow <= lut[i+1].flowLpm) {
+            float ratio = (targetFlow - lut[i].flowLpm) / (lut[i+1].flowLpm - lut[i].flowLpm);
+            return lut[i].steps + ratio * (lut[i+1].steps - lut[i].steps);
+        }
+    }
+    return lut[numPoints - 1].steps;
+}
 
 //====================================================================================================================================================================================================================
 // BIẾN TOÀN CỤC
@@ -89,6 +155,7 @@ volatile uint32_t pulseN = 0;
 volatile uint32_t pulseP = 0;
 volatile uint32_t pulseK = 0;
 volatile uint32_t pulseMain = 0;
+
 // Snapshot để tính flow rate
 uint32_t snapPulseN = 0, snapPulseP = 0, snapPulseK = 0, snapPulseMain = 0;
 float    flowLpmN = 0.0f, flowLpmP = 0.0f, flowLpmK = 0.0f, flowLpmMain = 0.0f;
@@ -106,25 +173,14 @@ float targetN = 0.0f, targetP = 0.0f, targetK = 0.0f;
 int speedN = 60, speedP = 60, speedK = 60;
 // Vị trí hiện tại của van (số micro-bước từ vị trí đóng)
 int32_t posN = 0, posP = 0, posK = 0;
-// GIỚI HẠN GÓC XOAY BAN ĐẦU (STARTUP CLAMP)
-#define STARTUP_LIMIT_STEPS 2000
-// BIẾN MÁY HỌC TỰ CÂN CHỈNH GIỚI HẠN AN TOÀN (SELF-LEARNING BOUNDARIES)
-int32_t learnedMinN = 0, learnedMaxN = MAX_OPEN_STEPS_N;
-int32_t learnedMinP = 0, learnedMaxP = MAX_OPEN_STEPS_P;
-int32_t learnedMinK = 0, learnedMaxK = MAX_OPEN_STEPS_K;
-// Theo dõi vị trí và lưu lượng để học độ bão hòa (saturating open limit)
-int32_t lastSatPosN = 0, lastSatPosP = 0, lastSatPosK = 0;
-float lastSatFlowN = 0.0f, lastSatFlowP = 0.0f, lastSatFlowK = 0.0f;
+
 // ---- Biến chế độ ĐỒNG THỜI ----
 bool simMode = false;                          // true = chế độ đồng thời đang chạy
 float targetLpmN = 0.0f;                       // Lưu lượng mục tiêu van N (L/phút)
 float targetLpmP = 0.0f;                       // Lưu lượng mục tiêu van P (L/phút)
 float targetLpmK = 0.0f;                       // Lưu lượng mục tiêu van K (L/phút)
 bool  doneN = false, doneP = false, doneK = false;  // Van đã đạt đủ lượng?
-// Biến giám sát rò rỉ van sau khi đạt mục tiêu (5 giây)
-bool monitoringN = false, monitoringP = false, monitoringK = false;
-unsigned long closeTimerN = 0, closeTimerP = 0, closeTimerK = 0;
-int extraCloseN = 0, extraCloseP = 0, extraCloseK = 0;
+
 float targetTotalWaterL = 0.0f; // Tổng lượng nước mục tiêu (Lít)
 bool dosingCompletedTimeRecorded = false; // true khi hoàn thành châm phân
 float finalWaterTargetL = 0.0f;           // Thể tích nước đích sau khi cộng thêm lượng xả ống
@@ -145,8 +201,8 @@ unsigned long lastReconnectTry = 0;
 unsigned long runStartTime = 0;             // Thời điểm bắt đầu chạy chu trình (ms)
 unsigned long zeroFlowDuration = 0;         // Thời gian liên tục không có lưu lượng (ms)
 String systemError = "";                    // Mã lỗi hệ thống hiện tại
-#define FLOW_TIMEOUT_MS  30000              // 30 giây không có lưu lượng sẽ ngắt
-#define FLOW_GRACE_PERIOD_MS 10000          // 10 giây đầu cho phép lưu lượng = 0 để mồi nước/phân
+#define FLOW_TIMEOUT_MS  15000              // 30 giây không có lưu lượng sẽ ngắt
+#define FLOW_GRACE_PERIOD_MS 7000          // 10 giây đầu cho phép lưu lượng = 0 để mồi nước/phân
 
 // MQTT Topics (Đã đổi để tránh bị trùng với người khác trên public broker)
 const char* TOPIC_CMD    = "autofert_khoaluan2026/cmd";
@@ -170,19 +226,19 @@ void moveStepper(int valve, int steps) {
     if (steps == 0) return;
     uint8_t stepPin, dirPin, enPin;
     int32_t *posPtr = nullptr;
-    int32_t learnedMin = 0, learnedMax = MAX_OPEN_STEPS_N;
+    int32_t stepMin = 0, stepMax = MAX_OPEN_STEPS_N;
     switch (valve) {
         case 1:
             stepPin = STEP_N; dirPin = DIR_N; enPin = EN_N;
-            posPtr = &posN; learnedMin = learnedMinN; learnedMax = learnedMaxN;
+            posPtr = &posN; stepMax = MAX_OPEN_STEPS_N;
             break;
         case 2:
             stepPin = STEP_P; dirPin = DIR_P; enPin = EN_P;
-            posPtr = &posP; learnedMin = learnedMinP; learnedMax = learnedMaxP;
+            posPtr = &posP; stepMax = MAX_OPEN_STEPS_P;
             break;
         case 3:
             stepPin = STEP_K; dirPin = DIR_K; enPin = EN_K;
-            posPtr = &posK; learnedMin = learnedMinK; learnedMax = learnedMaxK;
+            posPtr = &posK; stepMax = MAX_OPEN_STEPS_K;
             break;
         default: return;
     }
@@ -201,14 +257,14 @@ void moveStepper(int valve, int steps) {
         // Kiểm tra giới hạn an toàn bước trước khi di chuyển thực tế
         if (posPtr) {
             if (opening) {
-                if (*posPtr >= learnedMax) {
-                    Serial.printf("[VAN %d] Kich gioi han MAX co khi (%d buoc)!\n", valve, learnedMax);
+                if (*posPtr >= stepMax) {
+                    Serial.printf("[VAN %d] Kich gioi han MAX (%d buoc)!\n", valve, stepMax);
                     break;
                 }
                 (*posPtr)++;
             } else {
-                if (*posPtr <= learnedMin) {
-                    Serial.printf("[VAN %d] Kich gioi han MIN co khi (%d buoc)!\n", valve, learnedMin);
+                if (*posPtr <= stepMin) {
+                    Serial.printf("[VAN %d] Kich gioi han MIN (%d buoc)!\n", valve, stepMin);
                     break;
                 }
                 (*posPtr)--;
@@ -258,20 +314,49 @@ void moveSteppersSimultaneous(int stepsN, int stepsP, int stepsK) {
     // Nếu tất cả các van đều đang đóng (quay về 0), sử dụng tốc độ cực nhanh để ngắt dòng chảy
     bool isClosingOnly = (stepsN <= 0 && stepsP <= 0 && stepsK <= 0);
     // 200us là quá nhanh đối với động cơ bước không có gia tốc, gây trượt/kẹt cứng (stall). 
-    // Giảm xuống một tốc độ an toàn hơn (VD: 800us hoặc dùng luôn STEP_DELAY_US).
-    uint32_t currentDelay = isClosingOnly ? 800 : STEP_DELAY_US;
+    // Giảm xuống một tốc độ an toàn hơn. 300us là đủ an toàn và nhanh hơn nhiều so với 800us.
+    uint32_t currentDelay = isClosingOnly ? 300 : STEP_DELAY_US;
 
     for (int i = 0; i < maxSteps; i++) {
+        // [CẢI TIẾN QUAN TRỌNG]: Kiểm tra liên tục xem các van khác có đạt mục tiêu trong lúc hàm đang block không!
+        if (!doneN && targetN > 0 && (pulseN * ML_PER_PULSE_N) >= targetN) {
+            doneN = true;
+            stepsN = -posN; absN = abs(stepsN);
+            maxSteps = max(absN, max(absP, absK));
+            digitalWrite(DIR_N, LOW);
+            digitalWrite(EN_N, LOW);
+            Serial.printf("\n[SIM] Van N dat muc tieu (%.0f mL) TRONG KHI xoay! Bat dau dong ngay!\n", (float)(pulseN * ML_PER_PULSE_N));
+        }
+        if (!doneP && targetP > 0 && (pulseP * ML_PER_PULSE_P) >= targetP) {
+            doneP = true;
+            stepsP = -posP; absP = abs(stepsP);
+            maxSteps = max(absN, max(absP, absK));
+            digitalWrite(DIR_P, LOW);
+            digitalWrite(EN_P, LOW);
+            Serial.printf("\n[SIM] Van P dat muc tieu (%.0f mL) TRONG KHI xoay! Bat dau dong ngay!\n", (float)(pulseP * ML_PER_PULSE_P));
+        }
+        if (!doneK && targetK > 0 && (pulseK * ML_PER_PULSE_K) >= targetK) {
+            doneK = true;
+            stepsK = -posK; absK = abs(stepsK);
+            maxSteps = max(absN, max(absP, absK));
+            digitalWrite(DIR_K, LOW);
+            digitalWrite(EN_K, LOW);
+            Serial.printf("\n[SIM] Van K dat muc tieu (%.0f mL) TRONG KHI xoay! Bat dau dong ngay!\n", (float)(pulseK * ML_PER_PULSE_K));
+        }
+
         // Kiểm tra an toàn giới hạn cơ khí cho từng động cơ
         bool stepN_active = (i < absN) && (stepsN > 0 ? (posN < learnedMaxN) : (posN > learnedMinN));
         bool stepP_active = (i < absP) && (stepsP > 0 ? (posP < learnedMaxP) : (posP > learnedMinP));
         bool stepK_active = (i < absK) && (stepsK > 0 ? (posK < learnedMaxK) : (posK > learnedMinK));
+        
         if (!stepN_active && !stepP_active && !stepK_active) break;
+        
         // Kích hoạt sườn lên (Rising edge)
         if (stepN_active) digitalWrite(STEP_N, HIGH);
         if (stepP_active) digitalWrite(STEP_P, HIGH);
         if (stepK_active) digitalWrite(STEP_K, HIGH);
         delayMicroseconds(currentDelay);
+        
         // Kích hoạt sườn xuống (Falling edge) và cập nhật vị trí
         if (stepN_active) {
             digitalWrite(STEP_N, LOW);
@@ -393,7 +478,7 @@ void controlSimultaneous() {
         }
     }
 
-    // Chỉ thực thi PID châm phân khi simMode = true (Tức là chưa châm xong phân)
+    // Chỉ thực thi đọc lưu lượng khi simMode = true (Tức là chưa châm xong phân)
     if (!simMode) return;
 
     // Đọc thể tích tích lũy
@@ -403,261 +488,101 @@ void controlSimultaneous() {
     float volK = pulseK * ML_PER_PULSE_K;
     interrupts();
 
-    // --- PHẢN HỒI DÂN DỤNG THÔNG MINH (SMART FEEDBACK 1/100) ---
-    // Loại bỏ hoàn toàn lưu lượng châm cố định theo thời gian tĩnh.
-    // Tốc độ châm của mỗi bồn (L/min) được tính toán động dựa theo lưu lượng thực tế ống chính
-    // theo đúng tỷ lệ phối trộn 1/100, được đồng bộ theo thời gian và lưu lượng ống chính.
-    float totalTargetVol = targetN + targetP + targetK;
+    // --- ĐIỀU KHIỂN OPEN-LOOP BẰNG BẢNG TRA CỨU ---
+    // Tính toán thời gian hoàn thành mục tiêu cho từng van nếu chạy ở tốc độ tối đa
+    float t_N = (targetN > 0) ? (targetN / (Q_MAX_LPM_N * 1000.0f)) : 0; // phút
+    float t_P = (targetP > 0) ? (targetP / (Q_MAX_LPM_P * 1000.0f)) : 0;
+    float t_K = (targetK > 0) ? (targetK / (Q_MAX_LPM_K * 1000.0f)) : 0;
     
-    // Sử dụng bộ lọc thông thấp (exponential moving average) để làm mượt lưu lượng nước chính,
-    // tránh dao động sụt áp đột ngột làm rung lắc setpoint châm phân khiến động cơ bị trượt bước.
-    static float smoothMainFlowLpm = 0.0f;
-    if (smoothMainFlowLpm <= 0.01f && flowLpmMain > 0.10f) {
-        smoothMainFlowLpm = flowLpmMain; // Khởi tạo nhanh giá trị ban đầu
-    } else if (flowLpmMain > 0.10f) {
-        smoothMainFlowLpm = 0.85f * smoothMainFlowLpm + 0.15f * flowLpmMain;
-    }
-    
-    // Đảm bảo lưu lượng nước chính tối thiểu hợp lý (ví dụ 5.0 LPM) khi có dòng chảy thực tế để giữ van luôn chạy ổn định
-    float effectiveMainFlowLpm = max(5.0f, smoothMainFlowLpm);
-    
-    // Tổng lưu lượng phân châm cần đạt theo tỷ lệ 1/85 của nước chính để hoàn thành trước 15% nước xả rửa
-    float targetTotalDosingLpm = effectiveMainFlowLpm / 85.0f;
+    // Tìm thời gian dài nhất để tất cả các van chạy cùng lúc và kết thúc cùng lúc
+    float t_max = max(t_N, max(t_P, t_K));
     
     float dynTargetLpmN = 0.0f;
     float dynTargetLpmP = 0.0f;
     float dynTargetLpmK = 0.0f;
 
-    if (totalTargetVol > 0) {
-        dynTargetLpmN = (targetN / totalTargetVol) * targetTotalDosingLpm;
-        dynTargetLpmP = (targetP / totalTargetVol) * targetTotalDosingLpm;
-        dynTargetLpmK = (targetK / totalTargetVol) * targetTotalDosingLpm;
+    if (t_max > 0) {
+        dynTargetLpmN = (targetN / 1000.0f) / t_max;
+        dynTargetLpmP = (targetP / 1000.0f) / t_max;
+        dynTargetLpmK = (targetK / 1000.0f) / t_max;
     }
 
-    // Hàm lambda tính toán PID (Hiệu chỉnh tích lũy offset)
-    auto calcPID = [](float targetLpm, float flowLpm, float &errSum, float &lastErr) -> int {
-        if (targetLpm <= 0.0f) {
-            errSum = 0.0f;
-            lastErr = 0.0f;
-            return 0;
-        }
-        // Chờ mồi dòng chảy: không chạy PID điều chỉnh khi chưa có dòng chảy thực tế
-        if (flowLpm < 0.02f) {
-            errSum = 0.0f;
-            lastErr = 0.0f;
-            return 0; // Giữ nguyên vị trí đón đầu (Feedforward)
-        }
-        float err = targetLpm - flowLpm;
-        if (fabsf(err) <= DEADBAND_LPM) {
-            return 0;
-        }
-        float dt = CONTROL_INTERVAL_MS / 1000.0f;
-        errSum += err * dt;
-        errSum = constrain(errSum, -50.0f, 50.0f);
-
-        float dErr = (err - lastErr) / dt;
-        lastErr = err;
-        float output = (KP_CONTROL * err) + (KI_CONTROL * errSum) + (KD_CONTROL * dErr);
-        return (int)constrain(output, -MAX_ADJ_STEPS, MAX_ADJ_STEPS);
-    };
     int adjN = 0, adjP = 0, adjK = 0;
+    
     // --- Van N ---
     if (!doneN && targetN > 0) {
-        if (volN >= targetN) {
-            adjN = -posN; // Đóng van N song song không chặn CPU
+        // Tính độ trễ đóng van và lượng dư (Early Cutoff)
+        float t_close_N = posN * (2.0f * STEP_DELAY_US) / 1000000.0f; 
+        float overshoot_N = (flowLpmN / 2.0f) * (t_close_N / 60.0f) * 1000.0f; 
+        
+        if (volN >= targetN - overshoot_N) {
+            adjN = -posN; // Đóng van
             doneN = true;
-            // Chỉ chạy giám sát 5s nếu đây không phải là van cuối cùng kết thúc
             bool otherDone = (doneP || targetP <= 0) && (doneK || targetK <= 0);
             if (otherDone) {
-                monitoringN = false;
-                Serial.printf("[SIM✓] Van N đủ lượng (Van cuối) → %.0f/%.0f mL. Dừng hệ thống ngay lập tức.\n", volN, targetN);
+                Serial.printf("[SIM✓] Van N đủ lượng. Dừng hệ thống ngay lập tức.\n");
             } else {
-                monitoringN = true;
-                closeTimerN = millis();
-                extraCloseN = 0;
-                Serial.printf("[SIM✓] Van N đủ lượng → %.0f/%.0f mL. Bắt đầu giám sát rò rỉ 5s...\n", volN, targetN);
+                Serial.printf("[SIM✓] Van N ngắt sớm (Overshoot: %.1f mL).\n", overshoot_N);
             }
+            digitalWrite(EN_N, HIGH); // Tắt động cơ ngay lập tức
         } else {
-            float volRatio = volN / targetN;
-            float currentTargetLpmN = dynTargetLpmN;
-            if (volRatio >= 0.90f) {
-                float scale = (1.0f - volRatio) / 0.10f;
-                scale = constrain(scale, 0.20f, 1.0f);
-                currentTargetLpmN = dynTargetLpmN * scale;
-            }
-            if (lastSatPosN == 0 && posN > 0) {
-                lastSatPosN = posN;
-                lastSatFlowN = flowLpmN;
-            }
-            
-            // 1. Tính số bước mở đón đầu (Feedforward)
-            int32_t ffStepsN = (currentTargetLpmN / Q_MAX_LPM_N) * MAX_OPEN_STEPS_N;
-            ffStepsN = constrain(ffStepsN, 0, MAX_OPEN_STEPS_N);
-            
-            // 2. Tính hiệu chỉnh phản hồi (Feedback PID)
-            int adj = calcPID(currentTargetLpmN, flowLpmN, errSumN, lastErrN);
-            if (volRatio >= 0.95f && flowLpmN < 0.10f && adj > 0) {
-                adj = 0;
-            }
-            pidOffsetN = constrain(pidOffsetN + adj, -3000.0f, 3000.0f);
-            
-            // 3. Kết hợp Đón đầu + Phản hồi
-            int32_t targetPosN = ffStepsN + (int32_t)pidOffsetN;
-            targetPosN = constrain(targetPosN, learnedMinN, learnedMaxN);
-            
+            // Điều khiển Open-Loop: Đặt vị trí mục tiêu tĩnh 1 lần
+            int32_t targetPosN = getStepsFromFlow(dynTargetLpmN, lutN, NUM_POINTS_N);
+            targetPosN = constrain(targetPosN, 0, MAX_OPEN_STEPS_N);
             if (targetPosN != posN) {
                 adjN = targetPosN - posN;
             }
         }
     }
-    if (doneN && monitoringN) {
-        if (millis() - closeTimerN < 5000) {
-            if (flowLpmN > 0.01f && extraCloseN < 250 && adjN == 0) {
-                adjN = -15;
-                learnedMinN -= 15; // Lùi giới hạn phần mềm để cho phép siết thêm
-                extraCloseN += 15;
-                Serial.printf("[SIẾT VAN N] Phát hiện dòng chảy %.3f L/m -> Siết thêm 15 bước (Tổng siết: %d)\n", flowLpmN, extraCloseN);
-            }
-        } else {
-            monitoringN = false;
-            posN = 0;
-            learnedMinN = 0;
-            digitalWrite(EN_N, HIGH); // Tắt driver van N để hạ nhiệt
-            Serial.printf("[GIÁM SÁT N] Hoàn thành. Đã reset vị trí N về 0. Siết thêm: %d bước.\n", extraCloseN);
-        }
-    }
 
     // --- Van P ---
     if (!doneP && targetP > 0) {
-        if (volP >= targetP) {
-            adjP = -posP; // Đóng van P song song không chặn CPU
+        float t_close_P = posP * (2.0f * STEP_DELAY_US) / 1000000.0f; 
+        float overshoot_P = (flowLpmP / 2.0f) * (t_close_P / 60.0f) * 1000.0f; 
+        
+        if (volP >= targetP - overshoot_P) {
+            adjP = -posP; 
             doneP = true;
-            // Chỉ chạy giám sát 5s nếu đây không phải là van cuối cùng kết thúc
             bool otherDone = (doneN || targetN <= 0) && (doneK || targetK <= 0);
             if (otherDone) {
-                monitoringP = false;
-                Serial.printf("[SIM✓] Van P đủ lượng (Van cuối) → %.0f/%.0f mL. Dừng hệ thống ngay lập tức.\n", volP, targetP);
+                Serial.printf("[SIM✓] Van P đủ lượng. Dừng hệ thống ngay lập tức.\n");
             } else {
-                monitoringP = true;
-                closeTimerP = millis();
-                extraCloseP = 0;
-                Serial.printf("[SIM✓] Van P đủ lượng → %.0f/%.0f mL. Bắt đầu giám sát rò rỉ 5s...\n", volP, targetP);
+                Serial.printf("[SIM✓] Van P ngắt sớm (Overshoot: %.1f mL).\n", overshoot_P);
             }
+            digitalWrite(EN_P, HIGH);
         } else {
-            float volRatio = volP / targetP;
-            float currentTargetLpmP = dynTargetLpmP;
-            if (volRatio >= 0.90f) {
-                float scale = (1.0f - volRatio) / 0.10f;
-                scale = constrain(scale, 0.20f, 1.0f);
-                currentTargetLpmP = dynTargetLpmP * scale;
-            }
-            if (lastSatPosP == 0 && posP > 0) {
-                lastSatPosP = posP;
-                lastSatFlowP = flowLpmP;
-            }
-            
-            // 1. Tính số bước mở đón đầu (Feedforward)
-            int32_t ffStepsP = (currentTargetLpmP / Q_MAX_LPM_P) * MAX_OPEN_STEPS_P;
-            ffStepsP = constrain(ffStepsP, 0, MAX_OPEN_STEPS_P);
-            
-            // 2. Tính hiệu chỉnh phản hồi (Feedback PID)
-            int adj = calcPID(currentTargetLpmP, flowLpmP, errSumP, lastErrP);
-            if (volRatio >= 0.95f && flowLpmP < 0.10f && adj > 0) {
-                adj = 0;
-            }
-            pidOffsetP = constrain(pidOffsetP + adj, -2500.0f, 2500.0f);
-            
-            // 3. Kết hợp Đón đầu + Phản hồi
-            int32_t targetPosP = ffStepsP + (int32_t)pidOffsetP;
-            targetPosP = constrain(targetPosP, learnedMinP, learnedMaxP);
-            
+            int32_t targetPosP = getStepsFromFlow(dynTargetLpmP, lutP, NUM_POINTS_P);
+            targetPosP = constrain(targetPosP, 0, MAX_OPEN_STEPS_P);
             if (targetPosP != posP) {
                 adjP = targetPosP - posP;
             }
         }
     }
-    if (doneP && monitoringP) {
-        if (millis() - closeTimerP < 5000) {
-            if (flowLpmP > 0.01f && extraCloseP < 250 && adjP == 0) {
-                adjP = -15;
-                learnedMinP -= 15;
-                extraCloseP += 15;
-                Serial.printf("[SIẾT VAN P] Phát hiện dòng chảy %.3f L/m -> Siết thêm 15 bước (Tổng siết: %d)\n", flowLpmP, extraCloseP);
-            }
-        } else {
-            monitoringP = false;
-            posP = 0;
-            learnedMinP = 0;
-            digitalWrite(EN_P, HIGH);
-            Serial.printf("[GIÁM SÁT P] Hoàn thành. Đã reset vị trí P về 0. Siết thêm: %d bước.\n", extraCloseP);
-        }
-    }
 
     // --- Van K ---
     if (!doneK && targetK > 0) {
-        if (volK >= targetK) {
-            adjK = -posK; // Đóng van K song song không chặn CPU
+        float t_close_K = posK * (2.0f * STEP_DELAY_US) / 1000000.0f; 
+        float overshoot_K = (flowLpmK / 2.0f) * (t_close_K / 60.0f) * 1000.0f; 
+        
+        if (volK >= targetK - overshoot_K) {
+            adjK = -posK; 
             doneK = true;
-            // Chỉ chạy giám sát 5s nếu đây không phải là van cuối cùng kết thúc
             bool otherDone = (doneN || targetN <= 0) && (doneP || targetP <= 0);
             if (otherDone) {
-                monitoringK = false;
-                Serial.printf("[SIM✓] Van K đủ lượng (Van cuối) → %.0f/%.0f mL. Dừng hệ thống ngay lập tức.\n", volK, targetK);
+                Serial.printf("[SIM✓] Van K đủ lượng. Dừng hệ thống ngay lập tức.\n");
             } else {
-                monitoringK = true;
-                closeTimerK = millis();
-                extraCloseK = 0;
-                Serial.printf("[SIM✓] Van K đủ lượng → %.0f/%.0f mL. Bắt đầu giám sát rò rỉ 5s...\n", volK, targetK);
+                Serial.printf("[SIM✓] Van K ngắt sớm (Overshoot: %.1f mL).\n", overshoot_K);
             }
+            digitalWrite(EN_K, HIGH);
         } else {
-            float volRatio = volK / targetK;
-            float currentTargetLpmK = dynTargetLpmK;
-            if (volRatio >= 0.90f) {
-                float scale = (1.0f - volRatio) / 0.10f;
-                scale = constrain(scale, 0.20f, 1.0f);
-                currentTargetLpmK = dynTargetLpmK * scale;
-            }
-            if (lastSatPosK == 0 && posK > 0) {
-                lastSatPosK = posK;
-                lastSatFlowK = flowLpmK;
-            }
-            
-            // 1. Tính số bước mở đón đầu (Feedforward)
-            int32_t ffStepsK = (currentTargetLpmK / Q_MAX_LPM_K) * MAX_OPEN_STEPS_K;
-            ffStepsK = constrain(ffStepsK, 0, MAX_OPEN_STEPS_K);
-            
-            // 2. Tính hiệu chỉnh phản hồi (Feedback PID)
-            int adj = calcPID(currentTargetLpmK, flowLpmK, errSumK, lastErrK);
-            if (volRatio >= 0.95f && flowLpmK < 0.10f && adj > 0) {
-                adj = 0;
-            }
-            pidOffsetK = constrain(pidOffsetK + adj, -2500.0f, 2500.0f);
-            
-            // 3. Kết hợp Đón đầu + Phản hồi
-            int32_t targetPosK = ffStepsK + (int32_t)pidOffsetK;
-            targetPosK = constrain(targetPosK, learnedMinK, learnedMaxK);
-            
+            int32_t targetPosK = getStepsFromFlow(dynTargetLpmK, lutK, NUM_POINTS_K);
+            targetPosK = constrain(targetPosK, 0, MAX_OPEN_STEPS_K);
             if (targetPosK != posK) {
                 adjK = targetPosK - posK;
             }
         }
     }
-    if (doneK && monitoringK) {
-        if (millis() - closeTimerK < 5000) {
-            if (flowLpmK > 0.01f && extraCloseK < 250 && adjK == 0) {
-                adjK = -15;
-                learnedMinK -= 15;
-                extraCloseK += 15;
-                Serial.printf("[SIẾT VAN K] Phát hiện dòng chảy %.3f L/m -> Siết thêm 15 bước (Tổng siết: %d)\n", flowLpmK, extraCloseK);
-            }
-        } else {
-            monitoringK = false;
-            posK = 0;
-            learnedMinK = 0;
-            digitalWrite(EN_K, HIGH);
-            Serial.printf("[GIÁM SÁT K] Hoàn thành. Đã reset vị trí K về 0. Siết thêm: %d bước.\n", extraCloseK);
-        }
-    }
+
     // 4. Kích hoạt phát xung quay van đồng thời bằng phương án xen kẽ
     if (adjN != 0 || adjP != 0 || adjK != 0) {
         moveSteppersSimultaneous(adjN, adjP, adjK);
@@ -765,7 +690,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         // Reset các mốc học bão hòa cho chu kỳ mới
         lastSatPosN = 0; lastSatPosP = 0; lastSatPosK = 0;
         lastSatFlowN = 0.0f; lastSatFlowP = 0.0f; lastSatFlowK = 0.0f;
-        // Reset pulse counters và PID state
+        // Reset pulse counters và state
         noInterrupts(); pulseN = pulseP = pulseK = pulseMain = 0; interrupts();
         snapPulseN = snapPulseP = snapPulseK = snapPulseMain = 0;
         // Reset cửa sổ trượt
@@ -779,9 +704,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         finalWaterTargetL = 0.0f;
         monitoringN = monitoringP = monitoringK = false;
         extraCloseN = extraCloseP = extraCloseK = 0;
-        errSumN = errSumP = errSumK = 0.0f;
-        lastErrN = lastErrP = lastErrK = 0.0f;
-        pidOffsetN = pidOffsetP = pidOffsetK = 0.0f;
+        // Đã loại bỏ các biến PID cũ
         Serial.printf("[SIM] N=%.0fmL@%.2fL/m | P=%.0fmL@%.2fL/m | K=%.0fmL@%.2fL/m\n",
                        targetN, targetLpmN,
                        targetP, targetLpmP,
@@ -793,23 +716,23 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         systemError = "";      
         // Bật Bơm và Van chính để nước chảy qua hệ thống phối trộn đồng thời
         if (targetN > 0 || targetP > 0 || targetK > 0 || targetTotalWaterL > 0.0f) {
-            Serial.println("[SIM] Đang kích hoạt mở Van chính (chờ 5 giây để van mở hoàn toàn)...");
+            Serial.println("[SIM] Đang kích hoạt mở Van chính (chờ 7 giây để van mở hoàn toàn)...");
             digitalWrite(VALVE_PIN, HIGH);
-            delay(5000); // Đợi 5 giây cho van điện từ mở hoàn toàn           
+            delay(7000); // Đợi 7 giây cho van điện từ mở hoàn toàn           
             Serial.println("[SIM] Đang khởi động Bơm chính...");
             digitalWrite(PUMP_PIN, HIGH);
             delay(1000); // Đợi 1 giây cho dòng khởi động ổn định trước khi bắt đầu vòng điều khiển hồi tiếp
-            // Mở nhanh ban đầu đồng thời theo tỷ lệ thể tích mục tiêu để tránh chảy quá (giảm bước mở với thể tích nhỏ)
-            int initN = targetN > 0 ? ((targetN < 200.0f) ? max(150, (int)(targetN * (INITIAL_STARTUP_STEPS_N / 200.0f))) : INITIAL_STARTUP_STEPS_N) : 0;
-            int initP = targetP > 0 ? ((targetP < 200.0f) ? max(150, (int)(targetP * (INITIAL_STARTUP_STEPS_P / 200.0f))) : INITIAL_STARTUP_STEPS_P) : 0;
-            int initK = targetK > 0 ? ((targetK < 200.0f) ? max(150, (int)(targetK * (INITIAL_STARTUP_STEPS_K / 200.0f))) : INITIAL_STARTUP_STEPS_K) : 0;
+            // Mở nhanh ban đầu đồng thời theo bảng tra cứu vị trí ứng với lưu lượng mục tiêu
+            int initN = targetN > 0 ? getStepsFromFlow(targetLpmN, lutN, NUM_POINTS_N) : 0;
+            int initP = targetP > 0 ? getStepsFromFlow(targetLpmP, lutP, NUM_POINTS_P) : 0;
+            int initK = targetK > 0 ? getStepsFromFlow(targetLpmK, lutK, NUM_POINTS_K) : 0;
             if (initN > 0 || initP > 0 || initK > 0) {
                 moveSteppersSimultaneous(initN, initP, initK);
             }
         }       
         lastControlTime = millis();
         runStartTime = millis();        
-        Serial.println("[SIM] Tất cả van đã mở - vòng điều khiển PID bắt đầu!");
+        Serial.println("[SIM] Tất cả van đã mở - vòng lặp điều khiển bắt đầu!");
     }
     // ---- Lệnh DỪNG ----
     else if (strcmp(cmd, "stop") == 0) {
@@ -964,94 +887,21 @@ void calculateFlowRates() {
 // ĐÓNG CHẶT VAN HỒI TIẾP (CLOSED-LOOP CLOSED VALVE FEEDBACK CORRECTION)
 // Di chuyển động cơ bước thêm cho đến khi cảm biến lưu lượng thực sự báo 0 L/phút
 void forceCloseValve(int valve) {
-    Serial.printf("[FORCE CLOSE] Bat dau dong chat van %d su dung phan hoi cam bien...\n", valve);   
-    // 1. Di chuyển về vị trí 0 (đóng theo ly thuyet so buoc tinh toan)
+    Serial.printf("[FORCE CLOSE] Bat dau dong chat van %d...\n", valve);   
+    // 1. Di chuyển về vị trí 0
     openValve(valve, 0);    
-    // Giu driver ENABLE (LOW) de co mo-men xoan trong qua trinh siet chat van
-    uint8_t stepPin, dirPin, enPin;
-    float currentFlow = 0.0f;
-    int32_t *posPtr = nullptr;
-    int32_t *learnedMinPtr = nullptr;   
+    
+    uint8_t enPin;
     switch (valve) {
-        case 1: 
-            stepPin = STEP_N; dirPin = DIR_N; enPin = EN_N; 
-            posPtr = &posN; learnedMinPtr = &learnedMinN;
-            break;
-        case 2: 
-            stepPin = STEP_P; dirPin = DIR_P; enPin = EN_P; 
-            posPtr = &posP; learnedMinPtr = &learnedMinP;
-            break;
-        case 3: 
-            stepPin = STEP_K; dirPin = DIR_K; enPin = EN_K; 
-            posPtr = &posK; learnedMinPtr = &learnedMinK;
-            break;
+        case 1: enPin = EN_N; break;
+        case 2: enPin = EN_P; break;
+        case 3: enPin = EN_K; break;
         default: return;
     }   
-    // Đảm bảo driver được kích hoạt (ENABLE = LOW)
-    digitalWrite(enPin, LOW);   
-    // 2. Cho 800ms de dong chay on dinh va tinh luu luong ban dau sau khi dong ly thuyet
-    delay(800);
-    calculateFlowRates();   
-    switch (valve) {
-        case 1: currentFlow = flowLpmN; break;
-        case 2: currentFlow = flowLpmP; break;
-        case 3: currentFlow = flowLpmK; break;
-    }   
-    Serial.printf("[FORCE CLOSE] Luu luong ban dau sau khi dong ly thuyet: %.3f L/phut\n", currentFlow);
     
-    // THOÁT SỚM NẾU DÒNG CHẢY ĐÃ VỀ 0 (CHỐNG KẸT VAN)
-    if (currentFlow <= 0.01f) {
-        Serial.printf("[FORCE CLOSE] -> Van %d da kin hoan toan tai vi tri 0 (Flow = 0). Ket thuc som!\n", valve);
-        digitalWrite(enPin, HIGH); // Tắt driver (ngắt điện) để tiết kiệm điện
-        return;
-    }    
-    int extraStepsApplied = 0;
-    const int MAX_EXTRA_STEPS = 250; // Gioi han an toan toi da 250 buoc siet co (tranh hong ren van)
-    const int STEP_INCREMENT = 15;  // Moi lan siet them 15 buoc cực nhỏ để tránh kẹt
-    const int CHECK_DELAY_MS = 800; // Thoi gian cho dong chay cap nhat sau moi lan siet    
-    int unchangedFlowCount = 0;
-    float lastFlow = currentFlow;   
-    // 3. Vong hoi tiep siet chat: Siet them tung chut mot neu van phat hien dong chay
-    while (currentFlow > 0.01f && extraStepsApplied < MAX_EXTRA_STEPS) {
-        Serial.printf("[FORCE CLOSE] Phat hien ro ri (%.3f L/m) -> Siet chat them %d buoc...\n", currentFlow, STEP_INCREMENT);      
-        // Di chuyen them theo huong dong (DIR = LOW, tuc la moveStepper truyen steps am)
-        moveStepper(valve, -STEP_INCREMENT);
-        extraStepsApplied += STEP_INCREMENT;       
-        // Cap nhat lai vi tri luu tru thuc te trong ram (vi pos giam di khi siet them)
-        if (posPtr) *posPtr -= STEP_INCREMENT;        
-        // Cho va tinh lai luu luong
-        delay(CHECK_DELAY_MS);
-        calculateFlowRates();       
-        lastFlow = currentFlow;
-        switch (valve) {
-            case 1: currentFlow = flowLpmN; break;
-            case 2: currentFlow = flowLpmP; break;
-            case 3: currentFlow = flowLpmK; break;
-        }        
-        // MÁY HỌC TỰ PHÁT HIỆN KẸT: Nếu siết tiếp mà lưu lượng không đổi/tăng lên, chứng tỏ đã chạm kịch điểm cơ khí
-        if (fabsf(lastFlow - currentFlow) < 0.002f || currentFlow >= lastFlow) {
-            unchangedFlowCount++;
-            if (unchangedFlowCount >= 2) {
-                if (learnedMinPtr && posPtr) {
-                    *learnedMinPtr = *posPtr;
-                    Serial.printf("[ML] Da cham kich điểm co khí! Hoc vi tri MIN cho Bon %d la: %d buoc\n", valve, *learnedMinPtr);
-                }
-                break; // Thoát vòng lặp để tránh kẹt động cơ
-            }
-        } else {
-            unchangedFlowCount = 0;
-        }
-    }   
-    if (currentFlow <= 0.01f) {
-        Serial.printf("[FORCE CLOSE] -> Da dung hoan toan dong chay bon %d! (Siet them: %d buoc)\n", valve, extraStepsApplied);
-        if (learnedMinPtr && posPtr) {
-            *learnedMinPtr = *posPtr; // Lưu lại vị trí đóng hoàn toàn làm MIN
-        }
-    } else {
-        Serial.printf("[FORCE CLOSE] [!] Canh bao: Da dat gioi han siet hoac kich diem (%d buoc) nhung dong chay van con %.3f L/m!\n", extraStepsApplied, currentFlow);
-    }  
-    // 4. Hoan thanh: Tat driver (ENABLE = HIGH) de bao ve dong co, giam nhiet do
+    // 2. Hoan thanh: Tat driver (ENABLE = HIGH) de bao ve dong co, giam nhiet do
     digitalWrite(enPin, HIGH);
+    Serial.printf("[FORCE CLOSE] Van %d da duoc dua ve 0 va ngat dien dong co.\n", valve);
 }
 
 //====================================================================================================================================================================================================================
