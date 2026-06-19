@@ -908,17 +908,18 @@ function onCropOrStageChange() {
     // Bỏ thời gian xả ống +2 phút, chốt đúng thời gian bơm của nước 
     const totalDurationMin = (totalWaterDay_Calc / cycles) / 75.0;
     
-    // Cài đặt lại setpoint cho phù hợp: 
-    // Ép van có lưu lượng lớn nhất chạy ở mức 0.500 L/phút để đảm bảo flow sensor quay chính xác.
-    // Các van khác sẽ mở nhỏ hơn theo tỷ lệ. Thời gian tiêm phân sẽ kết thúc sớm để xả ống.
-    const MAX_TARGET_SETPOINT = 0.500;
-    const maxVol_cycle_mL = Math.max(volN_cycle, volP_cycle, volK_cycle);
-    let dosingTimeMin = (maxVol_cycle_mL / 1000) / MAX_TARGET_SETPOINT;
+    // Thuật toán bám sát tỷ lệ 1/100: Tổng phân bón = 0.8 L/phút (Vì nước = 80 L/phút)
+    const TOTAL_DOSING_LPM = 0.8;
+    const totalVol_cycle_mL = volN_cycle + volP_cycle + volK_cycle;
+    
+    let dosingTimeMin = 0.1;
+    if (totalVol_cycle_mL > 0) {
+        dosingTimeMin = (totalVol_cycle_mL / 1000) / TOTAL_DOSING_LPM;
+    }
     
     if (dosingTimeMin > totalDurationMin) {
         dosingTimeMin = totalDurationMin; // Không được tiêm lâu hơn tổng thời gian bơm nước
     }
-    if (dosingTimeMin < 0.1) dosingTimeMin = 0.1;
 
     // Cập nhật lên UI (ẩn, hoặc hiển thị)
     if (calcDurationInput) {
@@ -935,10 +936,10 @@ function onCropOrStageChange() {
     const waterPerPlant = totalWaterL / plants;
     const totalWaterDay = totalWaterL * cycles;
 
-    // Lưu lượng setpoint yêu cầu (L/phút) cho 1 lần tưới
-    const setpointN = parseFloat((volN_cycle / (dosingTimeMin * 1000)).toFixed(3));
-    const setpointP = parseFloat((volP_cycle / (dosingTimeMin * 1000)).toFixed(3));
-    const setpointK = parseFloat((volK_cycle / (dosingTimeMin * 1000)).toFixed(3));
+    // Lưu lượng setpoint yêu cầu (L/phút) cho 1 lần tưới (Dựa trên tổng 0.8 L/p)
+    const setpointN = totalVol_cycle_mL > 0 ? parseFloat(((volN_cycle / totalVol_cycle_mL) * TOTAL_DOSING_LPM).toFixed(3)) : 0;
+    const setpointP = totalVol_cycle_mL > 0 ? parseFloat(((volP_cycle / totalVol_cycle_mL) * TOTAL_DOSING_LPM).toFixed(3)) : 0;
+    const setpointK = totalVol_cycle_mL > 0 ? parseFloat(((volK_cycle / totalVol_cycle_mL) * TOTAL_DOSING_LPM).toFixed(3)) : 0;
 
     const totalWaterML = totalWaterL * 1000;
     const concN = ((volN_cycle / (totalWaterML + volN_cycle)) * 100).toFixed(2);

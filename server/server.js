@@ -543,13 +543,19 @@ app.post('/api/start', (req, res) => {
         const cP = calc(ratioP, pMl);
         const cK = calc(ratioK, kMl);
 
+        // Thuật toán bám sát tỷ lệ 1/100: Tổng phân bón = 0.8 L/phút (Vì nước = 80 L/phút)
+        const TOTAL_DOSING_LPM = 0.8;
+        const cN_lpm = parseFloat(((ratioN / totalParts) * TOTAL_DOSING_LPM).toFixed(3));
+        const cP_lpm = parseFloat(((ratioP / totalParts) * TOTAL_DOSING_LPM).toFixed(3));
+        const cK_lpm = parseFloat(((ratioK / totalParts) * TOTAL_DOSING_LPM).toFixed(3));
+
         mqttCmd = {
             cmd: 'start_sim',
             total_water_l: total_water_l,
             recipe: {
-                N: { target_ml: Math.round(cN.target_ml * (cN.target_ml >= 50 ? aiCalibration.N : 1.0)) },
-                P: { target_ml: Math.round(cP.target_ml * (cP.target_ml >= 50 ? aiCalibration.P : 1.0)) },
-                K: { target_ml: Math.round(cK.target_ml * (cK.target_ml >= 50 ? aiCalibration.K : 1.0)) }
+                N: { target_ml: Math.round(cN.target_ml * (cN.target_ml >= 50 ? aiCalibration.N : 1.0)), target_lpm: cN_lpm },
+                P: { target_ml: Math.round(cP.target_ml * (cP.target_ml >= 50 ? aiCalibration.P : 1.0)), target_lpm: cP_lpm },
+                K: { target_ml: Math.round(cK.target_ml * (cK.target_ml >= 50 ? aiCalibration.K : 1.0)), target_lpm: cK_lpm }
             }
         };
 

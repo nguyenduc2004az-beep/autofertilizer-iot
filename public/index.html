@@ -103,7 +103,7 @@
                 <span class="tn-label">Lịch Sử</span>
                 <div class="tn-active-indicator"></div>
             </button>
-            <button class="tn-item" id="tn-system" onclick="showPage('system')" title="Hệ Thống" style="display: none;">
+            <button class="tn-item" id="tn-system" onclick="showPage('system')" title="Hệ Thống">
                 <i class="fas fa-info-circle"></i>
                 <span class="tn-label">Hệ Thống</span>
                 <div class="tn-active-indicator"></div>
@@ -564,32 +564,32 @@
                                     <span style="background: var(--border-hl); color: #ffffff !important; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: bold; white-space: nowrap;">HỆ THỐNG PHỐI TRỘN</span>
                                 </div>
 
-                                <div style="display: grid; grid-template-columns: 1.2fr 1fr 0.8fr 0.8fr; gap: 12px; margin-bottom: 20px;">
-                                    <div>
-                                        <label style="font-size: 14px; font-weight: 700; color: var(--txt-main); display: block; margin-bottom: 6px;">Loại cây trồng</label>
-                                        <div style="display: flex; gap: 6px;">
-                                            <select id="calc-crop" class="field" onchange="onCropOrStageChange()" style="border-color: var(--border); background: var(--bg-card); flex: 1; height: 42px; padding: 6px 12px; min-height: 42px; font-size: 15px; font-weight: bold; color: var(--txt-dark);">
+                                <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; align-items: center;">
+                                    <div style="display: flex; align-items: center; gap: 8px; flex: 1.5; min-width: max-content;">
+                                        <label style="font-size: 13px; font-weight: 700; color: var(--txt-main); white-space: nowrap; margin: 0;">Loại cây trồng</label>
+                                        <div style="display: flex; gap: 6px; flex: 1;">
+                                            <select id="calc-crop" class="field" onchange="onCropOrStageChange()" style="border-color: var(--border); background: var(--bg-card); flex: 1; height: 38px; padding: 6px 10px; min-height: 38px; font-size: 14px; font-weight: bold; color: var(--txt-dark);">
                                                 <!-- Load từ JS -->
                                             </select>
-                                            <button type="button" onclick="showAddCropModal()" style="width: 42px; height: 42px; background: var(--p-color); color: white; border: none; border-radius: 6px; font-weight: 900; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Thêm cây trồng mới">+</button>
+                                            <button type="button" onclick="showAddCropModal()" style="width: 38px; height: 38px; background: var(--p-color); color: white; border: none; border-radius: 6px; font-weight: 900; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Thêm cây trồng mới">+</button>
                                         </div>
                                     </div>
-                                    <div>
-                                        <label style="font-size: 14px; font-weight: 700; color: var(--txt-main); display: block; margin-bottom: 6px;">Giai đoạn sinh trưởng</label>
-                                        <select id="calc-stage" class="field" onchange="onCropOrStageChange()" style="border-color: var(--border); background: var(--bg-card); height: 42px; padding: 6px 12px; min-height: 42px; font-size: 14px; font-weight: bold; color: var(--txt-dark);">
+                                    <div style="display: flex; align-items: center; gap: 8px; flex: 1.2; min-width: max-content;">
+                                        <label style="font-size: 13px; font-weight: 700; color: var(--txt-main); white-space: nowrap; margin: 0;">Giai đoạn</label>
+                                        <select id="calc-stage" class="field" onchange="onCropOrStageChange()" style="border-color: var(--border); background: var(--bg-card); flex: 1; height: 38px; padding: 6px 10px; min-height: 38px; font-size: 13px; font-weight: bold; color: var(--txt-dark);">
                                             <option value="seedling">🌱 Cây con (1-1-1)</option>
                                             <option value="vegetative">🌿 Sinh trưởng (1-1-1)</option>
                                             <option value="flowering">🌼 Ra hoa (2-1-3)</option>
                                             <option value="fruiting">🍅 Nuôi quả (5-3-10)</option>
                                         </select>
                                     </div>
-                                    <div>
-                                        <label style="font-size: 14px; font-weight: 700; color: var(--txt-main); display: block; margin-bottom: 6px;">Số lượng cây (gốc)</label>
-                                        <input type="number" id="calc-plants" class="field" value="2400" min="1" oninput="onCropOrStageChange()" style="border-color: var(--border); background: var(--bg-card); text-align: center; font-size: 18px; font-weight: 900; color: var(--txt-dark); height: 42px; padding: 6px 12px; min-height: 42px;">
+                                    <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: max-content;">
+                                        <label style="font-size: 13px; font-weight: 700; color: var(--txt-main); white-space: nowrap; margin: 0;">Số cây</label>
+                                        <input type="number" id="calc-plants" class="field" value="2400" min="1" oninput="onCropOrStageChange()" style="border-color: var(--border); background: var(--bg-card); flex: 1; text-align: center; font-size: 16px; font-weight: 900; color: var(--txt-dark); height: 38px; padding: 6px 10px; min-height: 38px;">
                                     </div>
-                                    <div>
-                                        <label style="font-size: 14px; font-weight: 700; color: var(--txt-main); display: block; margin-bottom: 6px;">Số lần tưới/ngày</label>
-                                        <select id="calc-cycles" class="field" onchange="onCropOrStageChange()" style="border-color: var(--border); background: var(--bg-card); height: 42px; padding: 6px 12px; min-height: 42px; font-size: 15px; font-weight: bold; color: var(--txt-dark); text-align: center;">
+                                    <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: max-content;">
+                                        <label style="font-size: 13px; font-weight: 700; color: var(--txt-main); white-space: nowrap; margin: 0;">Số lần tưới/ngày</label>
+                                        <select id="calc-cycles" class="field" onchange="onCropOrStageChange()" style="border-color: var(--border); background: var(--bg-card); flex: 1; height: 38px; padding: 6px 10px; min-height: 38px; font-size: 14px; font-weight: bold; color: var(--txt-dark); text-align: center;">
                                             <option value="1">1 lần</option>
                                             <option value="2">2 lần</option>
                                             <option value="3">3 lần</option>
