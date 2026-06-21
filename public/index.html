@@ -591,15 +591,10 @@
                                         <label style="font-size: 13px; font-weight: 700; color: var(--txt-main); white-space: nowrap; margin: 0;">Số lần tưới/ngày</label>
                                         <select id="calc-cycles" class="field" onchange="onCropOrStageChange()" style="border-color: var(--border); background: var(--bg-card); flex: 1; height: 38px; padding: 6px 10px; min-height: 38px; font-size: 14px; font-weight: bold; color: var(--txt-dark); text-align: center;">
                                             <option value="1">1 lần</option>
-                                            <option value="2">2 lần</option>
-                                            <option value="3">3 lần</option>
-                                            <option value="4">4 lần</option>
                                             <option value="5">5 lần</option>
-                                            <option value="6">6 lần</option>
-                                            <option value="7">7 lần</option>
-                                            <option value="8">8 lần</option>
-                                            <option value="9">9 lần</option>
                                             <option value="10">10 lần</option>
+                                            <option value="15">15 lần</option>
+                                            <option value="20">20 lần</option>
                                         </select>
                                     </div>
                                     <div style="display:none;">
@@ -613,14 +608,14 @@
                                         <span>📋 TỔNG LƯỢNG PHÂN N-P-K CẦN DÙNG (mL/Ngày):</span>
                                         <span id="formula-crop-name" style="color: var(--p-color); font-size: 13px;"></span>
                                     </div>
-                                    <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; border: 2px solid #000;">
+                                    <table style="width: 100%; border-collapse: collapse; font-size: 17px; text-align: center; border: 1px solid var(--border);">
                                         <thead>
-                                            <tr style="background: var(--bg-hover);">
-                                                <th style="padding: 8px 10px; border: 2px solid #000; color: var(--txt-dark); font-weight: 800; text-align: left;">Giai đoạn</th>
-                                                <th style="padding: 8px 10px; border: 2px solid #000; color: #16a34a; font-weight: 800;">Đạm (N)</th>
-                                                <th style="padding: 8px 10px; border: 2px solid #000; color: #2563eb; font-weight: 800;">Lân (P)</th>
-                                                <th style="padding: 8px 10px; border: 2px solid #000; color: #d97706; font-weight: 800;">Kali (K)</th>
-                                                <th style="padding: 8px 10px; border: 2px solid #000; color: #0ea5e9; font-weight: 800;">Nước (L/Ngày)</th>
+                                            <tr style="background: #ffffff;">
+                                                <th style="padding: 16px 18px; border: 1px solid var(--border); color: var(--txt-dark); font-weight: 800; text-align: left;">Giai đoạn</th>
+                                                <th style="padding: 16px 18px; border: 1px solid var(--border); color: #16a34a; font-weight: 800;">Đạm (N)</th>
+                                                <th style="padding: 16px 18px; border: 1px solid var(--border); color: #2563eb; font-weight: 800;">Lân (P)</th>
+                                                <th style="padding: 16px 18px; border: 1px solid var(--border); color: #d97706; font-weight: 800;">Kali (K)</th>
+                                                <th style="padding: 16px 18px; border: 1px solid var(--border); color: #0ea5e9; font-weight: 800;">Nước (L/Ngày)</th>
                                             </tr>
                                         </thead>
                                         <tbody id="crop-formula-body">
@@ -633,14 +628,14 @@
                                 <div id="calc-result-panel" style="background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 12px;">
                                     <div style="font-size: 14px; font-weight: 800; color: var(--txt-dark); margin-bottom: 10px;">📊 BÁO CÁO THỦY LỰC & NỒNG ĐỘ PHỐI TRỘN:</div>
                                     <div id="calc-summary" style="font-size: 14px; color: var(--p-color); background: var(--bg-hover); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-weight: 700; border-left: 4px solid var(--p-color);"></div>
-                                    <table style="width: 100%; border-collapse: collapse; font-size: 13px; border: 2px solid #000;">
+                                    <table style="width: 100%; border-collapse: collapse; font-size: 17px; border: 1px solid var(--border);">
                                         <thead>
-                                            <tr style="background: var(--bg-hover);">
-                                                <th style="padding: 8px 10px; text-align: left; border: 2px solid #000; color: var(--txt-dark); font-weight: 800;">Bồn dinh dưỡng</th>
-                                                <th style="padding: 8px 10px; text-align: center; border: 2px solid #000; color: var(--txt-dark); font-weight: 800;">Tổng thể tích (mL)</th>
-                                                <th style="padding: 8px 10px; text-align: center; border: 2px solid #000; color: var(--txt-dark); font-weight: 800;">Liều 1 chu kỳ (mL)</th>
-                                                <th style="padding: 8px 10px; text-align: center; border: 2px solid #000; color: var(--txt-dark); font-weight: 800;">Lưu lượng setpoint (L/phút)</th>
-                                                <th style="padding: 8px 10px; text-align: center; border: 2px solid #000; color: var(--txt-dark); font-weight: 800;">Nồng độ 1 chu kỳ (% V/V)</th>
+                                            <tr style="background: #ffffff;">
+                                                <th style="padding: 16px 18px; text-align: left; border: 1px solid var(--border); color: var(--txt-dark); font-weight: 800;">Bồn dinh dưỡng</th>
+                                                <th style="padding: 16px 18px; text-align: center; border: 1px solid var(--border); color: var(--txt-dark); font-weight: 800;">Tổng thể tích (mL)</th>
+                                                <th style="padding: 16px 18px; text-align: center; border: 1px solid var(--border); color: var(--txt-dark); font-weight: 800;">Liều 1 chu kỳ (mL)</th>
+                                                <th style="padding: 16px 18px; text-align: center; border: 1px solid var(--border); color: var(--txt-dark); font-weight: 800;">Lưu lượng setpoint (L/phút)</th>
+                                                <th style="padding: 16px 18px; text-align: center; border: 1px solid var(--border); color: var(--txt-dark); font-weight: 800;">Nồng độ 1 chu kỳ (% V/V)</th>
                                             </tr>
                                         </thead>
                                         <tbody id="calc-table-body"></tbody>

@@ -891,15 +891,15 @@ function onCropOrStageChange() {
             const wDay = totalWaterDay_Calc;
 
             const isCurrent = s === stage;
-            const bg = isCurrent ? 'background: #eff6ff;' : '';
+            const bg = 'background: #ffffff;';
             const fw = isCurrent ? 'font-weight: 900; color: #1e3a8a;' : 'font-weight: 600; color: #475569;';
             return `
             <tr style="${bg}">
-                <td style="padding: 8px 10px; border: 2px solid #000; text-align: left; ${fw}">${isCurrent ? '👉 ' : ''}${stageNames[s]}</td>
-                <td style="padding: 8px 10px; border: 2px solid #000; color: #16a34a; font-weight: 700;">${vN}</td>
-                <td style="padding: 8px 10px; border: 2px solid #000; color: #2563eb; font-weight: 700;">${vP}</td>
-                <td style="padding: 8px 10px; border: 2px solid #000; color: #d97706; font-weight: 700;">${vK}</td>
-                <td style="padding: 8px 10px; border: 2px solid #000; color: #0ea5e9; font-weight: 700;">${wDay.toFixed(1)}</td>
+                <td style="padding: 16px 18px; border: 1px solid var(--border); text-align: left; ${fw} font-size: 17px;">${isCurrent ? '👉 ' : ''}${stageNames[s]}</td>
+                <td style="padding: 16px 18px; border: 1px solid var(--border); color: #16a34a; font-weight: 700; font-size: 18px;">${vN}</td>
+                <td style="padding: 16px 18px; border: 1px solid var(--border); color: #2563eb; font-weight: 700; font-size: 18px;">${vP}</td>
+                <td style="padding: 16px 18px; border: 1px solid var(--border); color: #d97706; font-weight: 700; font-size: 18px;">${vK}</td>
+                <td style="padding: 16px 18px; border: 1px solid var(--border); color: #0ea5e9; font-weight: 700; font-size: 18px;">${wDay.toFixed(1)}</td>
             </tr>
             `;
         }).join('');
@@ -965,12 +965,12 @@ function onCropOrStageChange() {
             { ch: 'K', volTotal: volK, volCycle: volK_cycle, sp: setpointK, c: concK + '%' },
             { ch: 'W', volTotal: totalWaterDay.toFixed(1) + ' L', volCycle: totalWaterL.toFixed(1) + ' L', sp: '-', c: '-' }
         ].map(row => `
-            <tr>
-                <td style="padding:8px 10px; border: 2px solid #000; font-weight:700; font-size:14px; color:${colors[row.ch]}">${labels[row.ch]}</td>
-                <td style="padding:8px 10px; border: 2px solid #000; text-align:center; font-weight:800; font-size:15px; color:#64748b">${row.volTotal}</td>
-                <td style="padding:8px 10px; border: 2px solid #000; text-align:center; font-weight:900; font-size:16px; color:var(--txt-dark)">${row.volCycle}</td>
-                <td style="padding:8px 10px; border: 2px solid #000; text-align:center; font-weight:900; font-size:16px; color:#ef4444">${row.sp}</td>
-                <td style="padding:8px 10px; border: 2px solid #000; text-align:center; font-weight:800; font-size:14px; color:var(--txt-dark)">${row.c}</td>
+            <tr style="background: #ffffff;">
+                <td style="padding:16px 18px; border: 1px solid var(--border); font-weight:700; font-size:18px; color:${colors[row.ch]}">${labels[row.ch]}</td>
+                <td style="padding:16px 18px; border: 1px solid var(--border); text-align:center; font-weight:800; font-size:19px; color:#64748b">${row.volTotal}</td>
+                <td style="padding:16px 18px; border: 1px solid var(--border); text-align:center; font-weight:900; font-size:20px; color:var(--txt-dark)">${row.volCycle}</td>
+                <td style="padding:16px 18px; border: 1px solid var(--border); text-align:center; font-weight:900; font-size:20px; color:#ef4444">${row.sp}</td>
+                <td style="padding:16px 18px; border: 1px solid var(--border); text-align:center; font-weight:800; font-size:18px; color:var(--txt-dark)">${row.c}</td>
             </tr>
         `).join('');
     }
