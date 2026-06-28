@@ -79,8 +79,8 @@ function showPage(pageId) {
 
     // Update Title
     const titles = {
-        'dashboard': 'Tổng Quan', 'settings': 'Cài Đặt',
-        'recipes': 'Công Thức', 'history': 'Lịch Sử', 'system': 'Thông Tin Hệ Thống',
+        'dashboard': 'Tổng Quan', 'settings': 'Giám Sát',
+        'alerts': 'Cảnh Báo', 'history': 'Lịch Sử', 'system': 'Thông Tin Hệ Thống',
         'calibration': 'Hiệu Chuẩn Cảm Biến'
     };
     document.getElementById('topbarTitle').textContent = titles[pageId] || 'AutoFertilizer';
@@ -90,6 +90,7 @@ function showPage(pageId) {
 
     if(pageId === 'system') refreshSysInfo();
     if(pageId === 'calibration') loadCalibrationHistory();
+    if(pageId === 'alerts') renderAlerts();
 }
 
 function toggleSidebar(forceForce) {
@@ -136,6 +137,16 @@ socket.on('connect', () => {
     if(mqttDash) mqttDash.textContent = 'Đã kết nối Broker';
     if(mqttDot) mqttDot.style.background = 'var(--success)';
     
+    // Update state-* elements in dashboard status card
+    const stSocket = document.getElementById('state-socket');
+    const stMqtt = document.getElementById('state-mqtt');
+    const dotSocket = document.getElementById('dot-socket');
+    const dotMqtt = document.getElementById('dot-mqtt');
+    if(stSocket) { stSocket.textContent = 'Đã kết nối'; stSocket.style.color = 'var(--success)'; }
+    if(stMqtt) { stMqtt.textContent = 'Đã kết nối'; stMqtt.style.color = 'var(--success)'; }
+    if(dotSocket) dotSocket.style.background = '#16a34a';
+    if(dotMqtt) dotMqtt.style.background = '#16a34a';
+    
     syncStatus();
 });
 
@@ -148,10 +159,24 @@ socket.on('disconnect', () => {
     const sysConnMQTT = document.getElementById('sysConnMQTT'); if (sysConnMQTT) sysConnMQTT.textContent = 'Mất kết nối';
     
     // Dashboard new elements
-    const mqttDash = document.getElementById('sysConnMQTT_dash');
-    const mqttDot = document.getElementById('mqtt-dot');
-    if(mqttDash) mqttDash.textContent = 'Mất kết nối Broker';
-    if(mqttDot) mqttDot.style.background = 'var(--danger)';
+    const mqttDash2 = document.getElementById('sysConnMQTT_dash');
+    const mqttDot2 = document.getElementById('mqtt-dot');
+    if(mqttDash2) mqttDash2.textContent = 'Mất kết nối Broker';
+    if(mqttDot2) mqttDot2.style.background = 'var(--danger)';
+    
+    // Update state-* elements
+    const stSocketD = document.getElementById('state-socket');
+    const stMqttD = document.getElementById('state-mqtt');
+    const stEspD = document.getElementById('state-esp');
+    const dotSocket = document.getElementById('dot-socket');
+    const dotMqtt = document.getElementById('dot-mqtt');
+    const dotEsp = document.getElementById('dot-esp');
+    if(stSocketD) { stSocketD.textContent = 'Mất kết nối'; stSocketD.style.color = 'var(--danger)'; }
+    if(stMqttD) { stMqttD.textContent = 'Mất kết nối'; stMqttD.style.color = 'var(--danger)'; }
+    if(stEspD) { stEspD.textContent = 'Mất kết nối'; stEspD.style.color = 'var(--danger)'; }
+    if(dotSocket) dotSocket.style.background = '#ef4444';
+    if(dotMqtt) dotMqtt.style.background = '#ef4444';
+    if(dotEsp) dotEsp.style.background = '#ef4444';
     
     const srvTxt = document.getElementById('ov-server-txt');
     const srvDot = document.getElementById('ov-dot-server');
@@ -216,8 +241,9 @@ function fetchAiCalibration() {
 socket.on('session_started', (sess) => {
     window.currentSession = sess;
     showToast(`Bắt đầu trộn: ${sess.recipe_name}`, 'success');
-    document.getElementById('btnStart').disabled = true;
-    document.getElementById('btnStop').disabled = false;
+    const btnStart = document.getElementById('btnStart'); if(btnStart) btnStart.disabled = true;
+    const btnWater = document.getElementById('btnWaterOnly'); if(btnWater) btnWater.disabled = true;
+    const btnStop = document.getElementById('btnStop'); if(btnStop) btnStop.disabled = false;
     chartTimeOrigin = Date.now();
     clearChart();
 });
@@ -226,6 +252,7 @@ socket.on('session_completed', (record) => {
     window.currentSession = null;
     showToast(`Đã hoàn thành phối trộn! Tổng: ${record.total_ml}mL`, 'success');
     const btnStart = document.getElementById('btnStart'); if(btnStart) btnStart.disabled = false;
+    const btnWater = document.getElementById('btnWaterOnly'); if(btnWater) btnWater.disabled = false;
     const btnStop = document.getElementById('btnStop'); if(btnStop) btnStop.disabled = true;
     const monTxt = document.getElementById('monStatusTxt'); if(monTxt) monTxt.textContent = 'HOÀN THÀNH';
     const monStat = document.getElementById('monStatus'); if(monStat) monStat.className = 'conn-pill done';
@@ -236,6 +263,7 @@ socket.on('session_stopped', () => {
     window.currentSession = null;
     showToast('Đã dừng khẩn cấp!', 'error');
     const btnStart = document.getElementById('btnStart'); if(btnStart) btnStart.disabled = false;
+    const btnWater = document.getElementById('btnWaterOnly'); if(btnWater) btnWater.disabled = false;
     const btnStop = document.getElementById('btnStop'); if(btnStop) btnStop.disabled = true;
     const monTxt = document.getElementById('monStatusTxt'); if(monTxt) monTxt.textContent = 'ĐÃ HỦY';
     const monStat = document.getElementById('monStatus'); if(monStat) monStat.className = 'conn-pill idle';
@@ -253,6 +281,15 @@ function setESPStatus(status) {
     if(espTxt) espTxt.textContent = status ? 'TRỰC TUYẾN' : 'NGOẠI TUYẾN';
     if(espDot) espDot.className = 'ov-chip-dot ' + (status ? 'green' : '');
     if(espDashDot) espDashDot.style.background = status ? 'var(--success)' : 'var(--danger)';
+
+    // Update state-esp in dashboard status card
+    const stEspCard = document.getElementById('state-esp');
+    const dotEsp = document.getElementById('dot-esp');
+    if(stEspCard) { stEspCard.textContent = status ? 'Trực tuyến' : 'Mất kết nối'; stEspCard.style.color = status ? 'var(--success)' : 'var(--danger)'; }
+    if(dotEsp) dotEsp.style.background = status ? '#16a34a' : '#ef4444';
+    // Update state-mode
+    const stMode = document.getElementById('state-mode');
+    if(stMode) stMode.textContent = 'Đồng thời';
 
     const items = document.querySelectorAll('.conn-item');
     if(items[1]) {
@@ -318,6 +355,7 @@ function updateUI(data) {
     currentPhase = data.phase;
     const mStat = document.getElementById('monStatus');
     const mTxt = document.getElementById('monStatusTxt');
+    // Also sync to systemChip as fallback
     if(data.running) {
         if(mStat) mStat.className = 'conn-pill running active';
         if(mTxt) mTxt.textContent = 'ĐANG PHA TRỘN (ĐỒNG THỜI)';
@@ -325,6 +363,19 @@ function updateUI(data) {
         if(mStat) mStat.className = 'conn-pill ' + (data.phase===4 ? 'done' : 'idle');
         if(mTxt) mTxt.textContent = data.phase===4 ? 'HOÀN THÀNH' : 'SẴN SÀNG';
     }
+    // Sync state-socket/state-esp/state-mqtt display elements
+    const stSocket = document.getElementById('state-socket');
+    const stEsp = document.getElementById('state-esp');
+    const stMqtt = document.getElementById('state-mqtt');
+    const dotSocket = document.getElementById('dot-socket');
+    const dotEsp = document.getElementById('dot-esp');
+    const dotMqtt = document.getElementById('dot-mqtt');
+    if(stSocket) { stSocket.textContent = isOnline ? 'Đã kết nối' : 'Mất kết nối'; stSocket.style.color = isOnline ? 'var(--success)' : 'var(--danger)'; }
+    if(stEsp) { stEsp.textContent = espOnline ? 'Trực tuyến' : 'Ngoại tuyến'; stEsp.style.color = espOnline ? 'var(--success)' : 'var(--danger)'; }
+    if(stMqtt) { stMqtt.textContent = isOnline ? 'Đã kết nối' : 'Mất kết nối'; stMqtt.style.color = isOnline ? 'var(--success)' : 'var(--danger)'; }
+    if(dotSocket) dotSocket.style.background = isOnline ? '#16a34a' : '#ef4444';
+    if(dotEsp) dotEsp.style.background = espOnline ? '#16a34a' : '#ef4444';
+    if(dotMqtt) dotMqtt.style.background = isOnline ? '#16a34a' : '#ef4444';
 
     // Realistic Dashboard Sync
     const rdSysTxt = document.getElementById('ov-sys-txt');
@@ -337,28 +388,32 @@ function updateUI(data) {
         if(rdSysDot) rdSysDot.className = 'ov-chip-dot ' + (data.running ? 'green' : (data.phase === 4 ? 'blue' : ''));
     }
     
-    // Update individual flows and angles
+    // Update individual flows, angles, volumes and setpoints in diagram
     ['N','P','K'].forEach(ch => {
-        const fEl = document.getElementById(`rd-f${ch}`);
+        const vEl = document.getElementById(`rd-vol${ch}`);
         const valveData = data.valves ? data.valves[ch] : null;
-        if(fEl && valveData) fEl.textContent = ((valveData.flow_lpm||0) * 60).toFixed(0);
+        if(vEl && valveData) vEl.textContent = Math.round(valveData.volume_ml||0);
         
         const steps = valveData ? (valveData.steps || 0) : 0;
         const angleEl = document.getElementById(`rd-a${ch}`);
         if(angleEl) angleEl.textContent = Math.round((steps % 200) * 1.8) + '°';
+
+        const spEl = document.getElementById(`rd-sp${ch}`);
+        if(spEl && valveData) spEl.textContent = (valveData.target_lpm||0).toFixed(3);
     });
 
     // Main Flow Sensor Update
     const mainFlowLpm = data.main_flow_lpm || 0;
     const rdMainF = document.getElementById('rd-fMain');
     const rdTotalF = document.getElementById('rd-fTotal');
-    if(rdMainF) rdMainF.textContent = (mainFlowLpm * 60).toFixed(0);
-    if(rdTotalF) rdTotalF.textContent = (mainFlowLpm * 60).toFixed(0);
+    if(rdMainF) rdMainF.textContent = mainFlowLpm.toFixed(2);
+    if(rdTotalF) rdTotalF.textContent = mainFlowLpm.toFixed(2);
 
-    const monMainF = document.getElementById('flowMain');
+    // Main Flow
+    const monMainF = document.getElementById('flowMain') || document.getElementById('sysFlow');
     const monMainFLarge = document.getElementById('flowMainLarge');
-    const monMainVol = document.getElementById('volMain');
-    const monMainPulse = document.getElementById('pulseMain');
+    const monMainVol = document.getElementById('volMain') || document.getElementById('sysVolume');
+    const monMainPulse = document.getElementById('pulseMain') || document.getElementById('sysPulses');
     if(monMainF) monMainF.textContent = mainFlowLpm.toFixed(2);
     if(monMainFLarge) monMainFLarge.textContent = mainFlowLpm.toFixed(1);
     if(monMainVol) monMainVol.textContent = Math.round((data.main_volume_ml ?? data.total_volume_ml) || 0);
@@ -368,6 +423,24 @@ function updateUI(data) {
     if(stMain) {
         const isFlowing = mainFlowLpm > 0.05;
         stMain.innerHTML = `<span class="state-dot ${isFlowing?'open-dot':'closed-dot'}"></span> <span>${isFlowing?'Đang chảy':'Đang dừng'}</span>`;
+    }
+
+    // Cập nhật monitor card bơm chính (sysFlow, sysVolume, sysPulses, sysPumpState, sysValveState)
+    const sysFlow = document.getElementById('sysFlow');
+    const sysVolume = document.getElementById('sysVolume');
+    const sysPulses = document.getElementById('sysPulses');
+    const sysPumpState = document.getElementById('sysPumpState');
+    const sysValveState = document.getElementById('sysValveState');
+    if(sysFlow) sysFlow.textContent = mainFlowLpm.toFixed(2);
+    if(sysVolume) sysVolume.textContent = ((data.main_volume_ml ?? data.total_volume_ml ?? 0) / 1000).toFixed(2);
+    if(sysPulses) sysPulses.textContent = data.main_pulses || 0;
+    if(sysPumpState) {
+        const pumpOn = data.running || mainFlowLpm > 0.05;
+        sysPumpState.innerHTML = `<span class="state-dot ${pumpOn?'open-dot':'closed-dot'}"></span> <span>${pumpOn?'Đang chạy':'Đang tắt'}</span>`;
+    }
+    if(sysValveState) {
+        sysValveState.textContent = data.running ? 'Đang Mở' : 'Đã Đóng';
+        sysValveState.style.color = data.running ? 'var(--success)' : 'var(--danger)';
     }
 
     // Timer
@@ -595,11 +668,10 @@ function updateValve(ch, d) {
     const rdBar = document.getElementById(`rd-bar${ch}`);
     const rdPct = document.getElementById(`rd-pct${ch}`);
     if(rdVol) {
-        const remaining = Math.max(0, targetMl - d.volume_ml);
-        rdVol.textContent = (remaining / 1000).toFixed(1);
+        rdVol.textContent = Math.round(d.volume_ml||0);
         const rmPct = 100 - p;
-        rdBar.style.width = rmPct + '%';
-        rdPct.textContent = Math.round(rmPct) + '%';
+        if(rdBar) rdBar.style.width = rmPct + '%';
+        if(rdPct) rdPct.textContent = Math.round(rmPct) + '%';
     }
 }
 
@@ -706,7 +778,7 @@ function toggleAutoMode(checked) {
 // CẤU HÌNH CÂY TRỒNG VÀ PHỐI TRỘN DINH DƯỠNG ĐỘNG
 const DEFAULT_CROPS = {
     'tomato': {
-        name: '🍅 Cà chua (Chuẩn Haifa)',
+        name: '🍅 Công thức cà chua',
         rates: {
             'seedling':  { n: 222, p: 222, k: 222 },
             'vegetative':{ n: 267, p: 267, k: 267 },
@@ -841,15 +913,16 @@ function onCropOrStageChange() {
     const totalWaterDay_Calc = plants * waterPerPlantDay; // Tổng nước cả ngày (L)
     const totalFertDay_mL = totalWaterDay_Calc * 10; // Tổng phân (mL) = 1/100 nước
 
-    let rN = 0, rP = 0, rK = 0, sum = 1;
-    if (stage === 'seedling' || stage === 'vegetative') { rN = 1; rP = 1; rK = 1; sum = 3; }
-    else if (stage === 'flowering') { rN = 2; rP = 1; rK = 3; sum = 6; }
-    else if (stage === 'fruiting') { rN = 5; rP = 3; rK = 10; sum = 18; }
+    let baseVolN = 0, baseVolP = 0, baseVolK = 0;
+    if (stage === 'seedling') { baseVolN = 20; baseVolP = 20; baseVolK = 20; }
+    else if (stage === 'vegetative') { baseVolN = 25; baseVolP = 20; baseVolK = 25; }
+    else if (stage === 'flowering') { baseVolN = 25; baseVolP = 18; baseVolK = 30; }
+    else if (stage === 'fruiting') { baseVolN = 20; baseVolP = 18; baseVolK = 35; }
 
-    // Sử dụng tổng lượng phân CỦA CẢ NGÀY dựa trên 2L/cây
-    const volN = Math.round((totalFertDay_mL * rN) / sum);
-    const volP = Math.round((totalFertDay_mL * rP) / sum);
-    const volK = Math.round((totalFertDay_mL * rK) / sum);
+    // Sử dụng lượng phân thực tế của cả ngày (tính tỉ lệ theo số cây)
+    const volN = Math.round((baseVolN * 1000.0 * plants) / 2400.0);
+    const volP = Math.round((baseVolP * 1000.0 * plants) / 2400.0);
+    const volK = Math.round((baseVolK * 1000.0 * plants) / 2400.0);
     const multiplier = plants / 100; // Giữ lại cho tương thích nếu cần
 
     // Tính toán liều lượng cho 1 LẦN TƯỚI (Spoon-feeding)
@@ -867,10 +940,10 @@ function onCropOrStageChange() {
     if (inpK) inpK.value = volK_cycle;
 
     const stageNames = {
-        'seedling':  'Cây con (1-1-1)',
-        'vegetative':'Sinh trưởng (1-1-1)',
-        'flowering': 'Ra hoa (2-1-3)',
-        'fruiting':  'Nuôi quả (5-3-10)'
+        'seedling':  'Cây con',
+        'vegetative':'Sinh trưởng',
+        'flowering': 'Ra hoa',
+        'fruiting':  'Nuôi quả'
     };
     
     // Hiển thị Bảng Công thức 4 giai đoạn
@@ -879,14 +952,15 @@ function onCropOrStageChange() {
     const formulaBodyEl = document.getElementById('crop-formula-body');
     if (formulaBodyEl) {
         formulaBodyEl.innerHTML = ['seedling', 'vegetative', 'flowering', 'fruiting'].map(s => {
-            let rN = 0, rP = 0, rK = 0, sum = 1;
-            if (s === 'seedling' || s === 'vegetative') { rN = 1; rP = 1; rK = 1; sum = 3; }
-            else if (s === 'flowering') { rN = 2; rP = 1; rK = 3; sum = 6; }
-            else if (s === 'fruiting') { rN = 5; rP = 3; rK = 10; sum = 18; }
+            let bN = 0, bP = 0, bK = 0;
+            if (s === 'seedling') { bN = 20; bP = 20; bK = 20; }
+            else if (s === 'vegetative') { bN = 25; bP = 20; bK = 25; }
+            else if (s === 'flowering') { bN = 25; bP = 18; bK = 30; }
+            else if (s === 'fruiting') { bN = 20; bP = 18; bK = 35; }
 
-            const vN = Math.round((totalFertDay_mL * rN) / sum);
-            const vP = Math.round((totalFertDay_mL * rP) / sum);
-            const vK = Math.round((totalFertDay_mL * rK) / sum);
+            const vN = Math.round((bN * 1000.0 * plants) / 2400.0);
+            const vP = Math.round((bP * 1000.0 * plants) / 2400.0);
+            const vK = Math.round((bK * 1000.0 * plants) / 2400.0);
             
             const wDay = totalWaterDay_Calc;
 
@@ -905,10 +979,9 @@ function onCropOrStageChange() {
         }).join('');
     }
     
-    // Bỏ thời gian xả ống +2 phút, chốt đúng thời gian bơm của nước 
-    const totalDurationMin = (totalWaterDay_Calc / cycles) / 75.0;
+    // Bỏ thời gian xả ống +2 phút, chốt đúng thời gian bơm của nước (Lưu lượng chính 80 L/phút)
+    const totalDurationMin = (totalWaterDay_Calc / cycles) / 80.0;
     
-    // Thuật toán bám sát tỷ lệ 1/100: Tổng phân bón = 0.8 L/phút (Vì nước = 80 L/phút)
     const TOTAL_DOSING_LPM = 0.8;
     const totalVol_cycle_mL = volN_cycle + volP_cycle + volK_cycle;
     
@@ -930,16 +1003,16 @@ function onCropOrStageChange() {
     const rName = document.getElementById('recipeName');
     if (rName) rName.value = `${cropNameClean} - ${stageNames[stage] || stage} (${plants} gốc, 3-Phase × ${totalDurationMin}m)`;
 
-    // Báo cáo thủy lực cho 1 LẦN TƯỚI
-    const Q_MAIN_LPM   = 75.0;   
+    // Báo cáo thủy lực cho 1 LẦN TƯỚI (Lưu lượng chính 80 L/phút)
+    const Q_MAIN_LPM   = 80.0;   
     const totalWaterL  = Q_MAIN_LPM * totalDurationMin; 
     const waterPerPlant = totalWaterL / plants;
     const totalWaterDay = totalWaterL * cycles;
 
-    // Lưu lượng setpoint yêu cầu (L/phút) cho 1 lần tưới (Dựa trên tổng 0.8 L/p)
-    const setpointN = totalVol_cycle_mL > 0 ? parseFloat(((volN_cycle / totalVol_cycle_mL) * TOTAL_DOSING_LPM).toFixed(3)) : 0;
-    const setpointP = totalVol_cycle_mL > 0 ? parseFloat(((volP_cycle / totalVol_cycle_mL) * TOTAL_DOSING_LPM).toFixed(3)) : 0;
-    const setpointK = totalVol_cycle_mL > 0 ? parseFloat(((volK_cycle / totalVol_cycle_mL) * TOTAL_DOSING_LPM).toFixed(3)) : 0;
+    // Lưu lượng setpoint yêu cầu (L/phút) cho 1 lần tưới dựa trên công thức Q = V / t
+    const setpointN = totalDurationMin > 0 ? parseFloat(((volN_cycle / 1000.0) / totalDurationMin).toFixed(3)) : 0;
+    const setpointP = totalDurationMin > 0 ? parseFloat(((volP_cycle / 1000.0) / totalDurationMin).toFixed(3)) : 0;
+    const setpointK = totalDurationMin > 0 ? parseFloat(((volK_cycle / 1000.0) / totalDurationMin).toFixed(3)) : 0;
 
     const totalWaterML = totalWaterL * 1000;
     const concN = ((volN_cycle / (totalWaterML + volN_cycle)) * 100).toFixed(2);
@@ -952,7 +1025,7 @@ function onCropOrStageChange() {
             `<b>Tổng nước/Ngày: <span style="color:#ef4444">${totalWaterDay.toFixed(1)} L</span></b> &nbsp;|&nbsp; ` +
             `Nước/Chu kỳ: <b>${totalWaterL.toFixed(1)} L</b> (<b>${waterPerPlant.toFixed(2)}</b> L/cây) <br/>` +
             `Giai đoạn: <b>${stageNames[stage] || stage}</b> &nbsp;|&nbsp; ` +
-            `Thời gian bơm dự kiến: <b>~${dosingTimeMin.toFixed(1)} phút</b> (Tỉ lệ chuẩn 1/100)`;
+            `Thời gian bơm dự kiến: <b>~${dosingTimeMin.toFixed(1)} phút</b>`;
     }
 
     const tableBodyEl = document.getElementById('calc-table-body');
@@ -960,17 +1033,16 @@ function onCropOrStageChange() {
         const colors = { N: '#16a34a', P: '#2563eb', K: '#d97706', W: '#0ea5e9' };
         const labels = { N: '🌿 Bồn 1 (Đạm - N)', P: '🌾 Bồn 2 (Lân - P)', K: '🍂 Bồn 3 (Kali - K)', W: '💧 Nước sạch (Main)' };
         tableBodyEl.innerHTML = [
-            { ch: 'N', volTotal: volN, volCycle: volN_cycle, sp: setpointN, c: concN + '%' },
-            { ch: 'P', volTotal: volP, volCycle: volP_cycle, sp: setpointP, c: concP + '%' },
-            { ch: 'K', volTotal: volK, volCycle: volK_cycle, sp: setpointK, c: concK + '%' },
-            { ch: 'W', volTotal: totalWaterDay.toFixed(1) + ' L', volCycle: totalWaterL.toFixed(1) + ' L', sp: '-', c: '-' }
+            { ch: 'N', volTotal: volN, volCycle: volN_cycle, sp: setpointN },
+            { ch: 'P', volTotal: volP, volCycle: volP_cycle, sp: setpointP },
+            { ch: 'K', volTotal: volK, volCycle: volK_cycle, sp: setpointK },
+            { ch: 'W', volTotal: totalWaterDay.toFixed(1) + ' L', volCycle: totalWaterL.toFixed(1) + ' L', sp: '-' }
         ].map(row => `
             <tr style="background: #ffffff;">
                 <td style="padding:16px 18px; border: 1px solid var(--border); font-weight:700; font-size:18px; color:${colors[row.ch]}">${labels[row.ch]}</td>
                 <td style="padding:16px 18px; border: 1px solid var(--border); text-align:center; font-weight:800; font-size:19px; color:#64748b">${row.volTotal}</td>
                 <td style="padding:16px 18px; border: 1px solid var(--border); text-align:center; font-weight:900; font-size:20px; color:var(--txt-dark)">${row.volCycle}</td>
                 <td style="padding:16px 18px; border: 1px solid var(--border); text-align:center; font-weight:900; font-size:20px; color:#ef4444">${row.sp}</td>
-                <td style="padding:16px 18px; border: 1px solid var(--border); text-align:center; font-weight:800; font-size:18px; color:var(--txt-dark)">${row.c}</td>
             </tr>
         `).join('');
     }
@@ -1075,20 +1147,82 @@ function applyRecipe(n, p, k, name) {
     document.getElementById('inputP').value = p;
     document.getElementById('inputK').value = k;
     document.getElementById('recipeName').value = name;
-    onInputChange();
-    showPage('settings');
+    updateDashboardSettingsDisplay();
+    showPage('dashboard');
     showToast('Đã tải công thức!', 'success');
 }
 
 // ==========================================
-// 7. ALERTS (simplified - page removed)
+// 7. ALERTS
 // ==========================================
-function addAlert(msg, type='error') {
+function addAlert(msg, type = 'error') {
+    const time = new Date().toLocaleTimeString('vi-VN');
+    alertLog.unshift({ msg, type, time });
+    if (alertLog.length > 100) alertLog.pop();
     console.warn(`[Alert][${type}] ${msg}`);
+    // Update badge on nav tab
+    const tab = document.getElementById('tn-alerts');
+    if (tab) {
+        let badge = tab.querySelector('.alert-badge');
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'alert-badge';
+            badge.style.cssText = 'position:absolute;top:4px;right:4px;background:#ef4444;color:white;border-radius:9999px;font-size:10px;font-weight:800;padding:1px 5px;min-width:16px;text-align:center;';
+            tab.style.position = 'relative';
+            tab.appendChild(badge);
+        }
+        badge.textContent = alertLog.length;
+    }
+    // Live re-render if page is visible
+    const page = document.getElementById('page-alerts');
+    if (page && page.classList.contains('active')) renderAlerts();
 }
+
+function renderAlerts() {
+    const container = document.getElementById('alertList');
+    const empty = document.getElementById('alertEmptyState');
+    if (!container || !empty) return;
+    if (alertLog.length === 0) {
+        empty.style.display = '';
+        container.style.display = 'none';
+        return;
+    }
+    empty.style.display = 'none';
+    container.style.display = '';
+    const colorMap = { error: { bg: 'rgba(239,68,68,0.08)', border: '#ef4444', icon: '❌', label: 'LỖI' }, warning: { bg: 'rgba(245,158,11,0.08)', border: '#f59e0b', icon: '⚠️', label: 'CẢNH BÁO' }, info: { bg: 'rgba(59,130,246,0.08)', border: '#3b82f6', icon: 'ℹ️', label: 'THÔNG TIN' } };
+    container.innerHTML = alertLog.map((a, i) => {
+        const c = colorMap[a.type] || colorMap.error;
+        return `<div style="display:flex;align-items:flex-start;gap:14px;padding:14px 18px;border-bottom:1px solid var(--border);background:${c.bg};border-left:4px solid ${c.border};">
+            <span style="font-size:20px;flex-shrink:0;margin-top:1px;">${c.icon}</span>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;font-weight:700;color:var(--txt-dark);word-break:break-word;">${a.msg}</div>
+                <div style="font-size:11px;color:var(--txt-muted);margin-top:4px;">${a.time}</div>
+            </div>
+            <span style="background:${c.border};color:white;border-radius:4px;font-size:10px;font-weight:800;padding:2px 6px;white-space:nowrap;flex-shrink:0;">${c.label}</span>
+            <button onclick="deleteAlert(${i})" style="background:none;border:none;color:var(--txt-muted);cursor:pointer;font-size:16px;flex-shrink:0;padding:0 4px;">×</button>
+        </div>`;
+    }).join('');
+}
+
+window.deleteAlert = function(index) {
+    alertLog.splice(index, 1);
+    renderAlerts();
+    const tab = document.getElementById('tn-alerts');
+    const badge = tab ? tab.querySelector('.alert-badge') : null;
+    if (badge) badge.textContent = alertLog.length || '';
+    if (!alertLog.length && badge) badge.remove();
+};
+
 function saveThresholds() { showToast('Cảnh báo đã bị tắt', 'info'); }
-function renderAlerts() {}
-function clearAlertLog() {}
+
+function clearAlertLog() {
+    alertLog = [];
+    renderAlerts();
+    const tab = document.getElementById('tn-alerts');
+    const badge = tab ? tab.querySelector('.alert-badge') : null;
+    if (badge) badge.remove();
+    showToast('Đã xóa toàn bộ cảnh báo', 'info');
+}
 
 // ==========================================
 // 8. HISTORY & DB
@@ -1133,7 +1267,7 @@ function loadHistory() {
                      <td class="p-col">${h.P_ml||0}</td>
                      <td class="k-col">${h.K_ml||0}</td>
                      <td><strong>${(h.N_ml||0) + (h.P_ml||0) + (h.K_ml||0)}</strong></td>
-                     <td>${h.duration_s}s</td>
+                     <td>${(h.duration_s || 0)}s</td>
                      <td><strong>${h.total_ml||0}</strong> mL</td>
                      <td><span class="status-pill ${pt(h.status)}">${translateStatus(h.status)}</span></td>
                  </tr>
@@ -1261,13 +1395,16 @@ function switchTimerMode(mode) {
 
 // Gửi lệnh điều khiển thủ công (Manual)
 function testDevice(device, state) {
-    // Đồng bộ trạng thái checkbox giữa hai trang (System Info và Calibration)
+    // Đồng bộ trạng thái checkbox giữa ba trang (System Info, Calibration và Overview Sidebar)
     const id = device === 'pump' ? 'test-pump' : 'test-main-valve';
     const calibId = device === 'pump' ? 'calib-test-pump' : 'calib-test-main-valve';
+    const ovId = device === 'pump' ? 'test-pump-overview' : 'test-main-valve-overview';
     const cb = document.getElementById(id);
     const calibCb = document.getElementById(calibId);
+    const ovCb = document.getElementById(ovId);
     if (cb) cb.checked = state;
     if (calibCb) calibCb.checked = state;
+    if (ovCb) ovCb.checked = state;
 
     fetch('/api/manual', {
         method: 'POST',
@@ -1520,7 +1657,7 @@ function quickStartTimer() {
         }).then(res => res.json()).then(data => {
             if(data.error) showToast(data.error, 'error');
             else {
-                showPage('dashboard');
+                showPage('settings');
                 showToast(`Đã bắt đầu chu kì tưới hẹn giờ (${durationMin} phút)!`, 'success');
                 setTimeout(() => {
                     const monitorGrid = document.getElementById('monitor-grid');

@@ -352,6 +352,12 @@ mqttClient.on('message', async (topic, message) => {
         return;
     }
 
+    if (data.event === 'probe_done') {
+        io.emit('probe_done', data);
+        console.log(`[PROBE] Hoàn tất dò điểm giai đoạn: ${data.stage}`);
+        return;
+    }
+
     lastDeviceStatus = data;
 
     if (!deviceOnline) {
@@ -403,7 +409,7 @@ mqttClient.on('message', async (topic, message) => {
                 id:          Date.now(),
                 timestamp:   timestamp,
                 recipe_name: sess.recipe_name + suffix,
-                mode:        sess.mode || 'sequential',
+                mode:        'simultaneous',
                 ratio_n:     sess.calc?.N?.target_ml || sess.N_ml || sess.ratio?.N || 0,
                 ratio_p:     sess.calc?.P?.target_ml || sess.P_ml || sess.ratio?.P || 0,
                 ratio_k:     sess.calc?.K?.target_ml || sess.K_ml || sess.ratio?.K || 0,
@@ -464,10 +470,56 @@ app.get('/api/status', (req, res) => {
     });
 });
 
+app.post('/api/probe', (req, res) => {
+    const { stage, cycles } = req.body;
+    if (!stage || !cycles) return res.status(400).json({ error: 'Thiếu stage hoặc cycles' });
+    
+    const mqttCmd = {
+        cmd: 'probe_stage',
+        agri_stage: stage,
+        agri_cycles: cycles
+    };
+    
+    mqttClient.publish(TOPIC_CMD, JSON.stringify(mqttCmd), { qos: 1 });
+    console.log(`[PROBE] Đã gửi lệnh dò điểm cho giai đoạn: ${stage}, chu kỳ: ${cycles}`);
+    
+    return res.json({ success: true, command: mqttCmd });
+});
+
 app.post('/api/start', (req, res) => {
     const body = req.body;
 
     let mqttCmd, sessionInfo;
+
+    // 0. Chế độ Nông nghiệp ESP32 tự tính toán
+    if (body.cmd === 'start_agri') {
+        mqttCmd = {
+            cmd: 'start_agri',
+            agri_stage: body.agri_stage,
+            agri_cycles: body.agri_cycles
+        };
+        
+        const stageTranslations = {
+            'seedling': 'Cây con',
+            'vegetative': 'Sinh trưởng',
+            'flowering': 'Ra hoa',
+            'fruiting': 'Nuôi quả'
+        };
+        const stageVi = stageTranslations[body.agri_stage] || body.agri_stage;
+        
+        sessionInfo = {
+            recipe_name: `${stageVi} - ${body.agri_cycles} lần/ngày`,
+            mode: 'simultaneous',
+            start_time: Date.now()
+        };
+
+        if (waterTimerTimeout) clearTimeout(waterTimerTimeout);
+        mqttClient.publish(TOPIC_CMD, JSON.stringify(mqttCmd), { qos: 1 });
+        currentSession = sessionInfo;
+        io.emit('session_started', sessionInfo);
+        console.log(`[AGRI-MODE] Bắt đầu chu trình nông nghiệp: ${body.agri_stage}, ${body.agri_cycles} chu kỳ`);
+        return res.json({ success: true, session: sessionInfo, command: mqttCmd });
+    }
 
     // 1. Kiểm tra xả nước sạch (water-only)
     const nMl = parseFloat(body.N_ml) || 0;
@@ -543,11 +595,11 @@ app.post('/api/start', (req, res) => {
         const cP = calc(ratioP, pMl);
         const cK = calc(ratioK, kMl);
 
-        // Thuật toán bám sát tỷ lệ 1/100: Tổng phân bón = 0.8 L/phút (Vì nước = 80 L/phút)
-        const TOTAL_DOSING_LPM = 0.8;
-        const cN_lpm = parseFloat(((ratioN / totalParts) * TOTAL_DOSING_LPM).toFixed(3));
-        const cP_lpm = parseFloat(((ratioP / totalParts) * TOTAL_DOSING_LPM).toFixed(3));
-        const cK_lpm = parseFloat(((ratioK / totalParts) * TOTAL_DOSING_LPM).toFixed(3));
+        // Tính toán lưu lượng setpoint (L/phút) dựa trên lượng nước thực tế và lưu lượng bơm 80L/phút
+        const timeMin = total_water_l > 0 ? (total_water_l / 80.0) : 1.0;
+        const cN_lpm = parseFloat(((cN.target_ml / 1000.0) / timeMin).toFixed(3));
+        const cP_lpm = parseFloat(((cP.target_ml / 1000.0) / timeMin).toFixed(3));
+        const cK_lpm = parseFloat(((cK.target_ml / 1000.0) / timeMin).toFixed(3));
 
         mqttCmd = {
             cmd: 'start_sim',
@@ -601,7 +653,7 @@ app.post('/api/stop', async (req, res) => {
                 id:          Date.now(),
                 timestamp:   timestamp,
                 recipe_name: sess.recipe_name + ' [HỦY]',
-                mode:        sess.mode || 'sequential',
+                mode:        'simultaneous',
                 ratio_n: sess.ratio?.N || 0,
                 ratio_p: sess.ratio?.P || 0,
                 ratio_k: sess.ratio?.K || 0,
@@ -914,105 +966,7 @@ app.get('/api/calibration/history', async (req, res) => {
     }
 });
 
-app.post('/api/calibration/save', async (req, res) => {
-    try {
-        const { sensor, actual_ml, pulses, notes } = req.body;
-        const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
-        const query = `
-            INSERT INTO lich_su_hieu_chinh (thoi_gian, chu_ky, cam_bien, the_tich_ml, xung, luu_luong_tb_lpm, thoi_gian_chay_s, ghi_chu)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-        const values = [
-            timestamp, 
-            'Manual', 
-            sensor || 'N', 
-            parseFloat(actual_ml) || 0, 
-            parseInt(pulses) || 0, 
-            0, 
-            0, 
-            notes || 'Ghi nhận thủ công'
-        ];
-        const [result] = await pool.query(query, values);
-        res.json({ success: true, id: result.insertId });
-    } catch (e) {
-        console.error('[DB] Lỗi POST /calibration/save:', e.message);
-        res.status(500).json({ error: 'Lỗi Database' });
-    }
-});
-
-app.delete('/api/calibration/history/:id', async (req, res) => {
-    try {
-        await pool.query('DELETE FROM lich_su_hieu_chinh WHERE id = ?', [req.params.id]);
-        console.log(`[DB] Đã xóa lịch sử hiệu chuẩn id=${req.params.id}`);
-        res.json({ success: true });
-    } catch (e) {
-        console.error('[DB] Lỗi DELETE /calibration/history/:id:', e.message);
-        res.status(500).json({ error: 'Lỗi Database' });
-    }
-});
-
-
-app.get('/api/recipes', async (req, res) => {
-    try {
-        const query = `
-            SELECT ma_cong_thuc AS id, ten_cong_thuc AS name, 
-                   the_tich_bon1_ml AS N_ml, the_tich_bon2_ml AS P_ml, the_tich_bon3_ml AS K_ml, 
-                   mo_ta AS description, ngay_tao AS created_at 
-            FROM cong_thuc
-        `;
-        const [rows] = await pool.query(query);
-        res.json(rows);
-    } catch (e) {
-        console.error('[DB] Lỗi GET /recipes:', e.message);
-        res.status(500).json({ error: 'Lỗi Database' });
-    }
-});
-
-app.post('/api/recipes', async (req, res) => {
-    try {
-        const { name, N_ml, P_ml, K_ml, description } = req.body;
-        if (!name) return res.status(400).json({ error: 'Thiếu tên công thức' });
-
-        const id = Date.now().toString();
-        const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
-        const recipe = {
-            id,
-            name,
-            N_ml: parseFloat(N_ml) || 0,
-            P_ml: parseFloat(P_ml) || 0,
-            K_ml: parseFloat(K_ml) || 0,
-            description: description || '',
-            created_at: timestamp
-        };
-
-        const query = `
-            INSERT INTO cong_thuc (ma_cong_thuc, ten_cong_thuc, the_tich_bon1_ml, the_tich_bon2_ml, the_tich_bon3_ml, mo_ta, ngay_tao)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `;
-        const values = [
-            recipe.id, recipe.name, recipe.N_ml, recipe.P_ml, recipe.K_ml, 
-            recipe.description, recipe.created_at
-        ];
-        
-        await pool.query(query, values);
-        console.log(`[DB] Công thức mới: "${recipe.name}"`);
-        res.json(recipe);
-    } catch (e) {
-        console.error('[DB] Lỗi POST /recipes:', e.message);
-        res.status(500).json({ error: 'Lỗi Database' });
-    }
-});
-
-app.delete('/api/recipes/:id', async (req, res) => {
-    try {
-        await pool.query('DELETE FROM cong_thuc WHERE ma_cong_thuc = ?', [req.params.id]);
-        console.log(`[DB] Đã xóa công thức id=${req.params.id}`);
-        res.json({ success: true });
-    } catch (e) {
-        console.error('[DB] Lỗi DELETE /recipes/:id:', e.message);
-        res.status(500).json({ error: 'Lỗi Database' });
-    }
-});
+// Các endpoint công thức cũ đã được loại bỏ hoàn toàn dể sử dụng 4 giai đoạn mặc định
 
 
 // ================================================================
@@ -1188,6 +1142,10 @@ cron.schedule('* * * * *', async () => {
                 if ((s.n_ml > 0) || (s.p_ml > 0) || (s.k_ml > 0)) {
                     const totalParts = (s.n_ml || 0) + (s.p_ml || 0) + (s.k_ml || 0);
                     const durationMin = s.thoi_gian_tuoi_phut || 1.0;
+                    
+                    // Nước chính mặc định là 75 L/phút
+                    const total_water_l = 75.0 * durationMin;
+                    
                     const totalDosingFlowLpm = totalParts / (durationMin * 1000);
                     const total_lpm = totalDosingFlowLpm > 0.05 ? totalDosingFlowLpm : 3.0;
 
@@ -1200,6 +1158,7 @@ cron.schedule('* * * * *', async () => {
 
                     mqttCmd = {
                         cmd: 'start_sim',
+                        total_water_l: total_water_l,
                         recipe: {
                             N: { target_ml: Math.round((s.n_ml || 0) * ((s.n_ml || 0) >= 50 ? aiCalibration.N : 1.0)), target_lpm: cN_lpm, init_open: toInitOpen(cN_lpm) },
                             P: { target_ml: Math.round((s.p_ml || 0) * ((s.p_ml || 0) >= 50 ? aiCalibration.P : 1.0)), target_lpm: cP_lpm, init_open: toInitOpen(cP_lpm) },
@@ -1212,6 +1171,7 @@ cron.schedule('* * * * *', async () => {
                         start_time: Date.now(),
                         ratio: { N: s.n_ml || 0, P: s.p_ml || 0, K: s.k_ml || 0 },
                         total_liter: totalParts / 1000,
+                        total_water_l: total_water_l,
                         total_lpm: total_lpm,
                         calc: {
                             N: { target_ml: s.n_ml || 0, target_lpm: cN_lpm },
@@ -1221,6 +1181,7 @@ cron.schedule('* * * * *', async () => {
                     };
                 } else {
                     const durationMin = s.thoi_gian_tuoi_phut || 1.0;
+                    // Nước chính mặc định là 75 L/phút
                     const total_water_l = 75.0 * durationMin;
                     
                     mqttCmd = {
