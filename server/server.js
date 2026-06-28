@@ -391,7 +391,7 @@ mqttClient.on('message', async (topic, message) => {
 
             const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
             const isCompleted = (data.phase === 4);
-            const isFlowTimeout = (data.error === 'FLOW_TIMEOUT');
+            const isFlowTimeout = (data.error === 'LOW_FLOW_TIMEOUT');
             
             let status = 'completed';
             let suffix = '';
@@ -1133,7 +1133,7 @@ cron.schedule('* * * * *', async () => {
                 }
             }
 
-            if (shouldRun && !currentSession) {
+            if (shouldRun && !currentSession && deviceOnline) {
                 console.log(`[CRON] Kích hoạt lịch hẹn: ${s.mo_ta}`);
                 
                 let mqttCmd = {};

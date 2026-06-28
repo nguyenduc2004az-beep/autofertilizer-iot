@@ -734,20 +734,21 @@ start_init_label:
             Serial.printf("[%s] [SIM] Mở van chính và thiết lập vị trí van kim...\n", getRealTime().c_str());
             digitalWrite(VALVE_PIN, HIGH);
 
-            // Tính số bước motor (tốc độ châm phân * 1000 để ra ml/phút, sau đó chia 500 và nhân với MAX_OPEN_STEPS)
+            // Tính số bước motor từ lưu lượng mục tiêu qua bảng LUT (nội suy tuyến tính 6 điểm)
+            // Thay thế công thức magic number (LPM * 1000 / 500 * MAX_STEPS) bằng getStepsFromFlow()
             int initN = 0;
             if (targetN > 0) {
-                initN = ((targetLpmN * 1000.0f) / 500.0f) * MAX_OPEN_STEPS_N;
+                initN = (int)getStepsFromFlow(targetLpmN, lutN, NUM_POINTS_N);
                 initN = constrain(initN, 0, (int)MAX_OPEN_STEPS_N);
             }
             int initP = 0;
             if (targetP > 0) {
-                initP = ((targetLpmP * 1000.0f) / 500.0f) * MAX_OPEN_STEPS_P;
+                initP = (int)getStepsFromFlow(targetLpmP, lutP, NUM_POINTS_P);
                 initP = constrain(initP, 0, (int)MAX_OPEN_STEPS_P);
             }
             int initK = 0;
             if (targetK > 0) {
-                initK = ((targetLpmK * 1000.0f) / 500.0f) * MAX_OPEN_STEPS_K;
+                initK = (int)getStepsFromFlow(targetLpmK, lutK, NUM_POINTS_K);
                 initK = constrain(initK, 0, (int)MAX_OPEN_STEPS_K);
             }
 
@@ -986,7 +987,7 @@ void publishStatus() {
     doc["main_pulses"] = pulseMain;
     doc["total_target_ml"] = targetN + targetP + targetK;
     doc["total_volume_ml"] = volN + volP + volK;
-    char buffer[700];
+    char buffer[1024];
     size_t len = serializeJson(doc, buffer);
     mqttClient.publish(TOPIC_STATUS, (uint8_t*)buffer, len, false);
 }
@@ -1071,7 +1072,7 @@ void setup() {
     // Cấu hình MQTT
     mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
     mqttClient.setCallback(mqttCallback);
-    mqttClient.setBufferSize(700);
+    mqttClient.setBufferSize(1024);
     mqttClient.setKeepAlive(30);
     mqttClient.setSocketTimeout(10);
 
