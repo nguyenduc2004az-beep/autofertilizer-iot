@@ -526,14 +526,31 @@ void controlSimultaneous() {
         bool waterDone = (targetTotalWaterL > 0.0f && (currentVolL >= targetTotalWaterL || timeUp));
         
         if (waterDone) {
-            Serial.printf("[%s] [KẾT THÚC] Hoàn thành chu kỳ tưới nước chính (Lượng nước: %.2f L / Đích: %.2f L). Tắt toàn bộ hệ thống!\n", 
-                          getRealTime().c_str(), currentVolL, targetTotalWaterL);
+            // Kiểm tra lượng phân có châm đủ không
+            float volN = (pulseN * ML_PER_PULSE_N);
+            float volP = (pulseP * ML_PER_PULSE_P);
+            float volK = (pulseK * ML_PER_PULSE_K);
+            bool dosingOk = (targetN <= 0.0f || volN >= targetN * 0.9f)
+                         && (targetP <= 0.0f || volP >= targetP * 0.9f)
+                         && (targetK <= 0.0f || volK >= targetK * 0.9f);
+
+            if (!dosingOk) {
+                // Nước đủ nhưng phân chưa đủ 90% → cảnh báo lỗi
+                systemError = "DOSING_INCOMPLETE";
+                Serial.printf("[%s] [CẢNH BÁO] Đủ nước (%.1f L) nhưng phân CHƯA ĐỦ! N=%.0f/%.0fmL P=%.0f/%.0fmL K=%.0f/%.0fmL\n",
+                              getRealTime().c_str(), currentVolL,
+                              volN, targetN, volP, targetP, volK, targetK);
+            } else {
+                Serial.printf("[%s] [KẾT THÚC] Hoàn thành chu kỳ tưới. Nước: %.1f L | N=%.0f/%.0fmL P=%.0f/%.0fmL K=%.0f/%.0fmL\n",
+                              getRealTime().c_str(), currentVolL,
+                              volN, targetN, volP, targetP, volK, targetK);
+            }
             emergencyStop();
             digitalWrite(PUMP_PIN, LOW);
             digitalWrite(VALVE_PIN, LOW);
             systemRunning = false;
             currentPhase = 4; // Phase 4 = Completed
-            publishStatus(); // Gửi báo cáo MQTT
+            publishStatus(); // Gửi báo cáo MQTT (kèm systemError nếu có)
             return;
         }
     }
@@ -750,6 +767,10 @@ start_init_label:
             // Bước 2: Bật bơm chính
             Serial.printf("[%s] [SIM] Khởi động bơm chính...\n", getRealTime().c_str());
             digitalWrite(PUMP_PIN, HIGH);
+
+            // Reset bộ đếm xung NGAY SAU khi bơm bật để tránh đếm lượng nước
+            // chảy tự do trong 7 giây ổn định van vào tổng thể tích tưới chính
+            resetPulses();
         }       
         lastControlTime = millis();
         runStartTime = millis();        
