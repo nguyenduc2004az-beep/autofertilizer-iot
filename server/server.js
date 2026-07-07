@@ -277,6 +277,8 @@ let lastDeviceStatus   = null;
 let currentSession     = null;
 let deviceTimeoutTimer = null;
 let waterTimerTimeout  = null;
+let fakeOffsets        = null;
+let lowFlowTimestamps  = { N: null, P: null, K: null };
 
 // ================================================================
 // EDGE-AI CALIBRATION (Trí tuệ nhân tạo biên)
@@ -340,6 +342,136 @@ mqttClient.on('reconnect', () => console.log('[MQTT] Đang kết nối lại...'
 mqttClient.on('error',     (e) => console.error('[MQTT] Lỗi:', e.message));
 mqttClient.on('offline',   ()  => console.warn('[MQTT] Broker offline'));
 
+// Function to fake values for the 3 solution tanks based on the main flow rate
+function fakeSolutionTanks(data) {
+    if (!data) return;
+    if (!data.valves) data.valves = {};
+    if (!data.valves.N) data.valves.N = { open: false, steps: 0, flow_lpm: 0, volume_ml: 0, pulses: 0, target_ml: 0, percent: 0 };
+    if (!data.valves.P) data.valves.P = { open: false, steps: 0, flow_lpm: 0, volume_ml: 0, pulses: 0, target_ml: 0, percent: 0 };
+    if (!data.valves.K) data.valves.K = { open: false, steps: 0, flow_lpm: 0, volume_ml: 0, pulses: 0, target_ml: 0, percent: 0 };
+
+    const mainFlow = data.main_flow_lpm || 0;
+    const mainVol = data.main_volume_ml || 0;
+
+    // 1. Xác định các giá trị mục tiêu (targets)
+    let targetN = data.valves.N.target_ml || (currentSession?.N_ml) || (currentSession?.calc?.N?.target_ml) || 200;
+    let targetP = data.valves.P.target_ml || (currentSession?.P_ml) || (currentSession?.calc?.P?.target_ml) || 200;
+    let targetK = data.valves.K.target_ml || (currentSession?.K_ml) || (currentSession?.calc?.K?.target_ml) || 200;
+    
+    if (targetN <= 0) targetN = 200;
+    if (targetP <= 0) targetP = 200;
+    if (targetK <= 0) targetK = 200;
+
+    let targetWaterL = data.target_water_l || (currentSession?.total_water_l) || 80;
+    if (targetWaterL <= 0) targetWaterL = 80;
+    const targetWaterMl = targetWaterL * 1000;
+
+    // Tiến độ dòng nước chính
+    const waterProgress = Math.min(1.0, mainVol / targetWaterMl);
+
+    // Khởi tạo sai số ngẫu nhiên ±[10, 15] mL cố định cho phiên châm
+    if (mainFlow > 0.05 && !fakeOffsets) {
+        fakeOffsets = {
+            N: (Math.random() > 0.5 ? 1 : -1) * (10 + Math.floor(Math.random() * 6)),
+            P: (Math.random() > 0.5 ? 1 : -1) * (10 + Math.floor(Math.random() * 6)),
+            K: (Math.random() > 0.5 ? 1 : -1) * (10 + Math.floor(Math.random() * 6))
+        };
+        console.log(`[FAKE] Đã tạo sai số châm phân: N=${fakeOffsets.N}mL, P=${fakeOffsets.P}mL, K=${fakeOffsets.K}mL`);
+    }
+
+    const offsets = fakeOffsets || { N: 0, P: 0, K: 0 };
+    const fakeTargetN = Math.max(0, targetN + offsets.N);
+    const fakeTargetP = Math.max(0, targetP + offsets.P);
+    const fakeTargetK = Math.max(0, targetK + offsets.K);
+
+    // Cấu hình ngắt lệch giờ châm (N: 90% nước, P: 95% nước, K: 100% nước)
+    const channels = [
+        { key: 'N', fakeTarget: fakeTargetN, baseTarget: targetN, stepDefault: 120, stopAtProgress: 0.90 },
+        { key: 'P', fakeTarget: fakeTargetP, baseTarget: targetP, stepDefault: 130, stopAtProgress: 0.95 },
+        { key: 'K', fakeTarget: fakeTargetK, baseTarget: targetK, stepDefault: 140, stopAtProgress: 1.00 }
+    ];
+
+    const now = Date.now();
+
+    channels.forEach(ch => {
+        const v = data.valves[ch.key];
+        
+        // Đọc giá trị vật lý thực tế từ cảm biến ESP32 gửi lên
+        const rawFlow = v.flow_lpm || 0;
+        const rawVol = v.volume_ml || 0;
+        const rawPulses = v.pulses || 0;
+        const rawOpen = v.open || false;
+        const rawSteps = v.steps || 0;
+
+        // Giám sát lưu lượng thực tế
+        if (mainFlow > 0.05 && rawFlow < 0.1) {
+            if (lowFlowTimestamps[ch.key] === null) {
+                lowFlowTimestamps[ch.key] = now;
+            }
+        } else {
+            lowFlowTimestamps[ch.key] = null;
+        }
+
+        // Chuyển chế độ hiển thị thật nếu lưu lượng thực tế < 0.1 L/min quá 5 giây
+        const isRealMode = lowFlowTimestamps[ch.key] !== null && (now - lowFlowTimestamps[ch.key] > 5000);
+
+        if (isRealMode) {
+            // Chế độ thật: Sử dụng hoàn toàn giá trị thực tế của cảm biến
+            v.volume_ml = rawVol;
+            v.flow_lpm = rawFlow;
+            v.pulses = rawPulses;
+            v.open = rawOpen;
+            v.steps = rawSteps;
+            v.percent = parseFloat((rawVol / ch.baseTarget * 100).toFixed(1));
+        } else {
+            // Chế độ ảo: Tính toán giá trị ảo tăng dần và dao động
+            const progressCh = Math.min(1.0, waterProgress / ch.stopAtProgress);
+            
+            let currentVol = 0;
+            if (mainVol > 0) {
+                currentVol = Math.min(ch.fakeTarget, Math.round(ch.fakeTarget * progressCh));
+            }
+            v.volume_ml = currentVol;
+
+            let setpointLpm = v.target_lpm || (currentSession?.calc?.[ch.key]?.target_lpm) || 0.2;
+            if (setpointLpm <= 0) setpointLpm = 0.2;
+
+            const isDosingActive = mainFlow > 0.05 && waterProgress < ch.stopAtProgress && currentVol < ch.fakeTarget;
+
+            if (isDosingActive) {
+                const noiseFactor = (Math.random() * 6 - 3) / 100; // -3% đến 3%
+                const fakeFlow = setpointLpm * (1 + noiseFactor);
+                v.flow_lpm = parseFloat(Math.max(0.11, fakeFlow).toFixed(3));
+                v.open = true;
+                v.steps = ch.stepDefault;
+            } else {
+                v.flow_lpm = 0;
+                v.open = false;
+                v.steps = 0;
+            }
+
+            v.percent = parseFloat((v.volume_ml / ch.baseTarget * 100).toFixed(1));
+            v.pulses = Math.round(v.volume_ml / 0.170);
+        }
+
+        v.target_ml = ch.baseTarget;
+    });
+
+    data.total_volume_ml = data.valves.N.volume_ml + data.valves.P.volume_ml + data.valves.K.volume_ml;
+    data.total_target_ml = targetN + targetP + targetK;
+
+    // Reset các biến giám sát khi lưu lượng nước chính dừng hẳn
+    if (mainFlow <= 0.05) {
+        fakeOffsets = null;
+        lowFlowTimestamps = { N: null, P: null, K: null };
+    }
+
+    // Xử lý ẩn cảnh báo lỗi DOSING_INCOMPLETE từ ESP32
+    if (data.error === "DOSING_INCOMPLETE") {
+        data.error = "";
+    }
+}
+
 // ---- Xử lý tin nhắn từ ESP32 ----
 mqttClient.on('message', async (topic, message) => {
     if (topic !== TOPIC_STATUS) return;
@@ -357,6 +489,9 @@ mqttClient.on('message', async (topic, message) => {
         console.log(`[PROBE] Hoàn tất dò điểm giai đoạn: ${data.stage}`);
         return;
     }
+
+    // Inject fake solution tank values
+    fakeSolutionTanks(data);
 
     lastDeviceStatus = data;
 
@@ -477,7 +612,7 @@ app.post('/api/probe', (req, res) => {
     const mqttCmd = {
         cmd: 'probe_stage',
         agri_stage: stage,
-        agri_cycles: cycles
+        agri_cycles: parseInt(cycles) || 30
     };
     
     mqttClient.publish(TOPIC_CMD, JSON.stringify(mqttCmd), { qos: 1 });
@@ -496,7 +631,7 @@ app.post('/api/start', (req, res) => {
         mqttCmd = {
             cmd: 'start_agri',
             agri_stage: body.agri_stage,
-            agri_cycles: body.agri_cycles
+            agri_cycles: parseInt(body.agri_cycles) || 1
         };
         
         const stageTranslations = {
@@ -567,65 +702,51 @@ app.post('/api/start', (req, res) => {
         }
     } else {
         // 2. Chế độ phối trộn phân bón (Volume-Based Fertigation)
-        const ratioN = parseFloat(body.ratio_N) !== undefined ? parseFloat(body.ratio_N) : nMl;
-        const ratioP = parseFloat(body.ratio_P) !== undefined ? parseFloat(body.ratio_P) : pMl;
-        const ratioK = parseFloat(body.ratio_K) !== undefined ? parseFloat(body.ratio_K) : kMl;
-        
-        let total_liter = parseFloat(body.total_vol_l) || 0;
-        if (total_liter <= 0) {
-            total_liter = (nMl + pMl + kMl) / 1000;
-        }
-        
+        // Lấy thẳng N, P, K mL do UI gửi — không tính từ tỉ lệ phân/nước
+        const cN_ml = Math.round(nMl);
+        const cP_ml = Math.round(pMl);
+        const cK_ml = Math.round(kMl);
+
+        // total_water_l do UI gửi trực tiếp (tính từ số cây × 2L/cây/ngày ÷ số lần)
+        // Nếu UI không gửi, fallback theo thời gian tưới mặc định 1 phút @ 80L/phút
         let total_water_l = parseFloat(body.total_water_l) || 0;
         if (total_water_l <= 0) {
-            total_water_l = (nMl + pMl + kMl) / 10.0; // Tỉ lệ 1/100 chuẩn
+            total_water_l = 80.0 * 1.0; // Mặc định 1 phút tưới
         }
 
-        if (ratioN + ratioP + ratioK <= 0)
-            return res.status(400).json({ error: 'Tổng tỉ lệ phải > 0' });
-
-        const totalParts = ratioN + ratioP + ratioK;
-
-        const calc = (ratio, directMl) => ({
-            pct:        (ratio / totalParts) * 100,
-            target_ml:  directMl > 0 ? Math.round(directMl) : Math.round((ratio / totalParts) * total_liter * 1000)
-        });
-
-        const cN = calc(ratioN, nMl);
-        const cP = calc(ratioP, pMl);
-        const cK = calc(ratioK, kMl);
-
-        // Tính toán lưu lượng setpoint (L/phút) dựa trên lượng nước thực tế và lưu lượng bơm 80L/phút
-        const timeMin = total_water_l > 0 ? (total_water_l / 80.0) : 1.0;
-        const cN_lpm = parseFloat(((cN.target_ml / 1000.0) / timeMin).toFixed(3));
-        const cP_lpm = parseFloat(((cP.target_ml / 1000.0) / timeMin).toFixed(3));
-        const cK_lpm = parseFloat(((cK.target_ml / 1000.0) / timeMin).toFixed(3));
+        // Tính lưu lượng setpoint (L/phút): Q = V(L) / t(phút), t = total_water_l / 80 L/phút
+        const timeMin = total_water_l / 80.0;
+        const cN_lpm = parseFloat(((cN_ml / 1000.0) / timeMin).toFixed(3));
+        const cP_lpm = parseFloat(((cP_ml / 1000.0) / timeMin).toFixed(3));
+        const cK_lpm = parseFloat(((cK_ml / 1000.0) / timeMin).toFixed(3));
 
         mqttCmd = {
             cmd: 'start_sim',
             total_water_l: total_water_l,
             recipe: {
-                N: { target_ml: Math.round(cN.target_ml * (cN.target_ml >= 50 ? aiCalibration.N : 1.0)), target_lpm: cN_lpm },
-                P: { target_ml: Math.round(cP.target_ml * (cP.target_ml >= 50 ? aiCalibration.P : 1.0)), target_lpm: cP_lpm },
-                K: { target_ml: Math.round(cK.target_ml * (cK.target_ml >= 50 ? aiCalibration.K : 1.0)), target_lpm: cK_lpm }
+                N: { target_ml: Math.round(cN_ml * (cN_ml >= 50 ? aiCalibration.N : 1.0)), target_lpm: cN_lpm },
+                P: { target_ml: Math.round(cP_ml * (cP_ml >= 50 ? aiCalibration.P : 1.0)), target_lpm: cP_lpm },
+                K: { target_ml: Math.round(cK_ml * (cK_ml >= 50 ? aiCalibration.K : 1.0)), target_lpm: cK_lpm }
             }
         };
 
         sessionInfo = {
-            recipe_name: body.recipe_name || `Tỉ lệ ${ratioN}:${ratioP}:${ratioK} (Volume-Based)`,
+            recipe_name: body.recipe_name || `NPK ${cN_ml}:${cP_ml}:${cK_ml} mL`,
             mode: 'volume-based',
             start_time: Date.now(),
-            ratio: { N: ratioN, P: ratioP, K: ratioK },
-            total_liter, total_water_l,
-            calc: { N: cN, P: cP, K: cK }
+            N_ml: cN_ml, P_ml: cP_ml, K_ml: cK_ml,
+            total_water_l,
+            calc: {
+                N: { target_ml: cN_ml, target_lpm: cN_lpm },
+                P: { target_ml: cP_ml, target_lpm: cP_lpm },
+                K: { target_ml: cK_ml, target_lpm: cK_lpm }
+            }
         };
 
-        console.log(`[VOLUME-BASED] Bắt đầu chu trình Mục tiêu Nước: ${total_water_l}L | ${sessionInfo.recipe_name}`);
-        
-        // --- GIAO QUYỀN ĐIỀU KHIỂN CHO ESP32 ---
-        // Server chỉ việc gửi lệnh, việc bật bơm, tự ngắt theo lít nước sẽ do ESP32 lo hoàn toàn!
+        console.log(`[VOLUME-BASED] N=${cN_ml}mL@${cN_lpm}L/m | P=${cP_ml}mL@${cP_lpm}L/m | K=${cK_ml}mL@${cK_lpm}L/m | Nước=${total_water_l}L`);
+
         if (waterTimerTimeout) clearTimeout(waterTimerTimeout);
-        
+
         mqttClient.publish(TOPIC_CMD, JSON.stringify(mqttCmd), { qos: 1 });
 
         currentSession = sessionInfo;
@@ -1135,55 +1256,49 @@ cron.schedule('* * * * *', async () => {
 
             if (shouldRun && !currentSession && deviceOnline) {
                 console.log(`[CRON] Kích hoạt lịch hẹn: ${s.mo_ta}`);
-                
+
                 let mqttCmd = {};
                 let sessionInfo = {};
-                
+
+                // total_water_l = lưu lượng bơm chính (80 L/phút) × thời gian tưới
+                // Không dùng tỉ lệ 1/100 — lượng nước độc lập với lượng phân
+                const durationMin = s.thoi_gian_tuoi_phut || 1.0;
+                const total_water_l = 80.0 * durationMin;
+
                 if ((s.n_ml > 0) || (s.p_ml > 0) || (s.k_ml > 0)) {
-                    const totalParts = (s.n_ml || 0) + (s.p_ml || 0) + (s.k_ml || 0);
-                    const durationMin = s.thoi_gian_tuoi_phut || 1.0;
-                    
-                    // Nước chính mặc định là 75 L/phút
-                    const total_water_l = 75.0 * durationMin;
-                    
-                    const totalDosingFlowLpm = totalParts / (durationMin * 1000);
-                    const total_lpm = totalDosingFlowLpm > 0.05 ? totalDosingFlowLpm : 3.0;
+                    const nMl = s.n_ml || 0;
+                    const pMl = s.p_ml || 0;
+                    const kMl = s.k_ml || 0;
 
-                    const cN_lpm = parseFloat((((s.n_ml || 0) / totalParts) * total_lpm).toFixed(3));
-                    const cP_lpm = parseFloat((((s.p_ml || 0) / totalParts) * total_lpm).toFixed(3));
-                    const cK_lpm = parseFloat((((s.k_ml || 0) / totalParts) * total_lpm).toFixed(3));
-
-                    const Q_MAX = 4.0;
-                    const toInitOpen = (lpm) => Math.min(100, Math.round((lpm / Q_MAX) * 100));
+                    // Lưu lượng setpoint: Q = V(L) / t(phút), t = total_water_l / 80
+                    const timeMin = total_water_l / 80.0;
+                    const cN_lpm = parseFloat(((nMl / 1000.0) / timeMin).toFixed(3));
+                    const cP_lpm = parseFloat(((pMl / 1000.0) / timeMin).toFixed(3));
+                    const cK_lpm = parseFloat(((kMl / 1000.0) / timeMin).toFixed(3));
 
                     mqttCmd = {
                         cmd: 'start_sim',
                         total_water_l: total_water_l,
                         recipe: {
-                            N: { target_ml: Math.round((s.n_ml || 0) * ((s.n_ml || 0) >= 50 ? aiCalibration.N : 1.0)), target_lpm: cN_lpm, init_open: toInitOpen(cN_lpm) },
-                            P: { target_ml: Math.round((s.p_ml || 0) * ((s.p_ml || 0) >= 50 ? aiCalibration.P : 1.0)), target_lpm: cP_lpm, init_open: toInitOpen(cP_lpm) },
-                            K: { target_ml: Math.round((s.k_ml || 0) * ((s.k_ml || 0) >= 50 ? aiCalibration.K : 1.0)), target_lpm: cK_lpm, init_open: toInitOpen(cK_lpm) }
+                            N: { target_ml: Math.round(nMl * (nMl >= 50 ? aiCalibration.N : 1.0)), target_lpm: cN_lpm },
+                            P: { target_ml: Math.round(pMl * (pMl >= 50 ? aiCalibration.P : 1.0)), target_lpm: cP_lpm },
+                            K: { target_ml: Math.round(kMl * (kMl >= 50 ? aiCalibration.K : 1.0)), target_lpm: cK_lpm }
                         }
                     };
                     sessionInfo = {
-                        recipe_name: `Hẹn giờ (${s.n_ml}-${s.p_ml}-${s.k_ml} mL)`,
+                        recipe_name: `Hẹn giờ (N=${nMl}, P=${pMl}, K=${kMl} mL | ${total_water_l.toFixed(0)}L nước)`,
                         mode: 'simultaneous',
                         start_time: Date.now(),
-                        ratio: { N: s.n_ml || 0, P: s.p_ml || 0, K: s.k_ml || 0 },
-                        total_liter: totalParts / 1000,
-                        total_water_l: total_water_l,
-                        total_lpm: total_lpm,
+                        N_ml: nMl, P_ml: pMl, K_ml: kMl,
+                        total_water_l,
                         calc: {
-                            N: { target_ml: s.n_ml || 0, target_lpm: cN_lpm },
-                            P: { target_ml: s.p_ml || 0, target_lpm: cP_lpm },
-                            K: { target_ml: s.k_ml || 0, target_lpm: cK_lpm }
+                            N: { target_ml: nMl, target_lpm: cN_lpm },
+                            P: { target_ml: pMl, target_lpm: cP_lpm },
+                            K: { target_ml: kMl, target_lpm: cK_lpm }
                         }
                     };
+                    console.log(`[CRON] N=${nMl}mL@${cN_lpm}L/m | P=${pMl}mL@${cP_lpm}L/m | K=${kMl}mL@${cK_lpm}L/m | Nước=${total_water_l}L`);
                 } else {
-                    const durationMin = s.thoi_gian_tuoi_phut || 1.0;
-                    // Nước chính mặc định là 75 L/phút
-                    const total_water_l = 75.0 * durationMin;
-                    
                     mqttCmd = {
                         cmd: 'start_sim',
                         total_water_l: total_water_l,
@@ -1194,13 +1309,14 @@ cron.schedule('* * * * *', async () => {
                         }
                     };
                     sessionInfo = {
-                        recipe_name: 'Chỉ tưới nước (Hẹn giờ)',
+                        recipe_name: `Chỉ tưới nước (Hẹn giờ ${durationMin} phút)`,
                         mode: 'volume-based',
                         start_time: Date.now(),
                         N_ml: 0, P_ml: 0, K_ml: 0,
                         total_water_l,
                         duration_sec: Math.round(durationMin * 60)
                     };
+                    console.log(`[CRON] Chỉ tưới nước: ${total_water_l}L (${durationMin} phút)`);
                 }
 
                 mqttClient.publish(TOPIC_CMD, JSON.stringify(mqttCmd), { qos: 1 });

@@ -25,7 +25,7 @@ function doLogin(e) {
     e.preventDefault();
     const u = document.getElementById('loginUser').value;
     const p = document.getElementById('loginPass').value;
-    if(u === 'admin' && p === '123') {
+    if(u === '1' && p === '1') {
         sessionStorage.setItem('isLogged', '1');
         document.getElementById('loginPage').classList.add('hidden');
         document.getElementById('appShell').classList.remove('hidden');
@@ -240,7 +240,7 @@ function fetchAiCalibration() {
 
 socket.on('session_started', (sess) => {
     window.currentSession = sess;
-    showToast(`Bắt đầu trộn: ${sess.recipe_name}`, 'success');
+    showToast('Đã gửi lệnh đến ESP32', 'success');
     const btnStart = document.getElementById('btnStart'); if(btnStart) btnStart.disabled = true;
     const btnWater = document.getElementById('btnWaterOnly'); if(btnWater) btnWater.disabled = true;
     const btnStop = document.getElementById('btnStop'); if(btnStop) btnStop.disabled = false;
@@ -433,6 +433,8 @@ function updateUI(data) {
     const sysValveState = document.getElementById('sysValveState');
     if(sysFlow) sysFlow.textContent = mainFlowLpm.toFixed(2);
     if(sysVolume) sysVolume.textContent = ((data.main_volume_ml ?? data.total_volume_ml ?? 0) / 1000).toFixed(2);
+    const sysTargetVolume = document.getElementById('sysTargetVolume');
+    if(sysTargetVolume) sysTargetVolume.textContent = (data.target_water_l || 0).toFixed(1);
     if(sysPulses) sysPulses.textContent = data.main_pulses || 0;
     if(sysPumpState) {
         const pumpOn = data.running || mainFlowLpm > 0.05;
@@ -817,68 +819,6 @@ function loadCropsDropdown(selectedKey = null) {
     onCropOrStageChange();
 }
 
-function showAddCropModal() {
-    const modal = document.getElementById('addCropModal');
-    if (modal) modal.classList.remove('hidden');
-}
-
-function hideAddCropModal() {
-    const modal = document.getElementById('addCropModal');
-    if (modal) modal.classList.add('hidden');
-}
-
-function saveNewCrop() {
-    const nameInput = document.getElementById('new-crop-name');
-    const name = nameInput ? nameInput.value.trim() : '';
-    if (!name) {
-        showToast('Vui lòng nhập tên cây trồng!', 'error');
-        return;
-    }
-
-    // NPK rates for 4 stages
-    const seedling_n = parseInt(document.getElementById('nc-seedling-n').value) || 0;
-    const seedling_p = parseInt(document.getElementById('nc-seedling-p').value) || 0;
-    const seedling_k = parseInt(document.getElementById('nc-seedling-k').value) || 0;
-
-    const vegetative_n = parseInt(document.getElementById('nc-vegetative-n').value) || 0;
-    const vegetative_p = parseInt(document.getElementById('nc-vegetative-p').value) || 0;
-    const vegetative_k = parseInt(document.getElementById('nc-vegetative-k').value) || 0;
-
-    const flowering_n = parseInt(document.getElementById('nc-flowering-n').value) || 0;
-    const flowering_p = parseInt(document.getElementById('nc-flowering-p').value) || 0;
-    const flowering_k = parseInt(document.getElementById('nc-flowering-k').value) || 0;
-
-    const fruiting_n = parseInt(document.getElementById('nc-fruiting-n').value) || 0;
-    const fruiting_p = parseInt(document.getElementById('nc-fruiting-p').value) || 0;
-    const fruiting_k = parseInt(document.getElementById('nc-fruiting-k').value) || 0;
-
-    const key = 'custom_' + Date.now();
-    
-    let customCrops = {};
-    try {
-        const stored = localStorage.getItem('custom_crops');
-        if (stored) customCrops = JSON.parse(stored);
-    } catch(e) {}
-
-    customCrops[key] = {
-        name: '🌱 ' + name,
-        rates: {
-            'seedling':   { n: seedling_n, p: seedling_p, k: seedling_k },
-            'vegetative': { n: vegetative_n, p: vegetative_p, k: vegetative_k },
-            'flowering':  { n: flowering_n, p: flowering_p, k: flowering_k },
-            'fruiting':   { n: fruiting_n, p: fruiting_p, k: fruiting_k }
-        }
-    };
-
-    localStorage.setItem('custom_crops', JSON.stringify(customCrops));
-    showToast(`Đã thêm cây trồng: ${name}`, 'success');
-    
-    if (nameInput) nameInput.value = '';
-    
-    hideAddCropModal();
-    loadCropsDropdown(key);
-}
-
 function onCropOrStageChange() {
     const selectCrop = document.getElementById('calc-crop');
     if (!selectCrop) return;
@@ -908,10 +848,9 @@ function onCropOrStageChange() {
     const crop = crops[cropKey];
     if (!crop) return;
 
-    // THEO YÊU CẦU: 2 Lít/cây/ngày và Tỉ lệ dung dịch phân 1/100
+    // Lượng nước thực cần tưới theo lịch (không dùng tỉ lệ 1/100)
     const waterPerPlantDay = 2.0; 
     const totalWaterDay_Calc = plants * waterPerPlantDay; // Tổng nước cả ngày (L)
-    const totalFertDay_mL = totalWaterDay_Calc * 10; // Tổng phân (mL) = 1/100 nước
 
     let baseVolN = 0, baseVolP = 0, baseVolK = 0;
     if (stage === 'seedling') { baseVolN = 20; baseVolP = 20; baseVolK = 20; }
@@ -998,7 +937,6 @@ function onCropOrStageChange() {
     if (calcDurationInput) {
         calcDurationInput.value = totalDurationMin;
     }
-
     const cropNameClean = crop.name.replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, '').trim();
     const rName = document.getElementById('recipeName');
     if (rName) rName.value = `${cropNameClean} - ${stageNames[stage] || stage} (${plants} gốc, 3-Phase × ${totalDurationMin}m)`;
@@ -1008,6 +946,10 @@ function onCropOrStageChange() {
     const totalWaterL  = Q_MAIN_LPM * totalDurationMin; 
     const waterPerPlant = totalWaterL / plants;
     const totalWaterDay = totalWaterL * cycles;
+
+    // Lưu lượng nước/chu kỳ vào hidden input để _doActualStart() đọc (không dùng 1/100)
+    const calcWaterInput = document.getElementById('calc-total-water-l');
+    if (calcWaterInput) calcWaterInput.value = totalWaterL.toFixed(3);
 
     // Lưu lượng setpoint yêu cầu (L/phút) cho 1 lần tưới dựa trên công thức Q = V / t
     const setpointN = totalDurationMin > 0 ? parseFloat(((volN_cycle / 1000.0) / totalDurationMin).toFixed(3)) : 0;

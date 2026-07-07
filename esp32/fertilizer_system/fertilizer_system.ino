@@ -519,11 +519,9 @@ void controlSimultaneous() {
             }
         }
         
-        // Tính thời gian tưới lý thuyết dựa trên lượng nước mục tiêu (Lưu lượng máy bơm 80L/phút)
-        float timeMin = targetTotalWaterL > 0.0f ? (targetTotalWaterL / 80.0f) : 1.0f;
-        bool timeUp = (millis() - runStartTime >= timeMin * 60000.0f);
-        // Dừng khi đạt đủ thể tích hoặc hết thời gian tưới thiết lập (theo VanhanhHethong.ino)
-        bool waterDone = (targetTotalWaterL > 0.0f && (currentVolL >= targetTotalWaterL || timeUp));
+        // Dừng ngay khi lưu lượng chính (đo thực tế từ cảm biến) đạt đúng mục tiêu
+        // Không dùng thời gian lý thuyết để tránh vọt lố khi bơm chạy nhanh hơn dự kiến
+        bool waterDone = (targetTotalWaterL > 0.0f && currentVolL >= targetTotalWaterL);
         
         if (waterDone) {
             // Kiểm tra lượng phân có châm đủ không
@@ -558,9 +556,41 @@ void controlSimultaneous() {
     // Chỉ thực thi đọc lưu lượng khi simMode = true (Tức là chưa châm xong phân)
     if (!simMode) return;
 
-    // Trong thuật toán của VanhanhHethong.ino, các động cơ được giữ cố định ở vị trí mục tiêu
-    // và không được điều khiển hồi tiếp PI hay đóng sớm trong quá trình chạy.
-    // Do đó, chúng ta chỉ cần giữ nguyên trạng thái và đợi cho đến khi đạt đủ lượng nước/thời gian.
+    float factorN = getDynamicMlPerPulse(targetLpmN, ML_PER_PULSE_N);
+    float factorP = getDynamicMlPerPulse(targetLpmP, ML_PER_PULSE_P);
+    float factorK = getDynamicMlPerPulse(targetLpmK, ML_PER_PULSE_K);
+
+    float volN = pulseN * factorN;
+    float volP = pulseP * factorP;
+    float volK = pulseK * factorK;
+
+    // Kiểm tra và đóng van N
+    if (!doneN && targetN > 0.0f && volN >= targetN) {
+        Serial.printf("[%s] [SIM] Bồn N đạt mục tiêu: %.1f/%.1f mL. Đóng van N.\n", getRealTime().c_str(), volN, targetN);
+        closeValve(1);
+        doneN = true;
+    }
+    // Kiểm tra và đóng van P
+    if (!doneP && targetP > 0.0f && volP >= targetP) {
+        Serial.printf("[%s] [SIM] Bồn P đạt mục tiêu: %.1f/%.1f mL. Đóng van P.\n", getRealTime().c_str(), volP, targetP);
+        closeValve(2);
+        doneP = true;
+    }
+    // Kiểm tra và đóng van K
+    if (!doneK && targetK > 0.0f && volK >= targetK) {
+        Serial.printf("[%s] [SIM] Bồn K đạt mục tiêu: %.1f/%.1f mL. Đóng van K.\n", getRealTime().c_str(), volK, targetK);
+        closeValve(3);
+        doneK = true;
+    }
+
+    // Nếu tất cả các bồn có setpoint > 0 đều đã đạt mục tiêu
+    bool allDosingDone = (targetN <= 0.0f || doneN) &&
+                         (targetP <= 0.0f || doneP) &&
+                         (targetK <= 0.0f || doneK);
+    if (allDosingDone) {
+        Serial.printf("[%s] [SIM] Tất cả bồn phân đã châm đủ. Tắt chế độ châm phân, tiếp tục tưới nước chính đến %.1f L.\n", getRealTime().c_str(), targetTotalWaterL);
+        simMode = false;
+    }
 }
 
 //====================================================================================================================================================================================================================
@@ -583,7 +613,8 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (strcmp(cmd, "probe_stage") == 0) {
         if (systemRunning) { Serial.printf("[%s] [!] Hệ thống đang chạy. Bỏ qua lệnh probe.\n", getRealTime().c_str()); return; }
         const char* stage = doc["agri_stage"] | "flowering";
-        int cycles = doc["agri_cycles"] | 30;
+        int cycles = doc["agri_cycles"].as<int>();
+        if (cycles <= 0) cycles = 30;
         
         probeStageName = String(stage);
         if (probeStageName == "seedling") probeStageIndex = 0;
@@ -632,7 +663,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         else if (probeStageName == "fruiting") probeStageIndex = 3;
         else probeStageIndex = -1;
 
-        int cycles = doc["agri_cycles"] | 1;
+        int cycles = doc["agri_cycles"].as<int>();
         if (cycles <= 0) cycles = 1;
         
         float waterDay = 2400.0f * 2.0f; // 4800 L
@@ -985,6 +1016,7 @@ void publishStatus() {
     doc["main_flow_lpm"] = roundf(flowLpmMain * 100.0f) / 100.0f;
     doc["main_volume_ml"] = roundf(volMain);
     doc["main_pulses"] = pulseMain;
+    doc["target_water_l"] = targetTotalWaterL;
     doc["total_target_ml"] = targetN + targetP + targetK;
     doc["total_volume_ml"] = volN + volP + volK;
     char buffer[1024];

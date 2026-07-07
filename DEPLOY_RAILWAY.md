@@ -1,4 +1,4 @@
-﻿# HUONG DAN DEPLOY AUTOFERTILIZER LEN RAILWAY.APP
+# HUONG DAN DEPLOY AUTOFERTILIZER LEN RAILWAY.APP
 
 ## Ket qua cuoi cung
 Website cong khai tai: https://[ten-du-an].railway.app
@@ -109,7 +109,7 @@ Sau do nap lai firmware vao ESP32.
 1. Mo link Railway tren dien thoai 4G (KHONG dung WiFi nha)
    -> Neu hien trang dang nhap: THANH CONG
    
-2. Dang nhap: admin / admin123
+2. Dang nhap: 1 / 1
 
 3. Bat ESP32 -> Xem den ket noi tren dashboard
    -> Den xanh "Thiet bi ESP32": THANH CONG

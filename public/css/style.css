@@ -2408,5 +2408,37 @@ h1, h2, h3, h4, h5, h6,
     }
 }
 
+/* ── CUSTOM COLOR OVERRIDES FOR MONITOR CARDS & SCHEMATIC DIAGRAM ── */
+/* Đồng bộ màu chữ thực tế và mục tiêu cho các bồn ở trang Giám Sát */
+#volN {
+    color: var(--n-color) !important;
+    font-weight: bold !important;
+}
+#tgtN {
+    color: var(--k-color) !important;
+    font-weight: bold !important;
+}
+#volP {
+    color: var(--p-color) !important;
+    font-weight: bold !important;
+}
+#tgtP {
+    color: var(--k-color) !important;
+    font-weight: bold !important;
+}
+#volK {
+    color: var(--k-color) !important;
+    font-weight: bold !important;
+}
+#tgtK {
+    color: var(--k-color) !important;
+    font-weight: bold !important;
+}
 
-
+/* Đảm bảo chữ bên trong các bồn Q1, Q2, Q3 và bồn chính ở sơ đồ 2D luôn hiển thị màu trắng để dễ đọc */
+.rd-barrel-txt, .rd-barrel-txt * {
+    color: #ffffff !important;
+}
+.rd-big-tank-txt, .rd-big-tank-txt * {
+    color: #eff6ff !important;
+}
