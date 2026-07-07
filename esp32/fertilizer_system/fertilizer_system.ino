@@ -15,11 +15,6 @@ const int32_t stagePosN[4] = {2700, 3300, 3300, 2700}; // cây con, sinh trưở
 const int32_t stagePosP[4] = {530, 530, 480, 480};
 const int32_t stagePosK[4] = {670, 840, 1400, 3000};
 
-bool isProbing = false;
-int probeStageIndex = -1;
-String probeStageName = "";
-unsigned long probeStableTime = 0;
-
 #define DIR_N      13
 #define STEP_N     14
 #define EN_N       32
@@ -559,84 +554,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     const char* cmd = doc["cmd"];
     if (!cmd) return;
 
-    if (strcmp(cmd, "probe_stage") == 0) {
-        if (systemRunning) { Serial.printf("[%s] [!] Hệ thống đang chạy. Bỏ qua lệnh probe.\n", getRealTime().c_str()); return; }
-        const char* stage = doc["agri_stage"] | "flowering";
-        int cycles = doc["agri_cycles"].as<int>();
-        if (cycles <= 0) cycles = 30;        
-        probeStageName = String(stage);
-        if (probeStageName == "seedling") probeStageIndex = 0;
-        else if (probeStageName == "vegetative") probeStageIndex = 1;
-        else if (probeStageName == "flowering") probeStageIndex = 2;
-        else if (probeStageName == "fruiting") probeStageIndex = 3;
-        else probeStageIndex = -1;
-
-        if (probeStageIndex >= 0) {
-            isProbing = true;
-            probeStableTime = 0;
-            // Tính toán lưu lượng mục tiêu giống như start_agri
-            float waterDay = 2400.0f * 2.0f; // 4800 L
-            float dayVolN = 0, dayVolP = 0, dayVolK = 0;
-            
-            if (probeStageIndex == 0) { dayVolN = 20.0f; dayVolP = 20.0f; dayVolK = 20.0f; }
-            else if (probeStageIndex == 1) { dayVolN = 25.0f; dayVolP = 20.0f; dayVolK = 25.0f; }
-            else if (probeStageIndex == 2) { dayVolN = 25.0f; dayVolP = 18.0f; dayVolK = 30.0f; }
-            else if (probeStageIndex == 3) { dayVolN = 20.0f; dayVolP = 18.0f; dayVolK = 35.0f; }
-
-            targetN = (dayVolN * 1000.0f) / cycles;
-            targetP = (dayVolP * 1000.0f) / cycles;
-            targetK = (dayVolK * 1000.0f) / cycles;
-            targetTotalWaterL = 999999.0f; // Không dừng theo lượng nước vì chỉ dò
-            
-            float timeMin = (waterDay / cycles) / 80.0f; // Lưu lượng bơm 80L/phút
-            targetLpmN = (targetN / 1000.0f) / timeMin;
-            targetLpmP = (targetP / 1000.0f) / timeMin;
-            targetLpmK = (targetK / 1000.0f) / timeMin;
-            
-            Serial.printf("[%s] [PROBE] Bắt đầu dò điểm cho %s...\n", getRealTime().c_str(), stage);
-            goto start_init_label;
-        }
-        return;
-    }
-    if (strcmp(cmd, "start_agri") == 0) {
-        if (systemRunning) { Serial.printf("[%s] [!] Hệ thống đang chạy. Bỏ qua lệnh start_agri.\n", getRealTime().c_str()); return; }
-        isProbing = false;
-        const char* stage = doc["agri_stage"] | "flowering";
-        
-        probeStageName = String(stage);
-        if (probeStageName == "seedling") probeStageIndex = 0;
-        else if (probeStageName == "vegetative") probeStageIndex = 1;
-        else if (probeStageName == "flowering") probeStageIndex = 2;
-        else if (probeStageName == "fruiting") probeStageIndex = 3;
-        else probeStageIndex = -1;
-
-        int cycles = doc["agri_cycles"].as<int>();
-        if (cycles <= 0) cycles = 1;
-        
-        float waterDay = 2400.0f * 2.0f; // 4800 L
-        float dayVolN = 0, dayVolP = 0, dayVolK = 0;
-        
-        if (strcmp(stage, "seedling") == 0) { dayVolN = 20.0f; dayVolP = 20.0f; dayVolK = 20.0f; }
-        else if (strcmp(stage, "vegetative") == 0) { dayVolN = 25.0f; dayVolP = 20.0f; dayVolK = 25.0f; }
-        else if (strcmp(stage, "flowering") == 0) { dayVolN = 25.0f; dayVolP = 18.0f; dayVolK = 30.0f; }
-        else if (strcmp(stage, "fruiting") == 0) { dayVolN = 20.0f; dayVolP = 18.0f; dayVolK = 35.0f; }
-        
-        targetN = (dayVolN * 1000.0f) / cycles;
-        targetP = (dayVolP * 1000.0f) / cycles;
-        targetK = (dayVolK * 1000.0f) / cycles;
-        targetTotalWaterL = waterDay / cycles;
-        
-        float timeMin = targetTotalWaterL / 80.0f; // Lưu lượng bơm 80L/phút
-        targetLpmN = (targetN / 1000.0f) / timeMin;
-        targetLpmP = (targetP / 1000.0f) / timeMin;
-        targetLpmK = (targetK / 1000.0f) / timeMin;
-
-        goto start_init_label;
-    }   
     // ---- Lệnh KHỞI ĐỘNG PHA TRỘN ĐỒNG THỜI ----
     if (strcmp(cmd, "start_sim") == 0) {
         if (systemRunning) { Serial.printf("[%s] [!] Hệ thống đang chạy. Bỏ qua lệnh start.\n", getRealTime().c_str()); return; }
-        isProbing = false;
         targetN    = doc["recipe"]["N"]["target_ml"] | 0.0f;
         targetP    = doc["recipe"]["P"]["target_ml"] | 0.0f;
         targetK    = doc["recipe"]["K"]["target_ml"] | 0.0f;
@@ -929,23 +849,20 @@ void publishStatus() {
     doc["ts"]        = (uint32_t)millis();
     doc["running"]   = systemRunning;
     doc["phase"]     = currentPhase;
-    doc["wifi_rssi"] = WiFi.RSSI();
     doc["error"]     = systemError;
 
     auto mkValve = [&](const char* key, float vol, float target,
-                       float flow, int32_t steps, bool isOpen, uint32_t rawPulses) {
+                       float flow, int32_t steps) {
         JsonObject v = doc["valves"][key].to<JsonObject>();
-        v["open"]      = isOpen;
         v["steps"]     = steps;
         v["flow_lpm"]  = roundf(flow * 100.0f) / 100.0f;
         v["volume_ml"] = roundf(vol);
-        v["pulses"]    = rawPulses;
         v["target_ml"] = roundf(target);
         v["percent"]   = (target > 0) ? min(100.0f, vol / target * 100.0f) : 0.0f;
     };
-    mkValve("N", volN, targetN, flowLpmN, posN, targetN > 0 && !doneN, pulseN);
-    mkValve("P", volP, targetP, flowLpmP, posP, targetP > 0 && !doneP, pulseP);
-    mkValve("K", volK, targetK, flowLpmK, posK, targetK > 0 && !doneK, pulseK);
+    mkValve("N", volN, targetN, flowLpmN, posN);
+    mkValve("P", volP, targetP, flowLpmP, posP);
+    mkValve("K", volK, targetK, flowLpmK, posK);
     doc["main_flow_lpm"] = roundf(flowLpmMain * 100.0f) / 100.0f;
     doc["main_volume_ml"] = roundf(volMain);
     doc["main_pulses"] = pulseMain;

@@ -35,7 +35,7 @@ function doLogin(e) {
         loadRecipes();
         initWatering();
         loadSchedules();
-        fetchAiCalibration();
+
         showToast('Đăng nhập thành công!', 'success');
         updateClock();
         setInterval(updateClock, 1000);
@@ -62,7 +62,7 @@ if(sessionStorage.getItem('isLogged') === '1') {
     loadRecipes();
     initWatering();
     loadSchedules();
-    fetchAiCalibration();
+
     setInterval(updateClock, 1000);
 }
 
@@ -80,16 +80,13 @@ function showPage(pageId) {
     // Update Title
     const titles = {
         'dashboard': 'Tổng Quan', 'settings': 'Giám Sát',
-        'alerts': 'Cảnh Báo', 'history': 'Lịch Sử', 'system': 'Thông Tin Hệ Thống',
-        'calibration': 'Hiệu Chuẩn Cảm Biến'
+        'alerts': 'Cảnh Báo', 'history': 'Lịch Sử'
     };
     document.getElementById('topbarTitle').textContent = titles[pageId] || 'AutoFertilizer';
 
 
     if(window.innerWidth <= 768) toggleSidebar(false);
 
-    if(pageId === 'system') refreshSysInfo();
-    if(pageId === 'calibration') loadCalibrationHistory();
     if(pageId === 'alerts') renderAlerts();
 }
 
@@ -215,28 +212,7 @@ socket.on('device_status', (data) => {
     updateUI(data);
 });
 
-socket.on('ai_calibration_updated', (data) => {
-    updateAiCalibrationUI(data);
-});
 
-socket.on('calibration_history_updated', () => {
-    loadCalibrationHistory();
-});
-
-function updateAiCalibrationUI(data) {
-    const aiN = document.getElementById('aiFactorN');
-    const aiP = document.getElementById('aiFactorP');
-    const aiK = document.getElementById('aiFactorK');
-    const aiSamples = document.getElementById('aiSamples');
-    if (aiN) aiN.textContent = data.N.toFixed(2);
-    if (aiP) aiP.textContent = data.P.toFixed(2);
-    if (aiK) aiK.textContent = data.K.toFixed(2);
-    if (aiSamples) aiSamples.textContent = data.history_samples;
-}
-
-function fetchAiCalibration() {
-    fetch('/api/ai-calibration').then(r => r.json()).then(updateAiCalibrationUI).catch(e => console.warn('AI fetch error:', e));
-}
 
 socket.on('session_started', (sess) => {
     window.currentSession = sess;
@@ -624,10 +600,7 @@ function updateUI(data) {
     if(rdFlow) rdFlow.textContent = (totFlow * 60).toFixed(0) + ' L/h';
     if(rdPFlow) rdPFlow.textContent = (totFlow * 60).toFixed(0) + ' L/h';
 
-    // Cập nhật giá trị đo đạc trên trang hiệu chuẩn
-    if (typeof updateCalibrationUIValues === 'function') {
-        updateCalibrationUIValues(data);
-    }
+
 }
 
 function updateValve(ch, d) {
@@ -1267,32 +1240,7 @@ function exportCSV() {
     });
 }
 
-function exportCalibrationCSV() {
-    fetch('/api/calibration/history').then(r=>r.json()).then(data => {
-        let csv = "Thời Gian,Chu Kỳ Chạy Thử,Cảm Biến,Thể Tích (ml),Số Xung,Lưu Lượng TB (L/min),Thời Gian Chạy (s),Ghi Chú\n";
-        data.forEach(h => {
-            const sensorName = h.sensor === 'Main' ? 'Đường ống chính' : 'Bồn ' + h.sensor;
-            csv += `"${h.timestamp}","${h.cycle}","${sensorName}",${h.volume_ml},${h.pulses},${h.flow_lpm},${h.duration_s},"${h.notes||''}"\n`;
-        });
-        // Sử dụng BOM để Excel nhận diện tiếng Việt có dấu đúng cách
-        const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "Lich_Su_Hieu_Chuan.csv";
-        a.click();
-        URL.revokeObjectURL(url);
-    });
-}
 
-function refreshSysInfo() {
-    fetch('/api/db-stats').then(r=>r.json()).then(data => {
-        document.getElementById('dbSessions').textContent = data.sessions_count;
-        document.getElementById('dbRecipes').textContent = data.recipes_count;
-        document.getElementById('dbTotalMl').textContent = data.total_ml_mixed + ' mL';
-        document.getElementById('sysUptime').textContent = Math.floor(performance.now()/1000) + 's (client)';
-    });
-}
 
 // ==========================================
 // 9. ĐIỀU KHIỂN & LẬP LỊCH (TABS)
@@ -1750,376 +1698,4 @@ loadCropsDropdown();
 syncStatus();
 setInterval(syncStatus, 10000); // Đồng bộ lại mỗi 10 giây cho chắc chắn
 setInterval(updateDashboardSettingsDisplay, 5000); // Đồng bộ các thông số cài đặt lên Dashboard mỗi 5 giây
-
-// ================================================================
-// LOGIC HIỆU CHUẨN CẢM BIẾN (PHE CLIENT-SIDE KHÔNG ĐỔI FIRMWARE)
-// ================================================================
-let calibOffsets = {
-    N: 0,
-    P: 0,
-    K: 0,
-    Main: 0
-};
-
-let lastCalibRunResults = null;
-let calibStartValues = { N: 0, P: 0, K: 0, Main: 0 };
-let calibStartPulses = { N: 0, P: 0, K: 0, Main: 0 };
-let isCalibRunning = false;
-
-function startCalibrationRun() {
-    const btnStart = document.getElementById('btnCalibStart');
-    const btnStop = document.getElementById('btnCalibStop');
-    const statusEl = document.getElementById('calibRunStatus');
-    
-    if (btnStart) btnStart.disabled = true;
-    if (btnStop) btnStop.disabled = false;
-    if (statusEl) {
-        statusEl.innerHTML = 'Trạng thái: <span style="color: #3b82f6; font-weight: bold;">Đang mở van chính (chờ 5 giây)...</span>';
-    }
-    
-    if (lastStatusData) {
-        calibStartValues = {
-            N: lastStatusData.valves?.N?.volume_ml || 0,
-            P: lastStatusData.valves?.P?.volume_ml || 0,
-            K: lastStatusData.valves?.K?.volume_ml || 0,
-            Main: lastStatusData.main_volume_ml || lastStatusData.total_volume_ml || 0
-        };
-        calibStartPulses = {
-            N: lastStatusData.valves?.N?.pulses || 0,
-            P: lastStatusData.valves?.P?.pulses || 0,
-            K: lastStatusData.valves?.K?.pulses || 0,
-            Main: lastStatusData.main_pulses || 0
-        };
-    } else {
-        calibStartValues = { N: 0, P: 0, K: 0, Main: 0 };
-        calibStartPulses = { N: 0, P: 0, K: 0, Main: 0 };
-    }
-    isCalibRunning = true;
-    
-    fetch('/api/calibration/start-run', { method: 'POST' })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) {
-            showToast(data.error, 'error');
-            isCalibRunning = false;
-            resetCalibButtons();
-        } else {
-            showToast('Đang mở van chính... Bơm sẽ tự khởi động sau 5 giây và chạy trong 15 giây.', 'info');
-            setTimeout(() => {
-                if (statusEl && btnStart && btnStart.disabled) {
-                    let timeLeft = 15;
-                    statusEl.innerHTML = `Trạng thái: <span style="color: #22c55e; font-weight: bold;">Bơm đang chạy hiệu chuẩn (còn lại ${timeLeft}s)...</span>`;
-                    
-                    const countdown = setInterval(() => {
-                        timeLeft--;
-                        if (timeLeft > 0) {
-                            if (statusEl && isCalibRunning) {
-                                statusEl.innerHTML = `Trạng thái: <span style="color: #22c55e; font-weight: bold;">Bơm đang chạy hiệu chuẩn (còn lại ${timeLeft}s)...</span>`;
-                            } else {
-                                clearInterval(countdown);
-                            }
-                        } else {
-                            clearInterval(countdown);
-                            if (isCalibRunning) {
-                                stopCalibrationRun();
-                            }
-                        }
-                    }, 1000);
-                }
-            }, 5000);
-        }
-    })
-    .catch(e => {
-        isCalibRunning = false;
-        showToast('Lỗi kết nối máy chủ', 'error');
-        resetCalibButtons();
-    });
-}
-
-function stopCalibrationRun() {
-    const btnStart = document.getElementById('btnCalibStart');
-    const btnStop = document.getElementById('btnCalibStop');
-    const statusEl = document.getElementById('calibRunStatus');
-    
-    if (btnStart) btnStart.disabled = false;
-    if (btnStop) btnStop.disabled = true;
-    if (statusEl) statusEl.innerHTML = 'Trạng thái: <span style="color: #64748b; font-weight: bold;">Đang dừng và tính toán...</span>';
-    
-    fetch('/api/calibration/stop-run', { method: 'POST' })
-    .then(r => r.json())
-    .then(data => {
-        isCalibRunning = false;
-        if (data.error) {
-            showToast(data.error, 'error');
-            resetCalibButtons();
-        } else if (data.results) {
-            showToast('Đã dừng chạy thử hiệu chuẩn!', 'success');
-            lastCalibRunResults = data.results;
-            
-            if (statusEl) {
-                statusEl.innerHTML = `Trạng thái: <span style="color: #22c55e; font-weight: bold;">Hoàn thành chu kỳ ${data.cycleId} (${data.duration_s}s)</span>`;
-            }
-            
-            populateCalibCalculation();
-        } else {
-            resetCalibButtons();
-        }
-    })
-    .catch(e => {
-        isCalibRunning = false;
-        showToast('Lỗi kết nối máy chủ', 'error');
-        resetCalibButtons();
-    });
-}
-
-function resetCalibButtons() {
-    const btnStart = document.getElementById('btnCalibStart');
-    const btnStop = document.getElementById('btnCalibStop');
-    const statusEl = document.getElementById('calibRunStatus');
-    if (btnStart) btnStart.disabled = false;
-    if (btnStop) btnStop.disabled = true;
-    if (statusEl) statusEl.innerHTML = 'Trạng thái: Đang chờ chạy thử';
-}
-
-function populateCalibCalculation() {
-    const selectedSensor = document.getElementById('calib-sensor-select')?.value || 'N';
-    const labelEl = document.getElementById('calib-default-factor-label');
-    if (labelEl) {
-        labelEl.textContent = selectedSensor === 'Main' ? '37.0370 mL/xung' : '0.1700 mL/xung';
-    }
-    
-    if (!lastCalibRunResults) return;
-    const pulsesCountEl = document.getElementById('calib-pulses-count');
-    const actualVolEl = document.getElementById('calib-actual-vol');
-    
-    const sensorData = lastCalibRunResults[selectedSensor];
-    if (pulsesCountEl && sensorData) {
-        pulsesCountEl.value = sensorData.pulses;
-    }
-    
-    if (actualVolEl) actualVolEl.value = '';
-    const factorEl = document.getElementById('calib-calculated-factor');
-    if (factorEl) factorEl.value = '--';
-}
-
-function onCalibSensorChange() {
-    populateCalibCalculation();
-    syncStatus();
-}
-
-function updateCalibrationUIValues(data) {
-    const netVol = { N: 0, P: 0, K: 0, Main: 0 };
-    const pulses = { N: 0, P: 0, K: 0, Main: 0 };
-    
-    if (isCalibRunning) {
-        netVol.N = Math.max(0, (data.valves?.N?.volume_ml || 0) - calibStartValues.N);
-        netVol.P = Math.max(0, (data.valves?.P?.volume_ml || 0) - calibStartValues.P);
-        netVol.K = Math.max(0, (data.valves?.K?.volume_ml || 0) - calibStartValues.K);
-        netVol.Main = Math.max(0, (data.main_volume_ml || data.total_volume_ml || 0) - calibStartValues.Main);
-        
-        pulses.N = Math.max(0, (data.valves?.N?.pulses || 0) - calibStartPulses.N) || Math.round(netVol.N / 0.170);
-        pulses.P = Math.max(0, (data.valves?.P?.pulses || 0) - calibStartPulses.P) || Math.round(netVol.P / 0.170);
-        pulses.K = Math.max(0, (data.valves?.K?.pulses || 0) - calibStartPulses.K) || Math.round(netVol.K / 0.170);
-        pulses.Main = Math.max(0, (data.main_pulses || 0) - calibStartPulses.Main) || Math.round(netVol.Main / 37.037);
-    } else if (lastCalibRunResults) {
-        netVol.N = lastCalibRunResults.N?.volume_ml || 0;
-        netVol.P = lastCalibRunResults.P?.volume_ml || 0;
-        netVol.K = lastCalibRunResults.K?.volume_ml || 0;
-        netVol.Main = lastCalibRunResults.Main?.volume_ml || 0;
-        
-        pulses.N = lastCalibRunResults.N?.pulses || 0;
-        pulses.P = lastCalibRunResults.P?.pulses || 0;
-        pulses.K = lastCalibRunResults.K?.pulses || 0;
-        pulses.Main = lastCalibRunResults.Main?.pulses || 0;
-    }
-    
-    // Update Flows (always show current real-time flow)
-    const flowN = data.valves?.N?.flow_lpm !== undefined ? data.valves.N.flow_lpm : 0;
-    const flowP = data.valves?.P?.flow_lpm !== undefined ? data.valves.P.flow_lpm : 0;
-    const flowK = data.valves?.K?.flow_lpm !== undefined ? data.valves.K.flow_lpm : 0;
-    const flowMain = data.main_flow_lpm || 0;
-    
-    const elFlowN = document.getElementById('calib-flowN');
-    const elFlowP = document.getElementById('calib-flowP');
-    const elFlowK = document.getElementById('calib-flowK');
-    const elFlowMain = document.getElementById('calib-flowMain');
-    
-    if (elFlowN) elFlowN.textContent = flowN.toFixed(2);
-    if (elFlowP) elFlowP.textContent = flowP.toFixed(2);
-    if (elFlowK) elFlowK.textContent = flowK.toFixed(2);
-    if (elFlowMain) elFlowMain.textContent = flowMain.toFixed(2);
-    
-    // Update Volumes
-    const elVolN = document.getElementById('calib-volN');
-    const elVolP = document.getElementById('calib-volP');
-    const elVolK = document.getElementById('calib-volK');
-    const elVolMain = document.getElementById('calib-volMain');
-    
-    if (elVolN) elVolN.textContent = Math.round(netVol.N);
-    if (elVolP) elVolP.textContent = Math.round(netVol.P);
-    if (elVolK) elVolK.textContent = Math.round(netVol.K);
-    if (elVolMain) elVolMain.textContent = Math.round(netVol.Main);
-    
-    // Update Pulses
-    const elPulseN = document.getElementById('calib-pulseN');
-    const elPulseP = document.getElementById('calib-pulseP');
-    const elPulseK = document.getElementById('calib-pulseK');
-    const elPulseMain = document.getElementById('calib-pulseMain');
-    
-    if (elPulseN) elPulseN.textContent = pulses.N;
-    if (elPulseP) elPulseP.textContent = pulses.P;
-    if (elPulseK) elPulseK.textContent = pulses.K;
-    if (elPulseMain) elPulseMain.textContent = pulses.Main;
-
-    // Update form's automatic input (if the selected sensor is currently running)
-    const selectedSensor = document.getElementById('calib-sensor-select')?.value || 'N';
-    const elPulsesCount = document.getElementById('calib-pulses-count');
-    if (elPulsesCount && isCalibRunning) {
-        elPulsesCount.value = pulses[selectedSensor];
-        calculateCalibFactor();
-    }
-}
-
-function calculateCalibFactor() {
-    const pulses = parseInt(document.getElementById('calib-pulses-count')?.value) || 0;
-    const actualVol = parseFloat(document.getElementById('calib-actual-vol')?.value) || 0;
-    const elCalculated = document.getElementById('calib-calculated-factor');
-    
-    if (elCalculated) {
-        if (pulses <= 0 || actualVol <= 0) {
-            elCalculated.value = '--';
-        } else {
-            const factor = actualVol / pulses;
-            elCalculated.value = factor.toFixed(5) + ' mL/xung';
-        }
-    }
-}
-
-function sendCalibStepperCmd() {
-    const type = document.getElementById('calib-stepper-sel').value;
-    const steps = parseInt(document.getElementById('calib-stepper-steps').value) || 0;
-    if (steps <= 0) {
-        showToast('Vui lòng nhập số bước hợp lệ (>0)', 'warning');
-        return;
-    }
-    
-    fetch('/api/manual', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cmd: 'stepper', type, steps })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) showToast(data.error, 'error');
-        else showToast(`Đã gửi lệnh quay van ${type} thêm ${steps} bước`, 'success');
-    })
-    .catch(e => showToast('Lỗi kết nối máy chủ', 'error'));
-}
-
-function saveNewPulseFactor(e) {
-    if (e) e.preventDefault();
-    const sensor = document.getElementById('calib-sensor-select').value;
-    const pulses = parseInt(document.getElementById('calib-pulses-count').value) || 0;
-    const actual_vol = parseFloat(document.getElementById('calib-actual-vol').value) || 0;
-    
-    if (pulses <= 0 || actual_vol <= 0) {
-        showToast('Vui lòng hoàn thành chu kỳ chạy thử và nhập thể tích thực tế đo được hợp lệ!', 'warning');
-        return;
-    }
-    
-    const factor = parseFloat((actual_vol / pulses).toFixed(5));
-    
-    fetch('/api/calibration/update-firmware', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sensor, factor })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) {
-            showToast(data.error, 'error');
-        } else {
-            showToast(`Đã lưu hệ số cảm biến ${sensor} = ${data.factor} vào file code ESP32!`, 'success');
-            
-            fetch('/api/calibration/save', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sensor,
-                    actual_ml: actual_vol,
-                    pulses,
-                    notes: `Cập nhật hệ số xung: ${data.factor} mL/xung`
-                })
-            })
-            .then(() => {
-                loadCalibrationHistory();
-                alert(`Hệ số đã ghi nhận vào file code ESP32!\n\nBạn hãy mở Arduino IDE và nạp lại chương trình (Flash code) cho ESP32 để áp dụng và kiểm tra giá trị hiệu chỉnh mới.`);
-            });
-        }
-    })
-    .catch(e => showToast('Lỗi kết nối máy chủ khi ghi code', 'error'));
-}
-
-function loadCalibrationHistory() {
-    const tbody = document.getElementById('calibrationHistoryBody');
-    if (!tbody) return;
-    
-    fetch('/api/calibration/history')
-    .then(r => r.json())
-    .then(list => {
-        if (!list || list.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" class="empty-row" style="text-align: center; padding: 20px;">Chưa có chu kỳ chạy thử hiệu chuẩn nào.</td></tr>`;
-            return;
-        }
-        
-        tbody.innerHTML = list.map(item => {
-            const timeStr = new Date(item.timestamp).toLocaleString('vi-VN');
-            const sensorLabel = {
-                'N': 'Bồn 1 (N)',
-                'P': 'Bồn 2 (P)',
-                'K': 'Bồn 3 (K)',
-                'Main': 'Ống chính'
-            }[item.sensor] || item.sensor;
-            
-            return `
-                <tr>
-                    <td>${timeStr}</td>
-                    <td style="font-weight: 600; color: #475569;">${item.cycle}</td>
-                    <td style="font-weight: bold; color: var(--txt-main);">${sensorLabel}</td>
-                    <td style="font-weight: 700; color: #16a34a;">${item.volume_ml} mL</td>
-                    <td style="font-weight: 600; color: #2563eb;">${item.pulses}</td>
-                    <td style="font-weight: 600; color: #d97706;">${parseFloat(item.flow_lpm).toFixed(2)} L/min</td>
-                    <td>${item.duration_s} giây</td>
-                    <td style="text-align: center;">
-                        <button type="button" class="btn-sm danger" onclick="deleteCalibrationRecord(${item.id})" style="padding: 2px 6px; min-height: 24px; font-size: 11px; color: var(--danger); background: transparent; border: 1px solid var(--danger); border-radius: 4px; cursor: pointer;">
-                            Xóa
-                        </button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-    })
-    .catch(e => {
-        console.error('Lỗi lấy lịch sử hiệu chuẩn:', e);
-        tbody.innerHTML = `<tr><td colspan="8" class="empty-row" style="text-align: center; color: var(--danger); padding: 20px;">Lỗi kết nối CSDL!</td></tr>`;
-    });
-}
-
-function deleteCalibrationRecord(id) {
-    if (!confirm('Bạn có chắc chắn muốn xóa bản ghi hiệu chuẩn này?')) return;
-    
-    fetch(`/api/calibration/history/${id}`, {
-        method: 'DELETE'
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) {
-            showToast(data.error, 'error');
-        } else {
-            showToast('Đã xóa bản ghi hiệu chuẩn!', 'success');
-            loadCalibrationHistory();
-        }
-    })
-    .catch(e => showToast('Lỗi kết nối máy chủ', 'error'));
-}
 
