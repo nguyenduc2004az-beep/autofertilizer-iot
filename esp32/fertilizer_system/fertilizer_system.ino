@@ -2,7 +2,6 @@
 #include <time.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include <Preferences.h> // Lưu trữ Flash cho 4 giai đoạn
 
 // CẤU HÌNH WIFI & MQTT
 const char* WIFI_SSID     = "huuducc";
@@ -12,10 +11,9 @@ const int   MQTT_PORT     = 1883;
 const char* MQTT_USER     = "";
 const char* MQTT_PASS     = "";
 
-Preferences prefs;
-int32_t stagePosN[4] = {2700, 3300, 3300, 2700}; // Seedling, Vegetative, Flowering, Fruiting
-int32_t stagePosP[4] = {530, 530, 480, 480};
-int32_t stagePosK[4] = {670, 840, 1400, 3000};
+const int32_t stagePosN[4] = {2700, 3300, 3300, 2700}; // Seedling, Vegetative, Flowering, Fruiting
+const int32_t stagePosP[4] = {530, 530, 480, 480};
+const int32_t stagePosK[4] = {670, 840, 1400, 3000};
 
 bool isProbing = false;
 int probeStageIndex = -1;
@@ -117,8 +115,6 @@ float getDynamicMlPerPulse(float targetFlow, float baseFactor) {
     return baseFactor;
 }
 
-
-
 // Hàm cập nhật bảng tra cứu 6 điểm động từ bộ nhớ Preferences
 void updateLUTs() {
     float totalLpm = 0.8f; // 0.80000f
@@ -140,16 +136,12 @@ void updateLUTs() {
     float fP3 = totalLpm * 3.0f / 18.0f; // 0.13333f
     float fK3 = totalLpm * 10.0f / 18.0f; // 0.44444f
 
-    int32_t defaultN[4] = {2700, 3300, 3300, 2700};
-    int32_t defaultP[4] = {530, 530, 480, 480};
-    int32_t defaultK[4] = {670, 840, 1400, 3000};
-
-    auto populateAndSort = [](CalibrationPoint* lut, int32_t* stagePos, int32_t* defaultPos, float qMax, int32_t maxSteps, float f0, float f1, float f2, float f3) {
+    auto populateAndSort = [](CalibrationPoint* lut, const int32_t* stagePos, float qMax, int32_t maxSteps, float f0, float f1, float f2, float f3) {
         lut[0] = {0.0f, 0};
-        lut[1] = {f0, stagePos[0] > 0 ? stagePos[0] : defaultPos[0]};
-        lut[2] = {f1, stagePos[1] > 0 ? stagePos[1] : defaultPos[1]};
-        lut[3] = {f2, stagePos[2] > 0 ? stagePos[2] : defaultPos[2]};
-        lut[4] = {f3, stagePos[3] > 0 ? stagePos[3] : defaultPos[3]};
+        lut[1] = {f0, stagePos[0]};
+        lut[2] = {f1, stagePos[1]};
+        lut[3] = {f2, stagePos[2]};
+        lut[4] = {f3, stagePos[3]};
         lut[5] = {qMax, maxSteps};
 
         // Sắp xếp nổi bọt (Bubble Sort) theo flowLpm tăng dần
@@ -171,9 +163,9 @@ void updateLUTs() {
         }
     };
 
-    populateAndSort(lutN, stagePosN, defaultN, Q_MAX_LPM_N, MAX_OPEN_STEPS_N, fN0, fN1, fN2, fN3);
-    populateAndSort(lutP, stagePosP, defaultP, Q_MAX_LPM_P, MAX_OPEN_STEPS_P, fP0, fP1, fP2, fP3);
-    populateAndSort(lutK, stagePosK, defaultK, Q_MAX_LPM_K, MAX_OPEN_STEPS_K, fK0, fK1, fK2, fK3);
+    populateAndSort(lutN, stagePosN, Q_MAX_LPM_N, MAX_OPEN_STEPS_N, fN0, fN1, fN2, fN3);
+    populateAndSort(lutP, stagePosP, Q_MAX_LPM_P, MAX_OPEN_STEPS_P, fP0, fP1, fP2, fP3);
+    populateAndSort(lutK, stagePosK, Q_MAX_LPM_K, MAX_OPEN_STEPS_K, fK0, fK1, fK2, fK3);
 }
 
 //====================================================================================================================================================================================================================
@@ -1033,20 +1025,7 @@ void setup() {
     Serial.println(F("  ║  HỆ THỐNG PHỐI TRỘN PHÂN TỰ ĐỘNG     ║"));
     Serial.println(F("  ╚══════════════════════════════════════╝"));
 
-    // Khởi tạo Preferences
-    prefs.begin("fert", false);
-    for (int i=0; i<4; i++) {
-        String keyN = "posN_" + String(i);
-        String keyP = "posP_" + String(i);
-        String keyK = "posK_" + String(i);
-        stagePosN[i] = prefs.getInt(keyN.c_str(), 0);
-        stagePosP[i] = prefs.getInt(keyP.c_str(), 0);
-        stagePosK[i] = prefs.getInt(keyK.c_str(), 0);
-        if (stagePosN[i] > 0) {
-            Serial.printf("[PREFS] Đã tải vị trí Giai đoạn %d: N=%d, P=%d, K=%d\n", i, stagePosN[i], stagePosP[i], stagePosK[i]);
-        }
-    }
-    updateLUTs(); // Cập nhật bảng tra cứu 6 điểm động từ bộ nhớ Preferences
+    updateLUTs(); // Cập nhật bảng tra cứu 6 điểm động
 
     // LED trạng thái
     pinMode(STATUS_LED, OUTPUT);
