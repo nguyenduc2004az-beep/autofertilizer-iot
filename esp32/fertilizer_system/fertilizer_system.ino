@@ -94,16 +94,11 @@ int32_t getStepsFromFlow(float targetFlow, CalibrationPoint* lut, int numPoints)
         return lut[numPoints - 1].steps;
     }
     
-    // Nếu nằm dưới điểm có dòng chảy ban đầu
-    if (targetFlow < lut[0].flowLpm) {
-        return (targetFlow / lut[0].flowLpm) * lut[0].steps;
-    }
-    
     // Nội suy giữa 2 điểm kề nhau
     for (int i = 0; i < numPoints - 1; i++) {
         if (targetFlow >= lut[i].flowLpm && targetFlow <= lut[i+1].flowLpm) {
             float ratio = (targetFlow - lut[i].flowLpm) / (lut[i+1].flowLpm - lut[i].flowLpm);
-            return lut[i].steps + ratio * (lut[i+1].steps - lut[i].steps);
+            return lround(lut[i].steps + ratio * (lut[i+1].steps - lut[i].steps));
         }
     }
     return lut[numPoints - 1].steps;
