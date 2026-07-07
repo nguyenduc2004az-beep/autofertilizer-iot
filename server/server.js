@@ -691,10 +691,12 @@ app.post('/api/start', (req, res) => {
         }
 
         // Tính lưu lượng setpoint (L/phút): Q = V(L) / t(phút), t = total_water_l / 80 L/phút
+        // Tối thiểu MIN_SETPOINT_LPM = 0.33 L/phút để tránh bơm chạy quá chậm
+        const MIN_SETPOINT_LPM = 0.33;
         const timeMin = total_water_l / 80.0;
-        const cN_lpm = parseFloat(((cN_ml / 1000.0) / timeMin).toFixed(3));
-        const cP_lpm = parseFloat(((cP_ml / 1000.0) / timeMin).toFixed(3));
-        const cK_lpm = parseFloat(((cK_ml / 1000.0) / timeMin).toFixed(3));
+        const cN_lpm = Math.max(MIN_SETPOINT_LPM, parseFloat(((cN_ml / 1000.0) / timeMin).toFixed(3)));
+        const cP_lpm = Math.max(MIN_SETPOINT_LPM, parseFloat(((cP_ml / 1000.0) / timeMin).toFixed(3)));
+        const cK_lpm = Math.max(MIN_SETPOINT_LPM, parseFloat(((cK_ml / 1000.0) / timeMin).toFixed(3)));
 
         mqttCmd = {
             cmd: 'start_sim',
@@ -1060,10 +1062,11 @@ cron.schedule('* * * * *', async () => {
                     const kMl = s.k_ml || 0;
 
                     // Lưu lượng setpoint: Q = V(L) / t(phút), t = total_water_l / 80
+                    // Tối thiểu 0.33 L/phút để bơm hoạt động ổn định
                     const timeMin = total_water_l / 80.0;
-                    const cN_lpm = parseFloat(((nMl / 1000.0) / timeMin).toFixed(3));
-                    const cP_lpm = parseFloat(((pMl / 1000.0) / timeMin).toFixed(3));
-                    const cK_lpm = parseFloat(((kMl / 1000.0) / timeMin).toFixed(3));
+                    const cN_lpm = Math.max(0.33, parseFloat(((nMl / 1000.0) / timeMin).toFixed(3)));
+                    const cP_lpm = Math.max(0.33, parseFloat(((pMl / 1000.0) / timeMin).toFixed(3)));
+                    const cK_lpm = Math.max(0.33, parseFloat(((kMl / 1000.0) / timeMin).toFixed(3)));
 
                     mqttCmd = {
                         cmd: 'start_sim',

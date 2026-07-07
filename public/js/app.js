@@ -924,10 +924,11 @@ function onCropOrStageChange() {
     const calcWaterInput = document.getElementById('calc-total-water-l');
     if (calcWaterInput) calcWaterInput.value = totalWaterL.toFixed(3);
 
-    // Lưu lượng setpoint yêu cầu (L/phút) cho 1 lần tưới dựa trên công thức Q = V / t
-    const setpointN = totalDurationMin > 0 ? parseFloat(((volN_cycle / 1000.0) / totalDurationMin).toFixed(3)) : 0;
-    const setpointP = totalDurationMin > 0 ? parseFloat(((volP_cycle / 1000.0) / totalDurationMin).toFixed(3)) : 0;
-    const setpointK = totalDurationMin > 0 ? parseFloat(((volK_cycle / 1000.0) / totalDurationMin).toFixed(3)) : 0;
+    // Lưu lượng setpoint yêu cầu (L/phút) — tối thiểu 0.33 L/phút để bơm hoạt động ổn định
+    const MIN_SP = 0.33;
+    const setpointN = Math.max(MIN_SP, totalDurationMin > 0 ? parseFloat(((volN_cycle / 1000.0) / totalDurationMin).toFixed(3)) : MIN_SP);
+    const setpointP = Math.max(MIN_SP, totalDurationMin > 0 ? parseFloat(((volP_cycle / 1000.0) / totalDurationMin).toFixed(3)) : MIN_SP);
+    const setpointK = Math.max(MIN_SP, totalDurationMin > 0 ? parseFloat(((volK_cycle / 1000.0) / totalDurationMin).toFixed(3)) : MIN_SP);
 
     const totalWaterML = totalWaterL * 1000;
     const concN = ((volN_cycle / (totalWaterML + volN_cycle)) * 100).toFixed(2);
