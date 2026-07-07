@@ -860,7 +860,50 @@ app.delete('/api/history', async (req, res) => {
 
 
 
-// Các endpoint công thức cũ đã được loại bỏ hoàn toàn dể sử dụng 4 giai đoạn mặc định
+// ================================================================
+// QUẢN LÝ CÔNG THỨC (RECIPES)
+// ================================================================
+app.get('/api/recipes', async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT ma_cong_thuc AS id, ten_cong_thuc AS name,
+                   the_tich_bon1_ml AS N_ml, the_tich_bon2_ml AS P_ml, the_tich_bon3_ml AS K_ml,
+                   mo_ta AS description, ngay_tao AS created_at
+            FROM cong_thuc ORDER BY ngay_tao DESC
+        `);
+        res.json(rows);
+    } catch (e) {
+        console.error('[DB] Lỗi GET /recipes:', e.message);
+        res.status(500).json({ error: 'Lỗi Database' });
+    }
+});
+
+app.post('/api/recipes', async (req, res) => {
+    try {
+        const { name, N_ml, P_ml, K_ml, description } = req.body;
+        if (!name) return res.status(400).json({ error: 'Thiếu tên công thức' });
+        const id = Date.now().toString();
+        const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        await pool.query(`
+            INSERT INTO cong_thuc (ma_cong_thuc, ten_cong_thuc, the_tich_bon1_ml, the_tich_bon2_ml, the_tich_bon3_ml, mo_ta, ngay_tao)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [id, name, N_ml || 0, P_ml || 0, K_ml || 0, description || '', now]);
+        res.json({ success: true, id });
+    } catch (e) {
+        console.error('[DB] Lỗi POST /recipes:', e.message);
+        res.status(500).json({ error: 'Lỗi Database' });
+    }
+});
+
+app.delete('/api/recipes/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM cong_thuc WHERE ma_cong_thuc = ?', [req.params.id]);
+        res.json({ success: true });
+    } catch (e) {
+        console.error('[DB] Lỗi DELETE /recipes:', e.message);
+        res.status(500).json({ error: 'Lỗi Database' });
+    }
+});
 
 
 // ================================================================
